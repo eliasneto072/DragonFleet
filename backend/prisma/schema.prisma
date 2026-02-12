@@ -1,0 +1,142 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/* =========================
+   ENUMS
+========================= */
+
+enum UserRole {
+  ADMIN
+  DRIVER
+  MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum DocumentType {
+  CNH
+  CRLV
+  RECIBO
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+/* =========================
+   MODELS
+========================= */
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      UserRole   @default(DRIVER)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt
+
+  earnings      Earning[]
+  vehicles      Vehicle[]
+  notifications Notification[]
+  documents     Document[]
+  withdrawals   Withdrawal[]
+
+  @@map("users")
+}
+
+model Earning {
+  id        String   @id @default(cuid())
+  amount    Decimal  @db.Decimal(12, 2)
+  date      DateTime @db.Date
+  platform  String
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([date])
+  @@map("earnings")
+}
+
+model Vehicle {
+  id        String   @id @default(cuid())
+  plate     String   @unique
+  model     String
+  year      Int
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("vehicles")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    String   @map("user_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+model Document {
+  id        String         @id @default(cuid())
+  type      DocumentType
+  fileUrl   String         @map("file_url")
+  status    DocumentStatus @default(PENDING)
+  userId    String         @map("user_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type, status])
+  @@map("documents")
+}
+
+model Withdrawal {
+  id          String           @id @default(cuid())
+  amount      Decimal          @db.Decimal(12, 2)
+  status      WithdrawalStatus @default(PENDING)
+  requestedAt DateTime         @default(now()) @map("requested_at")
+  userId      String           @map("user_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("withdrawals")
+}
