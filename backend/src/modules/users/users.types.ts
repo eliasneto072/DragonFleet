@@ -23,5 +23,6 @@ export interface IUser {
     //documents?: IDocument[];
     //withdrawals?: IWithdrawal[];
 
-
 }
+
+export type IUserPublic = Omit<IUser, "password"> 
