@@ -11,6 +11,8 @@ export class UsersRepository  implements IUserRepository{
         id: true,
         name: true,
         email: true,
+        role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
     } as const
@@ -18,7 +20,7 @@ export class UsersRepository  implements IUserRepository{
     async findAll(): Promise<IUserPublic[]> {
         try{
             
-            return await prisma.user.findMany({ select: this.publicSelect })
+            return await prisma.user.findMany({ select: this.publicSelect, orderBy: {createdAt: 'desc'} })
 
         } catch(err) {
 
@@ -98,3 +100,4 @@ export class UsersRepository  implements IUserRepository{
   }
 }
 
+export const usersRepository =  new UsersRepository()

@@ -1,9 +1,10 @@
-// src/shared/errors/AppError.ts
 export class AppError extends Error {
-  constructor(
-    public message: string,
-    public statusCode: number = 400
-  ) {
+  public readonly statusCode: number;
+  public readonly code?: string;
+
+  constructor(message: string, statusCode = 400, code?: string) {
     super(message);
+    this.statusCode = statusCode;
+    this.code = code;
   }
 }

@@ -1,9 +1,12 @@
+import { UserRole, UserStatus } from "../../shared/types/enums";
+
 // Dados mínimos pra criar usuário (sem Partial + sem !)
 export type CreateUserDTO = {
     name: string
     email: string
     password: string; // (por enquanto) - ideal: enviar hash do service
-
+    role?: UserRole
+    status?: UserStatus
 }
 
 // Dados permitidos para update (evita atualizar id/createdAt etc.)

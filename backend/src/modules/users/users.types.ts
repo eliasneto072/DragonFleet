@@ -1,4 +1,4 @@
-
+import { UserRole, UserStatus } from "../../shared/types/enums"
 
 
 
@@ -11,8 +11,8 @@ export interface IUser {
     createdAt: Date
     updatedAt: Date
 
-    //role: UserRole
-    //status: UserStatus
+    role: UserRole
+    status: UserStatus
 
 
     // Relacionamentos
