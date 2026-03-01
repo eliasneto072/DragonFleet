@@ -1,18 +1,19 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { UserRole } from '../shared/types/enums';
 
 interface TokenPayload {
   sub?: string;
   userId?: string;
   id?: string;
-  role?: string;
+  role?: UserRole;
 }
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
-    role?: string;
+    role?: UserRole;
   };
 }
 
