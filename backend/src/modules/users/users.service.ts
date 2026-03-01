@@ -1,92 +1,117 @@
 import bcrypt from 'bcrypt';
-import { AppError } from "../../shared/errors/AppError"
-import { CreateUserDTO, UpdateUserDTO } from "./users.dto"
-import { usersRepository} from "./users.repository"
-import { IUserPublic } from "./users.types"
+import { AppError } from '../../shared/errors/AppError';
+import { CreateUserInput, UpdateUserInput } from './users.service.types';
+import { CreateUserData, UpdateUserData } from './users.repository.types';
+import { usersRepository } from './users.repository';
+import { IUserPublic} from './users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
 
-
 type Actor = {
-    id: string
-    role?: string
-}
+  id: string;
+  role?: UserRole;
+};
 
-function isAdmin(role?: string) {
-    return role === UserRole.ADMIN
+function isAdmin(role?: UserRole) {
+  return role === UserRole.ADMIN;
 }
 
 export class UsersService {
+  private async ensureUserExists(id: string) {
+    const user = await usersRepository.findById(id);
+    if (!user) {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+    return user;
+  }
 
-
-    async list(actor: Actor): Promise<IUserPublic[]> {
-
-        if (!isAdmin(actor.role)) throw new AppError('Forbidden', 403)
-
-        return usersRepository.findAll()
+  async list(actor: Actor): Promise<IUserPublic[]> {
+    if (!isAdmin(actor.role)) {
+      throw new AppError('Forbidden', 403);
     }
 
-    async getById(actor: Actor, id: string): Promise<IUserPublic> {
+    return usersRepository.findAll();
+  }
 
-        if(!isAdmin(actor.role) && actor.id !== id) throw new AppError('Forbidden', 403)
-        
-        const user = await usersRepository.findById(id)
-
-        if(!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
-        
-        return user
-
-    }
-    
-    async create(actor: Actor, data: CreateUserDTO): Promise<IUserPublic> {
-
-        if (!isAdmin(actor.role)) throw new AppError('Forbidden', 403);
-
-        const exist = await usersRepository.findByEmail(data.email)
-        if (exist) throw new AppError('Email already in use', 409, 'EMAIL_IN_USE')
-
-        const passwordHash = await bcrypt.hash(data.password, 10)
-
-        return usersRepository.create({
-            name: data.name,
-            email: data.email,
-            password: passwordHash,
-            role: data.role ?? ('DRIVER' as UserRole),
-            status: data.status ?? ('ACTIVE' as UserStatus)
-        })
-
+  async getById(actor: Actor, id: string): Promise<IUserPublic> {
+    if (!isAdmin(actor.role) && actor.id !== id) {
+      throw new AppError('Forbidden', 403);
     }
 
-    async update(actor: Actor, id: string, data: UpdateUserDTO): Promise<IUserPublic> {
+    return this.ensureUserExists(id);
+  }
 
-        const isSelf = actor.id === id
-        
-        if (!isAdmin(actor.role) && !isSelf) throw new AppError('Forbidden', 403);
-
-
-        // if not admin, only allow changing name
-        if (!isAdmin(actor.role)) {
-            const keys = Object.keys(data)
-            const allowed = keys.every((k) => k === 'name')
-            if (!allowed) throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_ROLE_OR_STATUS');
-        }
-
-        const existing = await usersRepository.findById(id)
-        if (!existing) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
-
-        return usersRepository.update(id, data)
-
+  async create(actor: Actor, input: CreateUserInput): Promise<IUserPublic> {
+    if (!isAdmin(actor.role)) {
+      throw new AppError('Forbidden', 403);
     }
 
-    async remove(actor: Actor, id: string): Promise<void> {
-        if (!isAdmin(actor.role)) throw new AppError('Forbidden', 403);
-
-        const existing = await usersRepository.findById(id)
-        if (!existing) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
-        
-        return usersRepository.delete(id)
+    const existingUser = await usersRepository.findByEmail(input.email);
+    if (existingUser) {
+      throw new AppError('Email already in use', 409, 'EMAIL_IN_USE');
     }
 
+    const passwordHash = await bcrypt.hash(input.password, 10);
 
+    const data: CreateUserData = {
+        name: input.name,
+        email: input.email,
+        password: passwordHash,
+        role: input.role ?? UserRole.DRIVER,
+        status: input.status ?? UserStatus.ACTIVE,
+    }
+
+    return usersRepository.create(data);
+  }
+
+  async update(actor: Actor, id: string, input: UpdateUserInput): Promise<IUserPublic> {
+    const isSelf = actor.id === id;
+
+    if (!isAdmin(actor.role) && !isSelf) {
+      throw new AppError('Forbidden', 403);
+    }
+
+    await this.ensureUserExists(id);
+
+    if (!isAdmin(actor.role)) {
+      const allowedFieldsForSelf: Array<keyof UpdateUserInput> = ['name', 'email', 'password']
+      const keys = Object.keys(input) as Array<keyof UpdateUserInput>
+      const allowed = keys.every((key) => allowedFieldsForSelf.includes(key))
+
+      if (!allowed) {
+        throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_RESTRICTED_FIELDS');
+      }
+    }
+
+    if (input.email) {
+      const existingUser = await usersRepository.findByEmail(input.email);
+      if (existingUser && existingUser.id !== id) {
+        throw new AppError('Email already in use', 409, 'EMAIL_IN_USE');
+      }
+    }
+
+    const data: UpdateUserData = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    };
+
+    if (input.password) {
+      data.password = await bcrypt.hash(input.password, 10);
+    }
+
+    return usersRepository.update(id, data);
+  }
+
+  async remove(actor: Actor, id: string): Promise<void> {
+    if (!isAdmin(actor.role)) {
+      throw new AppError('Forbidden', 403);
+    }
+
+    await this.ensureUserExists(id);
+
+    return usersRepository.delete(id);
+  }
 }
 
-export const usersService = new UsersService()
+export const usersService = new UsersService();
