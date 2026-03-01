@@ -2,7 +2,7 @@ import { prisma } from "../../config/prisma"
 import { logger } from "../../shared/utils/logger"
 import { IUserRepository } from "./users.repository.interfaces"
 import { IUser, IUserPublic } from "./users.types"
-import { CreateUserDTO, UpdateUserDTO } from "./users.dto"
+import { CreateUserData, UpdateUserData } from "./users.repository.types"
 
 
 export class UsersRepository  implements IUserRepository{
@@ -57,13 +57,15 @@ export class UsersRepository  implements IUserRepository{
         }
     }
 
-    async create(data: CreateUserDTO): Promise<IUserPublic> {
+    async create(data: CreateUserData): Promise<IUserPublic> {
     try {
       return await prisma.user.create({
         data: {
           name: data.name,
           email: data.email,
           password: data.password,
+          role: data.role,
+          status: data.status,
         },
         select: this.publicSelect,
       });
@@ -73,7 +75,7 @@ export class UsersRepository  implements IUserRepository{
     }
   }
 
-  async update(id: string, data: UpdateUserDTO): Promise<IUserPublic> {
+  async update(id: string, data: UpdateUserData): Promise<IUserPublic> {
     try {
       return await prisma.user.update({
         where: { id },
@@ -81,6 +83,8 @@ export class UsersRepository  implements IUserRepository{
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.email !== undefined ? { email: data.email } : {}),
           ...(data.password !== undefined ? { password: data.password } : {}),
+          ...(data.role !== undefined ? { role: data.role } : {}),
+          ...(data.status !== undefined ? { status: data.status } : {}),
         },
         select: this.publicSelect,
       });
@@ -101,3 +105,4 @@ export class UsersRepository  implements IUserRepository{
 }
 
 export const usersRepository =  new UsersRepository()
+
