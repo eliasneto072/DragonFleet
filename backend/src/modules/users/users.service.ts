@@ -16,7 +16,7 @@ function isAdmin(role?: UserRole) {
 }
 
 export class UsersService {
-  private async ensureUserExists(id: string) {
+  private async ensureUserExists(id: string): Promise<IUserPublic> {
     const user = await usersRepository.findById(id);
     if (!user) {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
