@@ -25,4 +25,5 @@ export interface IUser {
 
 }
 
-export type IUserPublic = Omit<IUser, "password"> 
+export type IUserPublic = Omit<IUser, 'password'>;
+
