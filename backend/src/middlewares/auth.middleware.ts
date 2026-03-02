@@ -5,8 +5,6 @@ import { UserRole } from '../shared/types/enums';
 
 interface TokenPayload {
   sub?: string;
-  userId?: string;
-  id?: string;
   role?: UserRole;
 }
 
@@ -34,9 +32,12 @@ export function authMiddleware(
   const token = authHeader.slice('Bearer '.length);
 
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as TokenPayload;
+    const payload = jwt.verify(token, env.JWT_SECRET, {
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
+    }) as TokenPayload;
 
-    const userId = payload.sub ?? payload.userId ?? payload.id;
+    const userId = payload.sub;
 
     if (!userId) {
       return res.status(401).json({
