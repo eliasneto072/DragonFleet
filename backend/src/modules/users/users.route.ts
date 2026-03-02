@@ -2,12 +2,15 @@ import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { usersController } from "./users.controller";
 
-const usersRouter = Router()
+export function usersRouter() {
+    const router = Router()
 
-usersRouter.get('/', authMiddleware, usersController.list)
-usersRouter.get('/:id', authMiddleware, usersController.getById)
-usersRouter.post('/', authMiddleware, usersController.create)
-usersRouter.patch('/:id', authMiddleware, usersController.update)
-usersRouter.delete('/:id', authMiddleware, usersController.remove)
+    router.get('/', authMiddleware, usersController.list)
+    router.get('/:id', authMiddleware, usersController.getById)
+    router.post('/',  usersController.create)
+    router.patch('/:id', authMiddleware, usersController.update)
+    router.delete('/:id', authMiddleware, usersController.remove)
 
-export {usersRouter}
+    return router
+
+}

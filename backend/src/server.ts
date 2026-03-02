@@ -1,8 +1,8 @@
-import app from './app';
+import { app } from './app';
 import { env } from './config/env';
-import { logger } from './shared/ultils/logger';
 
+const PORT = env.PORT ?? 3000;
 
-app.listen(env.PORT, () => {
-  logger.info(`API running on http://localhost:${env.PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });

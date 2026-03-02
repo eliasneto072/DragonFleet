@@ -40,7 +40,7 @@ export class UsersController {
   create = async (req: AuthRequest, res: Response) => {
     const parsed = createUserSchema.parse({ body: req.body });
 
-    const user = await usersService.create(getActor(req), parsed.body);
+    const user = await usersService.create(parsed.body);
 
     return ok(res, { user }, 201);
   };

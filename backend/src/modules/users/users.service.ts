@@ -3,13 +3,10 @@ import { AppError } from '../../shared/errors/AppError';
 import { CreateUserInput, UpdateUserInput } from './users.service.types';
 import { CreateUserData, UpdateUserData } from './users.repository.types';
 import { usersRepository } from './users.repository';
-import { IUserPublic} from './users.types';
+import { Actor, IUserPublic} from './users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
 
-type Actor = {
-  id: string;
-  role?: UserRole;
-};
+
 
 function isAdmin(role?: UserRole) {
   return role === UserRole.ADMIN;
@@ -40,10 +37,10 @@ export class UsersService {
     return this.ensureUserExists(id);
   }
 
-  async create(actor: Actor, input: CreateUserInput): Promise<IUserPublic> {
-    if (!isAdmin(actor.role)) {
-      throw new AppError('Forbidden', 403);
-    }
+  async create(input: CreateUserInput): Promise<IUserPublic> {
+  //  if (!isAdmin(actor.role)) {
+  //    throw new AppError('Forbidden', 403);
+  //  }
 
     const existingUser = await usersRepository.findByEmail(input.email);
     if (existingUser) {

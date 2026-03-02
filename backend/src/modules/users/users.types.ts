@@ -27,3 +27,9 @@ export interface IUser {
 
 export type IUserPublic = Omit<IUser, 'password'>;
 
+// Quem está executando a ação
+export type Actor = {
+  id: string;
+  role?: UserRole;
+};
+
