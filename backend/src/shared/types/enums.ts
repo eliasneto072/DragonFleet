@@ -32,3 +32,16 @@ export enum WithdrawalStatus {
   PAID = "PAID",
 }
 
+export enum VehicleStatus {
+  ACTIVE = "ACTIVE",
+  INACTIVE = "INACTIVE",
+  MAINTENANCE = "MAINTENANCE",
+  SOLD = "SOLD"
+}
+
+export enum EarningPlatform {
+  UBER = 'UBER',
+  BOLT = 'BOLT',
+  FREE_NOW = 'FREE_NOW',
+  OTHER = 'OTHER',
+}

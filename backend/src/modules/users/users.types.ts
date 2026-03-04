@@ -1,4 +1,5 @@
 import { UserRole, UserStatus } from "../../shared/types/enums"
+import { IVehicle } from "../vehicles/vehicles.types"
 
 
 
@@ -17,8 +18,8 @@ export interface IUser {
 
     // Relacionamentos
     
+    vehicles?: IVehicle[];
     //earnings?: IEarning[];
-    //vehicles?: IVehicle[];
     //notifications?: INotification[];
     //documents?: IDocument[];
     //withdrawals?: IWithdrawal[];

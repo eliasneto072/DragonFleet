@@ -20,7 +20,10 @@ export class UsersRepository  implements IUserRepository{
     async findAll(): Promise<IUserPublic[]> {
         try{
             
-            return await prisma.user.findMany({ select: this.publicSelect, orderBy: {createdAt: 'desc'} })
+            return await prisma.user.findMany({
+               select: this.publicSelect, 
+               orderBy: {createdAt: 'desc'} 
+              })
 
         } catch(err) {
 
@@ -55,6 +58,13 @@ export class UsersRepository  implements IUserRepository{
             logger.error('Erro ao buscar usuário por email', err)
             throw err
         }
+    }
+
+    async findByWithVehicle(id: string): Promise<IUser | null> {
+      return await prisma.user.findUnique({
+        where: {id},
+        include: {vehicles: true},
+      })
     }
 
     async create(data: CreateUserData): Promise<IUserPublic> {
