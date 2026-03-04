@@ -52,6 +52,13 @@ enum VehicleStatus {
   SOLD
 }
 
+enum EarningPlatform {
+  UBER
+  BOLT
+  FREE_NOW
+  OTHER
+}
+
 /* =========================
    MODELS
 ========================= */
@@ -79,7 +86,7 @@ model Earning {
   id        String   @id @default(cuid())
   amount    Decimal  @db.Decimal(12, 2)
   date      DateTime @db.Date
-  platform  String
+  platform  EarningPlatform
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
 
