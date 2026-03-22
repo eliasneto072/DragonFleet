@@ -134,6 +134,8 @@ model Document {
   id        String         @id @default(cuid())
   type      DocumentType
   fileUrl   String         @map("file_url")
+  fileKey   String         @map("file_key")
+  notes     String?
   status    DocumentStatus @default(PENDING)
   userId    String         @map("user_id")
   createdAt DateTime       @default(now()) @map("created_at")
@@ -146,11 +148,15 @@ model Document {
   @@map("documents")
 }
 
+// Atualizar model Withdrawal no schema.prisma
+
 model Withdrawal {
   id          String           @id @default(cuid())
   amount      Decimal          @db.Decimal(12, 2)
   status      WithdrawalStatus @default(PENDING)
+  notes       String?
   requestedAt DateTime         @default(now()) @map("requested_at")
+  processedAt DateTime?        @map("processed_at")
   userId      String           @map("user_id")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

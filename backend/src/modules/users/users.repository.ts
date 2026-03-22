@@ -60,13 +60,6 @@ export class UsersRepository  implements IUserRepository{
         }
     }
 
-    async findByWithVehicle(id: string): Promise<IUser | null> {
-      return await prisma.user.findUnique({
-        where: {id},
-        include: {vehicles: true},
-      })
-    }
-
     async create(data: CreateUserData): Promise<IUserPublic> {
     try {
       return await prisma.user.create({

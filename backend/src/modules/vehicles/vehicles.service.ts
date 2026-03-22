@@ -11,16 +11,8 @@ type Actor = {
   role?: UserRole;
 };
 
-function isAdmin(role?: UserRole) {
-  return role === UserRole.ADMIN;
-}
-
-function isManager(role?: UserRole) {
-  return role === UserRole.MANAGER;
-}
-
 function canManageVehicles(role?: UserRole) {
-  return isAdmin(role) || isManager(role);
+  return role === UserRole.ADMIN || role === UserRole.MANAGER;
 }
 
 export class VehiclesService {
@@ -50,6 +42,16 @@ export class VehiclesService {
     }
 
     return vehicles.filter((vehicle) => vehicle.userId === actor.id);
+  }
+
+  async listByUser(actor: Actor, userId: string): Promise<IVehiclePublic[]> {
+    if (!canManageVehicles(actor.role) && actor.id !== userId) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    await this.ensureUserExists(userId);
+
+    return vehiclesRepository.findByUserId(userId);
   }
 
   async getById(actor: Actor, id: string): Promise<IVehiclePublic> {

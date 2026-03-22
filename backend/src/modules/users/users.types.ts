@@ -1,36 +1,20 @@
-import { UserRole, UserStatus } from "../../shared/types/enums"
-import { IVehicle } from "../vehicles/vehicles.types"
-
-
+import { UserRole, UserStatus } from '../../shared/types/enums';
 
 export interface IUser {
-
-    id: string
-    name: string
-    email: string
-    password: string
-    createdAt: Date
-    updatedAt: Date
-
-    role: UserRole
-    status: UserStatus
-
-
-    // Relacionamentos
-    
-    vehicles?: IVehicle[];
-    //earnings?: IEarning[];
-    //notifications?: INotification[];
-    //documents?: IDocument[];
-    //withdrawals?: IWithdrawal[];
-
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  createdAt: Date;
+  updatedAt: Date;
+  role: UserRole;
+  status: UserStatus;
+  // relacionamentos removidos — cada módulo gere os seus próprios dados
 }
 
 export type IUserPublic = Omit<IUser, 'password'>;
 
-// Quem está executando a ação
 export type Actor = {
   id: string;
   role?: UserRole;
 };
-

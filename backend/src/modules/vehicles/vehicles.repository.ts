@@ -52,6 +52,19 @@ export class VehiclesRepository implements IVehicleRepository {
     }
   }
 
+  async findByUserId(userId: string): Promise<IVehiclePublic[]> {
+    try {
+      return await prisma.vehicle.findMany({
+        where: { userId },
+        select: this.publicSelect,
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (err) {
+      logger.error('Erro ao buscar veículos por utilizador', err);
+      throw err;
+    }
+  }
+
   async create(data: CreateVehicleData): Promise<IVehiclePublic> {
     try {
       return await prisma.vehicle.create({
@@ -92,9 +105,7 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async delete(id: string): Promise<void> {
     try {
-      await prisma.vehicle.delete({
-        where: { id },
-      });
+      await prisma.vehicle.delete({ where: { id } });
     } catch (err) {
       logger.error('Erro ao deletar veículo', err);
       throw err;
