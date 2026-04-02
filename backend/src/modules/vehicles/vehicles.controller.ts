@@ -41,7 +41,7 @@ export class VehiclesController {
     const actor = getActor(req);
     const userId = actor.id;
 
-    const vehicle = await vehiclesService.create(actor, { ...parsed.body, userId });
+    const vehicle = await vehiclesService.create(actor, userId, parsed.body);
     return ok(res, { vehicle }, 201);
   };
 

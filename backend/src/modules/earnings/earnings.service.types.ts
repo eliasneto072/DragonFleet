@@ -2,7 +2,7 @@ import { EarningPlatform } from '../../shared/types/enums';
 
 export type CreateEarningInput = {
   amount: number;
-  date: Date;
+  date?: Date;
   platform: EarningPlatform;
   // userId removido — vem do token no controller
 };

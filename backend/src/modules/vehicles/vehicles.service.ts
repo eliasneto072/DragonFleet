@@ -64,12 +64,12 @@ export class VehiclesService {
     return vehicle;
   }
 
-  async create(actor: Actor, input: CreateVehicleInput): Promise<IVehiclePublic> {
-    if (!canManageVehicles(actor.role) && input.userId !== actor.id) {
+  async create(actor: Actor, userId: string, input: CreateVehicleInput): Promise<IVehiclePublic> {
+    if (!canManageVehicles(actor.role) && userId !== actor.id) {
       throw new AppError('Forbidden', 403, 'CANNOT_CREATE_VEHICLE_FOR_ANOTHER_USER');
     }
 
-    await this.ensureUserExists(input.userId);
+    await this.ensureUserExists(userId);
 
     const existingVehicle = await vehiclesRepository.findByPlate(input.plate);
     if (existingVehicle) {
@@ -82,7 +82,7 @@ export class VehiclesService {
       plate: input.plate,
       year: input.year,
       status: input.status ?? VehicleStatus.ACTIVE,
-      userId: input.userId,
+      userId: userId,
     };
 
     return vehiclesRepository.create(data);
@@ -119,7 +119,10 @@ export class VehiclesService {
   }
 
   async remove(actor: Actor, id: string): Promise<void> {
-    if (!canManageVehicles(actor.role)) {
+    
+    const vehicle = await this.ensureVehicleExists(id)
+
+    if (!canManageVehicles(actor.role) && vehicle.userId !== actor.id ) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
 

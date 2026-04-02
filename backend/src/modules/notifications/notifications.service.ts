@@ -77,7 +77,10 @@ export class NotificationsService {
   }
 
   async update(actor: Actor, userId: string, id: string, input: UpdateNotificationInput): Promise<INotificationPublic> {
-    if(!canManageNotifications(actor.role) || actor.id !== userId) {
+    
+    const notification =  await this.ensureNotificationExists(id)
+    
+    if(!canManageNotifications(actor.role) &&  notification.userId !== actor.id) {
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 

@@ -8,7 +8,7 @@ export type CreateVehicleInput = {
     year: number
     status?: VehicleStatus
     
-    userId: string
+    //userId: string
 }
 
 

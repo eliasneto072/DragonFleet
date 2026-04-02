@@ -39,7 +39,7 @@ export class EarningsService {
       return earningsRepository.findAll();
     }
 
-    return earningsRepository.findByUserId(actor.id);
+    return earningsRepository.findByUserId(actor.id); 
   }
 
   async listByUser(actor: Actor, userId: string): Promise<IEarningPublic[]> {
@@ -72,7 +72,7 @@ export class EarningsService {
 
     const data: CreateEarningData = {
       amount: input.amount,
-      date: input.date,
+      date: input.date ?? new Date(),
       platform: input.platform,
       userId,
     };
@@ -81,7 +81,14 @@ export class EarningsService {
   }
 
   async update(actor: Actor, id: string, input: UpdateEarningInput): Promise<IEarningPublic> {
-    if (!canManageEarnings(actor.role)) {
+    
+    const earning = await earningsRepository.findById(id)
+    
+    if (!earning) {
+      throw new AppError('Earning not found', 404, 'NOT_FOUND')
+    }
+    
+    if (!canManageEarnings(actor.role) && earning.userId !== actor.id ) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
 
@@ -97,7 +104,10 @@ export class EarningsService {
   }
 
   async remove(actor: Actor, id: string): Promise<void> {
-    if (!canManageEarnings(actor.role)) {
+
+    const earning = await this.ensureEarningExists(id)
+
+    if (!canManageEarnings(actor.role) && earning.userId !== actor.id ) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
 

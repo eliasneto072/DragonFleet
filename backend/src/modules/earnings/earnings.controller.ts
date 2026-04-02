@@ -16,7 +16,7 @@ function getActor(req: AuthRequest) {
   }
 
   return { id: req.user.id, role: req.user.role };
-}
+} 
 
 export class EarningsController {
   list = async (req: AuthRequest, res: Response) => {

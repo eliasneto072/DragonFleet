@@ -5,6 +5,7 @@ import { vehiclesRouter } from '../modules/vehicles/vehicles.routes';
 import { earningsRouter } from '../modules/earnings/earnings.routes';
 import { withdrawalsRouter } from '../modules/withdrawals/withdrawals.routes';
 import { documentsRouter } from '../modules/documents/documents.routes';
+import { notificationsRouter } from '../modules/notifications/notifications.routes';
 
 
 const router = Router();
@@ -15,5 +16,6 @@ router.use('/vehicles', vehiclesRouter())
 router.use('/earnings', earningsRouter())
 router.use('/withdrawals', withdrawalsRouter())
 router.use('/documents', documentsRouter())
+router.use('/notifications', notificationsRouter())
 
 export { router };
