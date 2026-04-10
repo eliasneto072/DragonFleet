@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RootLayout } from '@/app/providers/RootLayout';
+import { LoginPage } from '@/features/auth/pages/LoginPage'; // ← novo
 
 import { DriverLayout } from '@/features/driver/components/DriverLayout';
 import { AdminLayout } from '@/features/admin/components/AdminLayout';
@@ -20,6 +21,12 @@ import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
 import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 
 export const router = createBrowserRouter([
+  // Rota pública — fora do RootLayout para não renderizar header/footer
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+
   {
     path: '/',
     element: <RootLayout />,
