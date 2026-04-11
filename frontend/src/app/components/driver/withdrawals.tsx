@@ -1,61 +1,115 @@
+// src/app/components/driver/withdrawals.tsx
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { DollarSign, CheckCircle, Clock, XCircle, ArrowDownToLine } from 'lucide-react';
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
+import { DollarSign, CheckCircle, Clock, XCircle, ArrowDownToLine, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { mockWithdrawals } from "@/shared/lib/mock-data";
-interface WithdrawalsProps {
-  driver: any;
+import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { queryKeys } from '@/shared/lib/query-keys';
+import { FINANCIAL } from '@/shared/constants';
+import type { WithdrawalStatus } from '@/shared/types/api';
+
+function getStatusBadge(status: WithdrawalStatus) {
+  switch (status) {
+    case 'PAID':
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Pago</Badge>;
+    case 'APPROVED':
+      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
+    case 'PENDING':
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
+    case 'REJECTED':
+      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
+    default:
+      return null;
+  }
 }
 
-export function Withdrawals({ driver }: WithdrawalsProps) {
-  const [open, setOpen] = useState(false);
+export function Withdrawals() {
+  const queryClient = useQueryClient();
+  const [open, setOpen]     = useState(false);
   const [amount, setAmount] = useState('');
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Concluído</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-      case 'rejected':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-      default:
-        return null;
-    }
-  };
+  // ── Leitura ───────────────────────────────────────────────────────────────
+  const { data, isLoading, isError } = useQuery({
+    queryKey: queryKeys.withdrawals.list,
+    queryFn:  () => withdrawalsService.list(),
+  });
 
-  const handleWithdrawal = (e: React.FormEvent) => {
+  const withdrawals = data?.withdrawals ?? [];
+
+  // Saldo disponível = soma dos ganhos PAID menos saques PAID/APPROVED
+  // (simplificado — idealmente viria de um endpoint /me/balance no backend)
+  const totalWithdrawn = withdrawals
+    .filter(w => w.status === 'PAID' || w.status === 'APPROVED')
+    .reduce((sum, w) => sum + Number(w.amount), 0);
+
+  // ── Criar saque ───────────────────────────────────────────────────────────
+  const { mutate: createWithdrawal, isPending } = useMutation({
+    mutationFn: (value: number) => withdrawalsService.create(value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+      toast.success('Solicitação de saque enviada com sucesso!');
+      setOpen(false);
+      setAmount('');
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? 'Erro ao solicitar saque.');
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const requestAmount = parseFloat(amount);
-    
-    if (requestAmount > driver.availableBalance) {
-      toast.error('Saldo insuficiente para esta retirada');
+    const value = parseFloat(amount);
+    if (isNaN(value) || value < FINANCIAL.minWithdrawal) {
+      toast.error(`Valor mínimo para saque é R$ ${FINANCIAL.minWithdrawal},00`);
       return;
     }
-    
-    if (requestAmount < 10) {
-      toast.error('Valor mínimo para saque é R$ 10,00');
+    if (value > FINANCIAL.maxWithdrawal) {
+      toast.error(`Valor máximo para saque é R$ ${FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00`);
       return;
     }
+    createWithdrawal(value);
+  }
 
-    toast.success('Solicitação de saque enviada com sucesso!');
-    setOpen(false);
-    setAmount('');
-  };
+  // ── Estados ───────────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Carregando saques…</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <AlertCircle className="h-10 w-10 text-red-400" />
+        <p className="text-muted-foreground">Erro ao carregar saques.</p>
+        <Button variant="outline" onClick={() =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })
+        }>
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Retiradas</h2>
           <p className="text-muted-foreground">Solicite saques e acompanhe seu histórico</p>
         </div>
+
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -67,10 +121,10 @@ export function Withdrawals({ driver }: WithdrawalsProps) {
             <DialogHeader>
               <DialogTitle>Solicitar Retirada</DialogTitle>
               <DialogDescription>
-                Saldo disponível: R$ {driver.availableBalance.toFixed(2)}
+                Mínimo R$ {FINANCIAL.minWithdrawal},00 · Máximo R$ {FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleWithdrawal} className="space-y-4 mt-4">
+            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="amount">Valor da Retirada</Label>
                 <div className="relative">
@@ -79,8 +133,8 @@ export function Withdrawals({ driver }: WithdrawalsProps) {
                     id="amount"
                     type="number"
                     step="0.01"
-                    min="10"
-                    max={driver.availableBalance}
+                    min={FINANCIAL.minWithdrawal}
+                    max={FINANCIAL.maxWithdrawal}
                     placeholder="0,00"
                     className="pl-10"
                     value={amount}
@@ -88,35 +142,12 @@ export function Withdrawals({ driver }: WithdrawalsProps) {
                     required
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Valor mínimo: R$ 10,00</p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="method">Método de Pagamento</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pix">Pix (Instantâneo)</SelectItem>
-                    <SelectItem value="bank">Transferência Bancária (1-2 dias úteis)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="account">Chave Pix / Conta Bancária</Label>
-                <Input
-                  id="account"
-                  placeholder="Ex: seu@email.com ou CPF"
-                  required
-                />
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>Importante:</strong> Retiradas via Pix são processadas em até 1 hora. 
-                  Transferências bancárias podem levar até 2 dias úteis.
+                  <strong>Importante:</strong> Saques são processados em até{' '}
+                  {FINANCIAL.processingDays} dias úteis.
                 </p>
               </div>
 
@@ -124,57 +155,76 @@ export function Withdrawals({ driver }: WithdrawalsProps) {
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">Solicitar Retirada</Button>
+                <Button type="submit" disabled={isPending}>
+                  {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Solicitar Retirada
+                </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Available Balance Card */}
+      {/* Saldo card */}
       <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
         <CardHeader>
-          <CardTitle className="text-white">Saldo Disponível</CardTitle>
-          <CardDescription className="text-blue-100">Disponível para saque imediato</CardDescription>
+          <CardTitle className="text-white">Total Sacado</CardTitle>
+          <CardDescription className="text-blue-100">Soma de saques aprovados e pagos</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-4xl font-bold">R$ {driver.availableBalance.toFixed(2)}</p>
-              <p className="text-sm text-blue-100 mt-2">Total em ganhos: R$ {driver.totalEarnings.toFixed(2)}</p>
+              <p className="text-4xl font-bold">
+                R$ {totalWithdrawn.toFixed(2)}
+              </p>
+              <p className="text-sm text-blue-100 mt-2">
+                {withdrawals.filter(w => w.status === 'PENDING').length} saque(s) pendente(s)
+              </p>
             </div>
             <DollarSign className="h-16 w-16 opacity-50" />
           </div>
         </CardContent>
       </Card>
 
-      {/* Withdrawal History */}
+      {/* Histórico */}
       <Card>
         <CardHeader>
           <CardTitle>Histórico de Retiradas</CardTitle>
           <CardDescription>Acompanhe todas as suas solicitações de saque</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {mockWithdrawals.map((withdrawal) => (
-              <div key={withdrawal.id} className="flex items-center justify-between border-b pb-4 last:border-0">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">R$ {withdrawal.amount.toFixed(2)}</p>
-                    {getStatusBadge(withdrawal.status)}
+          {withdrawals.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Nenhum saque solicitado ainda.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {withdrawals.map((w) => (
+                <div key={w.id} className="flex items-center justify-between border-b pb-4 last:border-0">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">R$ {Number(w.amount).toFixed(2)}</p>
+                      {getStatusBadge(w.status)}
+                    </div>
+                    {w.notes && (
+                      <p className="text-xs text-muted-foreground mt-1">{w.notes}</p>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">{withdrawal.method}</p>
-                  <p className="text-xs text-muted-foreground">{withdrawal.accountInfo}</p>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">
+                      {new Date(w.requestedAt).toLocaleDateString('pt-BR')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(w.requestedAt).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">{new Date(withdrawal.date).toLocaleDateString('pt-BR')}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(withdrawal.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

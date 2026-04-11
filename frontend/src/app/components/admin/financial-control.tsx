@@ -1,49 +1,97 @@
+// src/app/components/admin/financial-control.tsx
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { DollarSign, TrendingUp, CheckCircle, Clock, XCircle, Download } from 'lucide-react';
-import { mockWithdrawals, mockEarnings, mockDrivers } from "@/shared/lib/mock-data";
-import { useState } from 'react';
+import { DollarSign, TrendingUp, CheckCircle, Clock, XCircle, Loader2, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { earningsService }    from '@/features/driver/services/earnings.service';
+import { usersService }       from '@/features/admin/services/users.service';
+import { queryKeys }          from '@/shared/lib/query-keys';
+import { FINANCIAL }          from '@/shared/constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import type { WithdrawalStatus } from '@/shared/types/api';
+
+function getStatusBadge(status: WithdrawalStatus) {
+  switch (status) {
+    case 'PAID':
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Pago</Badge>;
+    case 'APPROVED':
+      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
+    case 'PENDING':
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
+    case 'REJECTED':
+      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
+    default:
+      return null;
+  }
+}
 
 export function FinancialControl() {
-  const [periodFilter, setPeriodFilter] = useState('month');
+  const queryClient = useQueryClient();
 
-  // Calculate financial stats
-  const totalPendingWithdrawals = mockWithdrawals
-    .filter(w => w.status === 'pending')
-    .reduce((sum, w) => sum + w.amount, 0);
+  // ── Leitura ───────────────────────────────────────────────────────────────
+  const withdrawalsQ = useQuery({ queryKey: queryKeys.withdrawals.list,  queryFn: () => withdrawalsService.list() });
+  const earningsQ    = useQuery({ queryKey: queryKeys.earnings.list,      queryFn: () => earningsService.list() });
+  const usersQ       = useQuery({ queryKey: queryKeys.users.list,         queryFn: () => usersService.list() });
 
-  const totalCompletedWithdrawals = mockWithdrawals
-    .filter(w => w.status === 'completed')
-    .reduce((sum, w) => sum + w.amount, 0);
+  const isLoading = withdrawalsQ.isLoading || earningsQ.isLoading;
+  const isError   = withdrawalsQ.isError   || earningsQ.isError;
 
-  const totalEarnings = mockEarnings
-    .filter(e => e.status === 'completed')
-    .reduce((sum, e) => sum + e.amount, 0);
+  // ── Aprovar / Rejeitar saque ──────────────────────────────────────────────
+  const { mutate: updateWithdrawalStatus, isPending: updating } = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: WithdrawalStatus }) =>
+      withdrawalsService.updateStatus(id, { status }),
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+      toast.success(status === 'APPROVED' ? 'Saque aprovado!' : 'Saque rejeitado.');
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao processar saque.'),
+  });
 
-  const platformRevenue = totalEarnings * 0.20; // 20% platform fee
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Carregando dados financeiros…</span>
+      </div>
+    );
+  }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Concluído</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-      case 'rejected':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-      default:
-        return null;
-    }
-  };
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <AlertCircle className="h-10 w-10 text-red-400" />
+        <p className="text-muted-foreground">Erro ao carregar dados financeiros.</p>
+        <Button variant="outline" onClick={() => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+          queryClient.invalidateQueries({ queryKey: queryKeys.earnings.all });
+        }}>
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
 
-  const financialData = [
-    { category: 'Ganhos Totais', value: totalEarnings },
-    { category: 'Saques Pagos', value: totalCompletedWithdrawals },
-    { category: 'Receita Plataforma', value: platformRevenue },
-    { category: 'Pendentes', value: totalPendingWithdrawals },
+  const withdrawals = withdrawalsQ.data?.withdrawals ?? [];
+  const earnings    = earningsQ.data?.earnings       ?? [];
+  const users       = usersQ.data?.users             ?? [];
+
+  const totalEarnings        = earnings.reduce((s, e) => s + Number(e.amount), 0);
+  const platformRevenue      = totalEarnings * FINANCIAL.companyCommission;
+  const pendingWithdrawals   = withdrawals.filter(w => w.status === 'PENDING');
+  const paidWithdrawals      = withdrawals.filter(w => w.status === 'PAID');
+  const totalPendingAmount   = pendingWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
+  const totalPaidAmount      = paidWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
+
+  const chartData = [
+    { categoria: 'Ganhos Totais',     valor: totalEarnings },
+    { categoria: 'Saques Pagos',      valor: totalPaidAmount },
+    { categoria: 'Receita Plataforma', valor: platformRevenue },
+    { categoria: 'Pendentes',         valor: totalPendingAmount },
   ];
 
   return (
@@ -53,13 +101,9 @@ export function FinancialControl() {
           <h2 className="text-2xl font-bold">Controle Financeiro</h2>
           <p className="text-muted-foreground">Gerencie transações e saques da plataforma</p>
         </div>
-        <Button>
-          <Download className="h-4 w-4 mr-2" />
-          Exportar Relatório
-        </Button>
       </div>
 
-      {/* Financial Overview */}
+      {/* Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -78,8 +122,8 @@ export function FinancialControl() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">R$ {totalCompletedWithdrawals.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Processados com sucesso</p>
+            <div className="text-2xl font-bold text-green-600">R$ {totalPaidAmount.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">{paidWithdrawals.length} saque(s) processado(s)</p>
           </CardContent>
         </Card>
 
@@ -89,8 +133,8 @@ export function FinancialControl() {
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">R$ {totalPendingWithdrawals.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Aguardando processamento</p>
+            <div className="text-2xl font-bold text-yellow-600">R$ {totalPendingAmount.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">{pendingWithdrawals.length} aguardando aprovação</p>
           </CardContent>
         </Card>
 
@@ -101,90 +145,88 @@ export function FinancialControl() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">R$ {platformRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Taxa de 20%</p>
+            <p className="text-xs text-muted-foreground">Taxa de {FINANCIAL.companyCommission * 100}%</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Financial Chart */}
+      {/* Gráfico */}
       <Card>
         <CardHeader>
           <CardTitle>Visão Geral Financeira</CardTitle>
           <CardDescription>Distribuição de valores por categoria</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={financialData}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="category" />
-              <YAxis />
-              <Tooltip 
-                formatter={(value: number) => `R$ ${value.toFixed(2)}`}
-                labelStyle={{ color: '#000' }}
-              />
-              <Bar dataKey="value" fill="#3b82f6" />
+              <XAxis dataKey="categoria" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v: number) => [`R$ ${v.toFixed(2)}`, 'Valor']} />
+              <Bar dataKey="valor" fill="#108865" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Pending Withdrawals */}
+      {/* Saques pendentes — com ações reais */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Solicitações de Saque Pendentes</CardTitle>
-              <CardDescription>Aprovações necessárias</CardDescription>
-            </div>
-            <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="week">Esta Semana</SelectItem>
-                <SelectItem value="month">Este Mês</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <CardTitle>Solicitações Pendentes</CardTitle>
+          <CardDescription>Aprovações necessárias ({pendingWithdrawals.length})</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Motorista</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Método</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockWithdrawals
-                .filter(w => w.status === 'pending')
-                .map((withdrawal) => {
-                  const driver = mockDrivers.find(d => d.id === withdrawal.driverId);
+          {pendingWithdrawals.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Nenhum saque pendente.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Motorista</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingWithdrawals.map((w) => {
+                  const driver = users.find(u => u.id === w.userId);
                   return (
-                    <TableRow key={withdrawal.id}>
+                    <TableRow key={w.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{driver?.name}</p>
+                          <p className="font-medium">{driver?.name ?? '—'}</p>
                           <p className="text-sm text-muted-foreground">{driver?.email}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(withdrawal.date).toLocaleDateString('pt-BR')}</TableCell>
-                      <TableCell className="font-bold">R$ {withdrawal.amount.toFixed(2)}</TableCell>
-                      <TableCell>{withdrawal.method}</TableCell>
-                      <TableCell>{getStatusBadge(withdrawal.status)}</TableCell>
+                      <TableCell>
+                        {new Date(w.requestedAt).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell className="font-bold">
+                        R$ {Number(w.amount).toFixed(2)}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(w.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="default">
-                            <CheckCircle className="h-3 w-3 mr-1" />
+                          <Button
+                            size="sm"
+                            disabled={updating}
+                            onClick={() => updateWithdrawalStatus({ id: w.id, status: 'APPROVED' })}
+                          >
+                            {updating
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <CheckCircle className="h-3 w-3 mr-1" />}
                             Aprovar
                           </Button>
-                          <Button size="sm" variant="destructive">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={updating}
+                            onClick={() => updateWithdrawalStatus({ id: w.id, status: 'REJECTED' })}
+                          >
                             <XCircle className="h-3 w-3 mr-1" />
                             Rejeitar
                           </Button>
@@ -193,16 +235,17 @@ export function FinancialControl() {
                     </TableRow>
                   );
                 })}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Recent Transactions */}
+      {/* Histórico completo */}
       <Card>
         <CardHeader>
-          <CardTitle>Transações Recentes</CardTitle>
-          <CardDescription>Histórico de todas as movimentações</CardDescription>
+          <CardTitle>Histórico de Saques</CardTitle>
+          <CardDescription>Todas as movimentações</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -211,35 +254,32 @@ export function FinancialControl() {
                 <TableHead>Motorista</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Valor</TableHead>
-                <TableHead>Método</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockWithdrawals.slice(0, 10).map((withdrawal) => {
-                const driver = mockDrivers.find(d => d.id === withdrawal.driverId);
-                return (
-                  <TableRow key={withdrawal.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{driver?.name}</p>
-                        <p className="text-sm text-muted-foreground">{withdrawal.accountInfo}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p>{new Date(withdrawal.date).toLocaleDateString('pt-BR')}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(withdrawal.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              {[...withdrawals]
+                .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
+                .slice(0, 20)
+                .map((w) => {
+                  const driver = users.find(u => u.id === w.userId);
+                  return (
+                    <TableRow key={w.id}>
+                      <TableCell>
+                        <p className="font-medium">{driver?.name ?? '—'}</p>
+                        <p className="text-sm text-muted-foreground">{driver?.email}</p>
+                      </TableCell>
+                      <TableCell>
+                        <p>{new Date(w.requestedAt).toLocaleDateString('pt-BR')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(w.requestedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-bold">R$ {withdrawal.amount.toFixed(2)}</TableCell>
-                    <TableCell>{withdrawal.method}</TableCell>
-                    <TableCell>{getStatusBadge(withdrawal.status)}</TableCell>
-                  </TableRow>
-                );
-              })}
+                      </TableCell>
+                      <TableCell className="font-bold">R$ {Number(w.amount).toFixed(2)}</TableCell>
+                      <TableCell>{getStatusBadge(w.status)}</TableCell>
+                    </TableRow>
+                  );
+                })}
             </TableBody>
           </Table>
         </CardContent>

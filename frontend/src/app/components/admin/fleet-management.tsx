@@ -1,379 +1,256 @@
+// src/app/components/admin/fleet-management.tsx
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
+import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
-import { Badge } from '@/app/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/app/components/ui/dialog';
-import { Car, Plus, Settings, AlertCircle, CheckCircle } from 'lucide-react';
-import { useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
+import { Car, Plus, Settings, AlertCircle, CheckCircle, Loader2, Wrench, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { vehiclesService } from '@/features/driver/services/vehicles.service';
+import { usersService }    from '@/features/admin/services/users.service';
+import { queryKeys }       from '@/shared/lib/query-keys';
+import type { VehicleStatus } from '@/shared/types/api';
 
-interface Vehicle {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  licensePlate: string;
-  color: string;
-  type: string;
-  status: 'available' | 'in_use' | 'maintenance';
-  driverName?: string;
-  driverId?: string;
+function getStatusBadge(status: VehicleStatus) {
+  const config = {
+    ACTIVE:      { label: 'Ativo',       icon: CheckCircle, cls: 'bg-green-100 text-green-800' },
+    INACTIVE:    { label: 'Inativo',     icon: Car,         cls: 'bg-gray-100 text-gray-800' },
+    MAINTENANCE: { label: 'Manutenção',  icon: Wrench,      cls: 'bg-orange-100 text-orange-800' },
+    SOLD:        { label: 'Vendido',     icon: AlertCircle, cls: 'bg-red-100 text-red-800' },
+  };
+  const { label, icon: Icon, cls } = config[status] ?? config.INACTIVE;
+  return (
+    <Badge className={`${cls} hover:${cls} flex items-center gap-1 w-fit`}>
+      <Icon className="h-3 w-3" />{label}
+    </Badge>
+  );
 }
 
-const mockVehicles: Vehicle[] = [
-  {
-    id: '1',
-    make: 'Tesla',
-    model: 'Model 3',
-    year: 2023,
-    licensePlate: 'AB-12-CD',
-    color: 'Branco',
-    type: 'Elétrico',
-    status: 'in_use',
-    driverName: 'João Silva',
-    driverId: '101',
-  },
-  {
-    id: '2',
-    make: 'Nissan',
-    model: 'Leaf',
-    year: 2022,
-    licensePlate: 'EF-34-GH',
-    color: 'Azul',
-    type: 'Elétrico',
-    status: 'in_use',
-    driverName: 'Maria Santos',
-    driverId: '102',
-  },
-  {
-    id: '3',
-    make: 'Toyota',
-    model: 'Prius',
-    year: 2021,
-    licensePlate: 'IJ-56-KL',
-    color: 'Preto',
-    type: 'Híbrido',
-    status: 'available',
-  },
-  {
-    id: '4',
-    make: 'Volkswagen',
-    model: 'ID.3',
-    year: 2023,
-    licensePlate: 'MN-78-OP',
-    color: 'Cinza',
-    type: 'Elétrico',
-    status: 'maintenance',
-  },
-];
-
-const mockDrivers = [
-  { id: '101', name: 'João Silva' },
-  { id: '102', name: 'Maria Santos' },
-  { id: '103', name: 'Pedro Costa' },
-  { id: '104', name: 'Ana Ferreira' },
-];
+const EMPTY_FORM = { brand: '', model: '', plate: '', year: new Date().getFullYear() };
 
 export function FleetManagement() {
-  const [vehicles] = useState<Vehicle[]>(mockVehicles);
-  const [selectedDriver, setSelectedDriver] = useState('');
-  const [newVehicle, setNewVehicle] = useState({
-    make: '',
-    model: '',
-    year: new Date().getFullYear(),
-    licensePlate: '',
-    color: '',
-    type: 'sedan',
+  const queryClient = useQueryClient();
+  const [open, setOpen]   = useState(false);
+  const [form, setForm]   = useState(EMPTY_FORM);
+
+  // ── Leitura ───────────────────────────────────────────────────────────────
+  const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
+  const usersQ    = useQuery({ queryKey: queryKeys.users.list,    queryFn: () => usersService.list() });
+
+  const vehicles = vehiclesQ.data?.vehicles ?? [];
+  const users    = usersQ.data?.users       ?? [];
+
+  // ── Criar veículo ─────────────────────────────────────────────────────────
+  const { mutate: createVehicle, isPending: creating } = useMutation({
+    mutationFn: () => vehiclesService.create(form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      toast.success('Veículo adicionado com sucesso!');
+      setOpen(false);
+      setForm(EMPTY_FORM);
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao adicionar veículo.'),
   });
 
-  const getStatusBadge = (status: Vehicle['status']) => {
-    const config = {
-      available: { label: 'Disponível', variant: 'default' as const, icon: CheckCircle },
-      in_use: { label: 'Em Uso', variant: 'secondary' as const, icon: Car },
-      maintenance: { label: 'Manutenção', variant: 'outline' as const, icon: AlertCircle },
-    };
+  // ── Alterar status ────────────────────────────────────────────────────────
+  const { mutate: updateStatus } = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: VehicleStatus }) =>
+      vehiclesService.update(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      toast.success('Status atualizado.');
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar status.'),
+  });
 
-    const { label, variant, icon: Icon } = config[status];
+  // ── Remover ───────────────────────────────────────────────────────────────
+  const { mutate: removeVehicle } = useMutation({
+    mutationFn: (id: string) => vehiclesService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      toast.success('Veículo removido.');
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao remover veículo.'),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.brand || !form.model || !form.plate) {
+      toast.error('Preencha todos os campos obrigatórios.');
+      return;
+    }
+    createVehicle();
+  }
+
+  const isLoading = vehiclesQ.isLoading;
+  const isError   = vehiclesQ.isError;
+
+  if (isLoading) {
     return (
-      <Badge variant={variant} className="flex items-center gap-1 w-fit">
-        <Icon className="h-3 w-3" />
-        {label}
-      </Badge>
+      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Carregando frota…</span>
+      </div>
     );
-  };
+  }
 
-  const handleAddVehicle = () => {
-    alert('Veículo adicionado com sucesso!');
-    setNewVehicle({
-      make: '',
-      model: '',
-      year: new Date().getFullYear(),
-      licensePlate: '',
-      color: '',
-      type: 'sedan',
-    });
-  };
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <AlertCircle className="h-10 w-10 text-red-400" />
+        <p className="text-muted-foreground">Erro ao carregar veículos.</p>
+        <Button variant="outline" onClick={() =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all })
+        }>
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total',      value: vehicles.length,                                          color: 'blue',   icon: Car },
+          { label: 'Ativos',     value: vehicles.filter(v => v.status === 'ACTIVE').length,       color: 'green',  icon: CheckCircle },
+          { label: 'Manutenção', value: vehicles.filter(v => v.status === 'MAINTENANCE').length,  color: 'orange', icon: Settings },
+          { label: 'Inativos',   value: vehicles.filter(v => v.status === 'INACTIVE').length,     color: 'gray',   icon: AlertCircle },
+        ].map(({ label, value, icon: Icon }) => (
+          <Card key={label}>
+            <CardContent className="pt-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total de Veículos</p>
-                <h3 className="text-2xl font-bold mt-1">{vehicles.length}</h3>
+                <p className="text-sm font-medium text-muted-foreground">{label}</p>
+                <h3 className="text-2xl font-bold mt-1">{value}</h3>
               </div>
-              <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                <Car className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 bg-[#108865]/10 rounded-lg flex items-center justify-center">
+                <Icon className="h-5 w-5 text-[#108865]" />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Disponíveis</p>
-                <h3 className="text-2xl font-bold mt-1 text-green-600">
-                  {vehicles.filter(v => v.status === 'available').length}
-                </h3>
-              </div>
-              <div className="h-12 w-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Em Uso</p>
-                <h3 className="text-2xl font-bold mt-1">
-                  {vehicles.filter(v => v.status === 'in_use').length}
-                </h3>
-              </div>
-              <div className="h-12 w-12 bg-gradient-to-br from-[#108865] to-[#0d6b4f] rounded-lg flex items-center justify-center">
-                <Car className="h-6 w-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Manutenção</p>
-                <h3 className="text-2xl font-bold mt-1 text-orange-600">
-                  {vehicles.filter(v => v.status === 'maintenance').length}
-                </h3>
-              </div>
-              <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
-                <Settings className="h-6 w-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Actions */}
+      {/* Header + botão */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Gestão de Frotas</h2>
-        <Dialog>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Veículo
-            </Button>
+            <Button><Plus className="h-4 w-4 mr-2" />Adicionar Veículo</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Veículo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
+            <DialogHeader><DialogTitle>Novo Veículo</DialogTitle></DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="make">Marca</Label>
-                  <Input
-                    id="make"
-                    placeholder="Tesla"
-                    value={newVehicle.make}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, make: e.target.value })}
-                  />
+                <div className="space-y-1">
+                  <Label>Marca *</Label>
+                  <Input placeholder="Toyota" value={form.brand}
+                    onChange={e => setForm({ ...form, brand: e.target.value })} required />
                 </div>
-                <div>
-                  <Label htmlFor="model">Modelo</Label>
-                  <Input
-                    id="model"
-                    placeholder="Model 3"
-                    value={newVehicle.model}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
-                  />
+                <div className="space-y-1">
+                  <Label>Modelo *</Label>
+                  <Input placeholder="Corolla" value={form.model}
+                    onChange={e => setForm({ ...form, model: e.target.value })} required />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="year">Ano</Label>
-                  <Input
-                    id="year"
-                    type="number"
-                    value={newVehicle.year}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, year: parseInt(e.target.value) })}
-                  />
+                <div className="space-y-1">
+                  <Label>Placa *</Label>
+                  <Input placeholder="ABC-1234" value={form.plate}
+                    onChange={e => setForm({ ...form, plate: e.target.value.toUpperCase() })} required />
                 </div>
-                <div>
-                  <Label htmlFor="plate">Matrícula</Label>
-                  <Input
-                    id="plate"
-                    placeholder="AB-12-CD"
-                    value={newVehicle.licensePlate}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, licensePlate: e.target.value })}
-                  />
+                <div className="space-y-1">
+                  <Label>Ano</Label>
+                  <Input type="number" min={2000} max={new Date().getFullYear() + 1}
+                    value={form.year}
+                    onChange={e => setForm({ ...form, year: Number(e.target.value) })} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="color">Cor</Label>
-                  <Input
-                    id="color"
-                    placeholder="Branco"
-                    value={newVehicle.color}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, color: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="type">Tipo</Label>
-                  <Select
-                    value={newVehicle.type}
-                    onValueChange={(value) => setNewVehicle({ ...newVehicle, type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sedan">Sedan</SelectItem>
-                      <SelectItem value="suv">SUV</SelectItem>
-                      <SelectItem value="electric">Elétrico</SelectItem>
-                      <SelectItem value="hybrid">Híbrido</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={creating}>
+                  {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Adicionar
+                </Button>
               </div>
-              <Button onClick={handleAddVehicle} className="w-full">
-                Adicionar Veículo
-              </Button>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Vehicles Table */}
+      {/* Tabela */}
       <Card>
-        <CardHeader>
-          <CardTitle>Veículos da Frota</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Veículos ({vehicles.length})</CardTitle></CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b">
-                <tr className="text-left">
-                  <th className="pb-3 font-semibold">Veículo</th>
-                  <th className="pb-3 font-semibold">Matrícula</th>
-                  <th className="pb-3 font-semibold">Tipo</th>
-                  <th className="pb-3 font-semibold">Status</th>
-                  <th className="pb-3 font-semibold">Motorista</th>
-                  <th className="pb-3 font-semibold">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vehicles.map((vehicle) => (
-                  <tr key={vehicle.id} className="border-b last:border-0">
-                    <td className="py-4">
-                      <div>
-                        <p className="font-semibold">
-                          {vehicle.make} {vehicle.model}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {vehicle.year} • {vehicle.color}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="py-4">
-                      <span className="font-mono font-semibold">{vehicle.licensePlate}</span>
-                    </td>
-                    <td className="py-4">
-                      <Badge variant="outline">{vehicle.type}</Badge>
-                    </td>
-                    <td className="py-4">{getStatusBadge(vehicle.status)}</td>
-                    <td className="py-4">
-                      {vehicle.status === 'in_use' && vehicle.driverName ? (
-                        <span>{vehicle.driverName}</span>
-                      ) : vehicle.status === 'available' ? (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              Associar Motorista
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Associar Motorista</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 mt-4">
-                              <Label>Selecionar Motorista</Label>
-                              <Select value={selectedDriver} onValueChange={setSelectedDriver}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Escolha um motorista" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {mockDrivers.map((driver) => (
-                                    <SelectItem key={driver.id} value={driver.id}>
-                                      {driver.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                onClick={() => alert('Motorista associado com sucesso!')}
-                                className="w-full"
-                              >
-                                Confirmar Associação
-                              </Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="py-4">
-                      <Button variant="ghost" size="sm">
-                        Ver Detalhes
-                      </Button>
-                    </td>
+          {vehicles.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-10">
+              Nenhum veículo cadastrado ainda.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b">
+                  <tr className="text-left">
+                    <th className="pb-3 font-semibold">Veículo</th>
+                    <th className="pb-3 font-semibold">Placa</th>
+                    <th className="pb-3 font-semibold">Status</th>
+                    <th className="pb-3 font-semibold">Motorista</th>
+                    <th className="pb-3 font-semibold">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {vehicles.map((v) => {
+                    const driver = users.find(u => u.id === v.userId);
+                    return (
+                      <tr key={v.id} className="border-b last:border-0">
+                        <td className="py-4">
+                          <p className="font-semibold">{v.brand} {v.model}</p>
+                          <p className="text-sm text-muted-foreground">{v.year}</p>
+                        </td>
+                        <td className="py-4">
+                          <span className="font-mono font-semibold">{v.plate}</span>
+                        </td>
+                        <td className="py-4">{getStatusBadge(v.status)}</td>
+                        <td className="py-4">
+                          {driver
+                            ? <span className="text-sm">{driver.name}</span>
+                            : <span className="text-sm text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-4">
+                          <div className="flex gap-1">
+                            {v.status === 'ACTIVE' && (
+                              <Button variant="outline" size="sm"
+                                onClick={() => updateStatus({ id: v.id, status: 'MAINTENANCE' })}>
+                                <Wrench className="h-3 w-3 mr-1" />Manutenção
+                              </Button>
+                            )}
+                            {v.status === 'MAINTENANCE' && (
+                              <Button variant="outline" size="sm"
+                                onClick={() => updateStatus({ id: v.id, status: 'ACTIVE' })}>
+                                <CheckCircle className="h-3 w-3 mr-1" />Ativar
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm"
+                              onClick={() => {
+                                if (confirm('Remover este veículo?')) removeVehicle(v.id);
+                              }}>
+                              <Trash2 className="h-3 w-3 text-red-500" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
