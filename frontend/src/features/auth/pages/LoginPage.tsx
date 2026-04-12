@@ -103,6 +103,14 @@ export function LoginPage() {
             {submitting ? 'Entrando…' : 'Entrar'}
           </button>
         </form>
+
+        {/* Link para cadastro */}
+        <p className="text-center text-sm text-gray-500">
+          Não tem uma conta?{' '}
+          <a href="/register" className="text-[#108865] font-semibold hover:underline">
+            Cadastre-se
+          </a>
+        </p>
       </div>
     </div>
   );

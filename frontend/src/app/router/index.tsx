@@ -4,7 +4,8 @@ import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RootLayout } from '@/app/providers/RootLayout';
 import { LandingPage } from '@/features/landing/pages/LandingPage';
-import { LoginPage } from '@/features/auth/pages/LoginPage';
+import { LoginPage }    from '@/features/auth/pages/LoginPage';
+import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 
 import { DriverLayout } from '@/features/driver/components/DriverLayout';
 import { AdminLayout } from '@/features/admin/components/AdminLayout';
@@ -33,6 +34,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/register',
+    element: <RegisterPage />,
   },
 
   // ── Rotas protegidas (com header/footer via RootLayout) ──────────────────

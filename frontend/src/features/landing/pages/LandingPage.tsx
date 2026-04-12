@@ -69,15 +69,16 @@ export function LandingPage() {
         <header style={{
           position: 'sticky', top: 0, zIndex: 50,
           borderBottom: '1px solid rgba(255,255,255,0.06)',
-          background: 'rgba(10,10,10,0.85)',
-          backdropFilter: 'blur(12px)',
+          background: '#0a0a0a',
         }}>
           <div style={{
-            maxWidth: '1100px', margin: '0 auto', padding: '0 24px',
-            height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            maxWidth: '1200px', margin: '0 auto', padding: '0 32px',
+            height: '72px', display: 'flex', alignItems: 'center', gap: '40px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg width="36" height="36" viewBox="0 0 100 100" fill="none">
+
+            {/* Logo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginRight: '8px', flexShrink: 0 }}>
+              <svg width="32" height="32" viewBox="0 0 100 100" fill="none">
                 <defs>
                   <linearGradient id="h-bg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#1a4a3a"/>
@@ -95,31 +96,92 @@ export function LandingPage() {
                 <circle cx="70" cy="76" r="7" fill="white"/>
                 <circle cx="70" cy="76" r="3" fill="url(#h-bg)"/>
               </svg>
-              <span style={{ fontWeight: 700, fontSize: '18px', letterSpacing: '-0.5px' }}>
+              <span style={{ fontWeight: 700, fontSize: '17px', letterSpacing: '-0.3px', color: '#fff' }}>
                 Dragon<span style={{ color: '#108865' }}>Fleet</span>
               </span>
             </div>
 
-            <button
-              onClick={() => navigate('/login')}
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.2)',
-                color: '#fff', padding: '8px 20px',
-                borderRadius: '999px', fontSize: '14px',
-                fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => {
-                (e.target as HTMLElement).style.borderColor = '#108865';
-                (e.target as HTMLElement).style.color = '#108865';
-              }}
-              onMouseLeave={e => {
-                (e.target as HTMLElement).style.borderColor = 'rgba(255,255,255,0.2)';
-                (e.target as HTMLElement).style.color = '#fff';
-              }}
-            >
-              Entrar
-            </button>
+            {/* Nav links centrais */}
+            <nav style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+              {[
+                { label: 'Motoristas',  href: '#features' },
+                { label: 'Plataforma',  href: '#features' },
+                { label: 'Empresa',     href: '#features' },
+                { label: 'Suporte',     href: '#features' },
+              ].map(({ label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  style={{
+                    color: 'rgba(255,255,255,0.75)',
+                    textDecoration: 'none',
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    padding: '6px 14px',
+                    borderRadius: '999px',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.target as HTMLElement).style.color = '#fff';
+                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
+                  }}
+                  onMouseLeave={e => {
+                    (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)';
+                    (e.target as HTMLElement).style.background = 'transparent';
+                  }}
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+
+            {/* Auth buttons — à direita */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+
+              {/* Fazer login */}
+              <button
+                onClick={() => navigate('/login')}
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: 'rgba(255,255,255,0.75)', padding: '8px 16px',
+                  borderRadius: '999px', fontSize: '15px',
+                  fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  (e.target as HTMLElement).style.color = '#fff';
+                  (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
+                }}
+                onMouseLeave={e => {
+                  (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)';
+                  (e.target as HTMLElement).style.background = 'transparent';
+                }}
+              >
+                Fazer login
+              </button>
+
+              {/* Cadastre-se — destaque com borda */}
+              <button
+                onClick={() => navigate('/register')}
+                style={{
+                  background: 'transparent',
+                  border: '1.5px solid rgba(255,255,255,0.85)',
+                  color: '#fff', padding: '8px 20px',
+                  borderRadius: '999px', fontSize: '15px',
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  (e.target as HTMLElement).style.background = '#fff';
+                  (e.target as HTMLElement).style.color = '#0a0a0a';
+                }}
+                onMouseLeave={e => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                  (e.target as HTMLElement).style.color = '#fff';
+                }}
+              >
+                Cadastre-se
+              </button>
+            </div>
+
           </div>
         </header>
 
