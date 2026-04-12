@@ -21,8 +21,6 @@ export function generateAccessToken(userId: string, role: UserRole) {
     {
       subject: userId,
       expiresIn: env.JWT_EXPIRES_IN,
-      issuer: env.JWT_ISSUER,
-      audience: env.JWT_AUDIENCE,
       
     }
   );
