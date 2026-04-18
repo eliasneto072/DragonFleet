@@ -2,8 +2,6 @@
 
 import { apiClient } from '@/shared/lib/api-client';
 
-// ---------- tipos que espelham o contrato do backend ----------
-
 export interface AuthUser {
   id: string;
   name: string;
@@ -14,24 +12,9 @@ export interface AuthUser {
   updatedAt: string;
 }
 
-interface LoginResponse {
-  token: string;
-  user: AuthUser;
-}
-
-interface MeResponse {
-  user: AuthUser;
-}
-
-// ---------- service ----------
-
 export const authService = {
-  /**
-   * POST /auth/login
-   * Faz login, persiste o token e retorna o usuário.
-   */
   async login(email: string, password: string): Promise<AuthUser> {
-    const data = await apiClient.post<LoginResponse>('/auth/login', {
+    const data = await apiClient.post<{ token: string; user: AuthUser }>('/auth/login', {
       email,
       password,
     });
@@ -40,10 +23,6 @@ export const authService = {
     return data.user;
   },
 
-  /**
-   * POST /auth/logout
-   * Avisa o backend (stateless) e limpa o token local.
-   */
   async logout(): Promise<void> {
     try {
       await apiClient.post('/auth/logout', {});
@@ -52,16 +31,11 @@ export const authService = {
     }
   },
 
-  /**
-   * GET /auth/me
-   * Retorna o usuário autenticado com base no token salvo.
-   */
   async me(): Promise<AuthUser> {
-    const data = await apiClient.get<MeResponse>('/auth/me');
+    const data = await apiClient.get<{ user: AuthUser }>('/auth/me');
     return data.user;
   },
 
-  /** Lê o token salvo no localStorage. */
   getToken(): string | null {
     return localStorage.getItem('dragonfleet:token');
   },

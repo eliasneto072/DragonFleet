@@ -1,5 +1,3 @@
-// src/shared/lib/api-client.ts
-
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export class ApiError extends Error {
@@ -33,23 +31,23 @@ async function request<T>(
     headers,
   });
 
-  const data = await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     throw new ApiError(
       res.status,
-      data?.code ?? 'UNKNOWN_ERROR',
-      data?.message ?? 'Ocorreu um erro inesperado.',
+      json?.code ?? 'UNKNOWN_ERROR',
+      json?.message ?? 'Ocorreu um erro inesperado.',
     );
   }
 
-  return data as T;
+  return (json.data ?? json) as T;
 }
 
 export const apiClient = {
-  get:    <T>(path: string)                        => request<T>(path, { method: 'GET' }),
-  post:   <T>(path: string, body: unknown)         => request<T>(path, { method: 'POST',   body: JSON.stringify(body) }),
-  put:    <T>(path: string, body: unknown)         => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
-  patch:  <T>(path: string, body?: unknown)        => request<T>(path, { method: 'PATCH',  body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string)                        => request<T>(path, { method: 'DELETE' }),
+  get:    <T>(path: string)                => request<T>(path, { method: 'GET' }),
+  post:   <T>(path: string, body: unknown) => request<T>(path, { method: 'POST',   body: JSON.stringify(body) }),
+  put:    <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
+  patch:  <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string)               => request<T>(path, { method: 'DELETE' }),
 };
