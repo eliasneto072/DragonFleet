@@ -32,11 +32,8 @@ export function authMiddleware(
   const token = authHeader.slice('Bearer '.length);
 
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET, {
-  issuer: env.JWT_ISSUER,
-  audience: env.JWT_AUDIENCE,
-}) as TokenPayload;
-    
+    const payload = jwt.verify(token, env.JWT_SECRET) as TokenPayload;
+
     const userId = payload.sub;
 
     if (!userId) {
