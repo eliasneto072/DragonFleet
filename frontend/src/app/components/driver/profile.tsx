@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { useEffect } from 'react';
 
 export function DriverProfile() {
   const { user } = useAuth();
@@ -21,15 +22,17 @@ export function DriverProfile() {
 
   // ── Leitura — busca os dados mais recentes do perfil ─────────────────────
   const { data, isLoading, isError } = useQuery({
-    queryKey: queryKeys.users.detail(user!.id),
-    queryFn:  () => usersService.getById(user!.id),
-    // Inicializa os campos de edição quando os dados chegam
-    select: (res) => {
-      setName(res.user.name);
-      setEmail(res.user.email);
-      return res.user;
-    },
-  });
+  queryKey: queryKeys.users.detail(user!.id),
+  queryFn:  () => usersService.getById(user!.id),
+});
+
+// Inicializa os campos quando os dados chegam pela primeira vez
+  useEffect(() => {
+    if (data?.user) {
+      setName(data.user.name);
+      setEmail(data.user.email);
+  }
+}, [data]);
 
   // ── Atualização ───────────────────────────────────────────────────────────
   const { mutate: updateUser, isPending } = useMutation({

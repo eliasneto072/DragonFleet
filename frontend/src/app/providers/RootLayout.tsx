@@ -1,5 +1,3 @@
-// src/app/providers/RootLayout.tsx
-
 import { Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -64,8 +62,8 @@ export function RootLayout() {
 
               {/* Nome do usuário logado */}
               {user && (
-                <span className="text-sm text-muted-foreground hidden md:block">
-                  Olá, <strong className="text-[#1D1D1D]">{user.name.split(' ')[0]}</strong>
+                <span className="text-sm text-[#1D1D1D] hidden md:block">
+                  Olá, <strong className="text-[#108865]">{user.name.split(' ')[0]}</strong>
                 </span>
               )}
 

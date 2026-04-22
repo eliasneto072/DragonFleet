@@ -16,11 +16,6 @@ const NAV_ITEMS = [
 export function DriverLayout() {
   const { user } = useAuth();
 
-  // Admin/Manager que entrou em /driver por engano → manda para o painel deles
-  // (proteção dupla — o RootLayout já faz o inverso, mas aqui garante)
-  if (user && user.role !== 'DRIVER') {
-    return <Navigate to="/app/admin" replace />;
-  }
 
   return (
     <div className="space-y-6">
