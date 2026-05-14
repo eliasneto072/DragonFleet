@@ -16,3 +16,11 @@ export type UpdateVehicleData = {
   year?: number;
   status?: VehicleStatus;
 };
+
+// Aliases para compatibilidade com interface e service
+export type ICreateVehicleRepositoryDTO = CreateVehicleData;
+export type IUpdateVehicleRepositoryDTO = UpdateVehicleData;
+export type IFindVehicleRepositoryFilters = {
+  userId?: string;
+  status?: VehicleStatus;
+};

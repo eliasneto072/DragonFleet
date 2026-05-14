@@ -10,6 +10,7 @@ export class DocumentsRepository implements IDocumentRepository {
     id: true,
     type: true,
     fileUrl: true,
+    fileKey: true, // novo
     status: true,
     userId: true,
     createdAt: true,
@@ -74,6 +75,7 @@ export class DocumentsRepository implements IDocumentRepository {
         data: {
           type: data.type,
           fileUrl: data.fileUrl,
+          fileKey: data.fileKey, //novo
           status: data.status,
           userId: data.userId,
         },

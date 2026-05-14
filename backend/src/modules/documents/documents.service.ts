@@ -76,6 +76,7 @@ export class DocumentsService {
   const data: CreateDocumentData = {
     type: input.type,
     fileUrl: input.fileUrl,
+    fileKey: input.fileKey, //novo
     status: DocumentStatus.PENDING,
     userId: actor.id,
   };

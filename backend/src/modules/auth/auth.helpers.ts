@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { AppError } from '../../shared/errors/AppError';
 import { env } from '../../config/env';
 import { IUserPublic } from '../users/users.types';
@@ -20,7 +20,10 @@ export function generateAccessToken(userId: string, role: UserRole) {
     env.JWT_SECRET,
     {
       subject: userId,
-      expiresIn: env.JWT_EXPIRES_IN,
+      expiresIn: env.JWT_EXPIRES_IN as SignOptions['expiresIn'],
+
+      //issuer: env.JWT_ISSUER,
+      //audience: env.JWT_AUDIENCE,
       
     }
   );

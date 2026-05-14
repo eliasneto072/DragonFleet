@@ -11,6 +11,7 @@ export const createDocumentSchema = z.object({
   body: z.object({
     type: z.nativeEnum(DocumentType),
     fileUrl: z.string().min(1),
+    fileKey: z.string().min(1),
   }),
 });
 

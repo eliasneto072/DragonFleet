@@ -16,7 +16,8 @@ function canManageWithdrawals(role?: UserRole) {
 }
 
 // Status finais — não podem ser alterados
-const FINAL_STATUSES = [WithdrawalStatus.PAID, WithdrawalStatus.REJECTED];
+const FINAL_STATUSES: WithdrawalStatus[] = [WithdrawalStatus.PAID, WithdrawalStatus.REJECTED];
+
 
 export class WithdrawalsService {
   private async ensureWithdrawalExists(id: string): Promise<IWithdrawalPublic> {
@@ -90,7 +91,7 @@ export class WithdrawalsService {
     }
 
     const withdrawal = await this.ensureWithdrawalExists(id);
-
+    
     // Não permite alterar status de saques já finalizados
     if (FINAL_STATUSES.includes(withdrawal.status)) {
       throw new AppError(
