@@ -18,13 +18,18 @@
   "type": "commonjs",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@prisma/client": "^6.19.2",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "prisma": "^6.19.2",
+    "uuid": "^14.0.0",
+    "streamifier": "^0.1.1",
     "zod": "^3.25.0"
   },
   "devDependencies": {
@@ -32,7 +37,10 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
     "@types/node": "^25.2.3",
+    "@types/streamifier": "^0.1.2",
+    "@types/uuid": "^10.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   }
