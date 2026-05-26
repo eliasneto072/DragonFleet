@@ -1,16 +1,10 @@
 // src/features/landing/pages/LandingPage.tsx
 
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 
-// ─── CSS de animação float ────────────────────────────────────────────────────
-// Variável string separada para evitar problemas com template literals
-// dentro de JSX no Vite/Babel (o erro "\uXXXX" acontecia por isso).
-//
-// .btn-float    → botão do hero (sobe 6px)
-// .btn-float-lg → botão do CTA final (sobe 8px, sombra maior)
-// hover pausa a animação para não brigar com o cursor
 const floatCSS = [
   '@keyframes float {',
   '  0%, 100% { transform: translateY(0px);  box-shadow: 0 0 30px rgba(16,136,101,0.4); }',
@@ -28,17 +22,16 @@ const floatCSS = [
 export function LandingPage() {
   const { isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (loading) return null;
 
   if (isAuthenticated && user) {
-    const dest = user.role === 'DRIVER' ? '/app/driver' : '/app/admin';
-    return <Navigate to={dest} replace />;
+    return <Navigate to={user.role === 'DRIVER' ? '/app/driver' : '/app/admin'} replace />;
   }
 
   return (
     <>
-      {/* Injeta os keyframes no documento de forma segura */}
       <style dangerouslySetInnerHTML={{ __html: floatCSS }} />
 
       <div style={{
@@ -72,13 +65,12 @@ export function LandingPage() {
           background: '#0a0a0a',
         }}>
           <div style={{
-            maxWidth: '1200px', margin: '0 auto', padding: '0 32px',
-            height: '72px', display: 'flex', alignItems: 'center', gap: '40px',
+            maxWidth: '1200px', margin: '0 auto', padding: '0 20px',
+            height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-
             {/* Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginRight: '8px', flexShrink: 0 }}>
-              <svg width="32" height="32" viewBox="0 0 100 100" fill="none">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
                 <defs>
                   <linearGradient id="h-bg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#1a4a3a"/>
@@ -96,224 +88,216 @@ export function LandingPage() {
                 <circle cx="70" cy="76" r="7" fill="white"/>
                 <circle cx="70" cy="76" r="3" fill="url(#h-bg)"/>
               </svg>
-              <span style={{ fontWeight: 700, fontSize: '17px', letterSpacing: '-0.3px', color: '#fff' }}>
+              <span style={{ fontWeight: 700, fontSize: '16px', letterSpacing: '-0.3px', color: '#fff' }}>
                 Dragon<span style={{ color: '#108865' }}>Fleet</span>
               </span>
             </div>
 
-            {/* Nav links centrais */}
-            <nav style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
-              {[
-                { label: 'Motoristas',  href: '#features' },
-                { label: 'Plataforma',  href: '#features' },
-                { label: 'Empresa',     href: '#features' },
-                { label: 'Suporte',     href: '#features' },
-              ].map(({ label, href }) => (
-                <a
-                  key={label}
-                  href={href}
-                  style={{
-                    color: 'rgba(255,255,255,0.75)',
-                    textDecoration: 'none',
-                    fontSize: '15px',
-                    fontWeight: 500,
-                    padding: '6px 14px',
-                    borderRadius: '999px',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => {
-                    (e.target as HTMLElement).style.color = '#fff';
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)';
-                    (e.target as HTMLElement).style.background = 'transparent';
-                  }}
-                >
-                  {label}
-                </a>
+            {/* Nav links — só desktop */}
+            <nav style={{ display: 'none', alignItems: 'center', gap: '4px', flex: 1, marginLeft: '32px' }}
+              className="md-nav">
+              {['Motoristas', 'Plataforma', 'Empresa', 'Suporte'].map(label => (
+                <a key={label} href="#features" style={{
+                  color: 'rgba(255,255,255,0.75)', textDecoration: 'none',
+                  fontSize: '14px', fontWeight: 500, padding: '6px 12px',
+                  borderRadius: '999px', transition: 'all 0.15s',
+                }}
+                  onMouseEnter={e => { (e.target as HTMLElement).style.color = '#fff'; (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                  onMouseLeave={e => { (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)'; (e.target as HTMLElement).style.background = 'transparent'; }}
+                >{label}</a>
               ))}
             </nav>
 
-            {/* Auth buttons — à direita */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-
-              {/* Fazer login */}
-              <button
-                onClick={() => navigate('/login')}
-                style={{
-                  background: 'transparent', border: 'none',
-                  color: 'rgba(255,255,255,0.75)', padding: '8px 16px',
-                  borderRadius: '999px', fontSize: '15px',
-                  fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => {
-                  (e.target as HTMLElement).style.color = '#fff';
-                  (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
-                }}
-                onMouseLeave={e => {
-                  (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)';
-                  (e.target as HTMLElement).style.background = 'transparent';
-                }}
-              >
-                Fazer login
-              </button>
-
-              {/* Cadastre-se — destaque com borda */}
-              <button
-                onClick={() => navigate('/register')}
-                style={{
-                  background: 'transparent',
-                  border: '1.5px solid rgba(255,255,255,0.85)',
-                  color: '#fff', padding: '8px 20px',
-                  borderRadius: '999px', fontSize: '15px',
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => {
-                  (e.target as HTMLElement).style.background = '#fff';
-                  (e.target as HTMLElement).style.color = '#0a0a0a';
-                }}
-                onMouseLeave={e => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.color = '#fff';
-                }}
-              >
-                Cadastre-se
-              </button>
+            {/* Botões auth — desktop */}
+            <div className="auth-btns" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button onClick={() => navigate('/login')} style={{
+                background: 'transparent', border: 'none',
+                color: 'rgba(255,255,255,0.75)', padding: '8px 14px',
+                borderRadius: '999px', fontSize: '14px',
+                fontWeight: 500, cursor: 'pointer',
+              }}
+                onMouseEnter={e => { (e.target as HTMLElement).style.color = '#fff'; (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                onMouseLeave={e => { (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.75)'; (e.target as HTMLElement).style.background = 'transparent'; }}
+              >Entrar</button>
+              <button onClick={() => navigate('/register')} style={{
+                background: 'transparent',
+                border: '1.5px solid rgba(255,255,255,0.85)',
+                color: '#fff', padding: '7px 18px',
+                borderRadius: '999px', fontSize: '14px',
+                fontWeight: 600, cursor: 'pointer',
+              }}
+                onMouseEnter={e => { (e.target as HTMLElement).style.background = '#fff'; (e.target as HTMLElement).style.color = '#0a0a0a'; }}
+                onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.color = '#fff'; }}
+              >Cadastrar</button>
             </div>
 
+            {/* Hamburguer — mobile (via inline style + useState) */}
+            <button
+              onClick={() => setMobileMenuOpen(v => !v)}
+              style={{
+                display: 'none',
+                background: 'transparent', border: 'none', color: '#fff',
+                cursor: 'pointer', padding: '4px',
+              }}
+              className="hamburger-btn"
+            >
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
+
+          {/* Menu mobile */}
+          {mobileMenuOpen && (
+            <div style={{
+              background: '#111', borderTop: '1px solid rgba(255,255,255,0.08)',
+              padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px',
+            }}>
+              <button onClick={() => { navigate('/login'); setMobileMenuOpen(false); }} style={{
+                background: 'transparent', border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff', padding: '10px', borderRadius: '8px',
+                fontSize: '15px', fontWeight: 500, cursor: 'pointer',
+              }}>Entrar</button>
+              <button onClick={() => { navigate('/register'); setMobileMenuOpen(false); }} style={{
+                background: '#108865', border: 'none',
+                color: '#fff', padding: '10px', borderRadius: '8px',
+                fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+              }}>Cadastrar</button>
+            </div>
+          )}
+
+          {/* CSS para esconder/mostrar elementos responsivos */}
+          <style>{`
+            @media (min-width: 768px) {
+              .md-nav { display: flex !important; }
+              .hamburger-btn { display: none !important; }
+            }
+            @media (max-width: 767px) {
+              .auth-btns { display: none !important; }
+              .hamburger-btn { display: block !important; }
+            }
+          `}</style>
         </header>
 
         {/* ── Hero ── */}
         <section style={{
           position: 'relative', zIndex: 1,
           maxWidth: '1100px', margin: '0 auto',
-          padding: '120px 24px 100px',
-          display: 'grid', gridTemplateColumns: '1fr 1fr',
-          gap: '80px', alignItems: 'center',
+          padding: '60px 20px 60px',
         }}>
-          <div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              background: 'rgba(16,136,101,0.12)',
-              border: '1px solid rgba(16,136,101,0.3)',
-              borderRadius: '999px', padding: '6px 14px',
-              fontSize: '12px', color: '#4ecca0', marginBottom: '32px',
-              fontWeight: 500, letterSpacing: '0.5px', textTransform: 'uppercase',
-            }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#108865', display: 'inline-block' }} />
-              Plataforma de gestão de frota
-            </div>
-
-            <h1 style={{
-              fontSize: 'clamp(40px, 5vw, 64px)', fontWeight: 800,
-              lineHeight: 1.05, letterSpacing: '-2px', margin: '0 0 24px',
-            }}>
-              Gerencie sua<br />frota com<br />
-              <span style={{ color: '#108865' }}>precisão.</span>
-            </h1>
-
-            <p style={{
-              fontSize: '18px', lineHeight: 1.7,
-              color: 'rgba(255,255,255,0.5)', margin: '0 0 48px', maxWidth: '440px',
-            }}>
-              Uma plataforma completa para motoristas e gestores. Ganhos, saques,
-              documentos e frota — tudo em um só lugar.
-            </p>
-
-            {/* ← btn-float: classe definida no floatCSS (flutua 6px, pausa no hover) */}
-            <button
-              onClick={() => navigate('/login')}
-              className="btn-float"
-              style={{
-                background: '#108865', border: 'none', color: '#fff',
-                padding: '14px 32px', borderRadius: '999px',
-                fontSize: '15px', fontWeight: 600,
-                cursor: 'pointer', transition: 'background 0.2s',
-              }}
-              onMouseEnter={e => (e.target as HTMLElement).style.background = '#0d7557'}
-              onMouseLeave={e => (e.target as HTMLElement).style.background = '#108865'}
-            >
-              Acessar plataforma →
-            </button>
-          </div>
-
-          {/* Card preview */}
-          <div style={{ position: 'relative' }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '24px', padding: '32px',
-            }}>
-              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Visão geral do motorista
-              </p>
-              <div style={{ marginBottom: '24px' }}>
-                <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Saldo disponível</p>
-                <p style={{ fontSize: '36px', fontWeight: 700, letterSpacing: '-1px', color: '#4ecca0' }}>R$ 3.240,75</p>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                {[
-                  { label: 'Ganhos do mês', value: 'R$ 8.420' },
-                  { label: 'Corridas',      value: '847'       },
-                  { label: 'Avaliação',     value: '4.9 ★'    },
-                  { label: 'Documentos',    value: '3 ativos'  },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: '12px', padding: '14px',
-                  }}>
-                    <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px' }}>{label}</p>
-                    <p style={{ fontSize: '18px', fontWeight: 600 }}>{value}</p>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>Meta mensal</span>
-                  <span style={{ fontSize: '12px', color: '#4ecca0' }}>84%</span>
-                </div>
-                <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px' }}>
-                  <div style={{ width: '84%', height: '100%', background: '#108865', borderRadius: '999px' }} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{
-              position: 'absolute', bottom: '-20px', left: '-20px',
-              background: '#111', border: '1px solid rgba(16,136,101,0.3)',
-              borderRadius: '16px', padding: '12px 16px',
-              display: 'flex', alignItems: 'center', gap: '10px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
-            }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '48px',
+            alignItems: 'center',
+          }}>
+            <div>
               <div style={{
-                width: '32px', height: '32px', background: 'rgba(16,136,101,0.15)',
-                borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px',
-              }}>✅</div>
-              <div>
-                <p style={{ fontSize: '13px', fontWeight: 600, margin: 0 }}>Saque aprovado</p>
-                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: 0 }}>R$ 1.500,00 · agora mesmo</p>
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                background: 'rgba(16,136,101,0.12)',
+                border: '1px solid rgba(16,136,101,0.3)',
+                borderRadius: '999px', padding: '6px 14px',
+                fontSize: '11px', color: '#4ecca0', marginBottom: '28px',
+                fontWeight: 500, letterSpacing: '0.5px', textTransform: 'uppercase',
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#108865', display: 'inline-block' }} />
+                Plataforma de gestão de frota
+              </div>
+
+              <h1 style={{
+                fontSize: 'clamp(32px, 6vw, 64px)', fontWeight: 800,
+                lineHeight: 1.05, letterSpacing: '-2px', margin: '0 0 20px',
+              }}>
+                Gerencie sua<br />frota com<br />
+                <span style={{ color: '#108865' }}>precisão.</span>
+              </h1>
+
+              <p style={{
+                fontSize: 'clamp(15px, 2vw, 18px)', lineHeight: 1.7,
+                color: 'rgba(255,255,255,0.5)', margin: '0 0 40px', maxWidth: '440px',
+              }}>
+                Uma plataforma completa para motoristas e gestores. Ganhos, saques,
+                documentos e frota — tudo em um só lugar.
+              </p>
+
+              <button
+                onClick={() => navigate('/login')}
+                className="btn-float"
+                style={{
+                  background: '#108865', border: 'none', color: '#fff',
+                  padding: '13px 28px', borderRadius: '999px',
+                  fontSize: '15px', fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.target as HTMLElement).style.background = '#0d7557'}
+                onMouseLeave={e => (e.target as HTMLElement).style.background = '#108865'}
+              >
+                Acessar plataforma →
+              </button>
+            </div>
+
+            {/* Card preview — esconde em telas muito pequenas */}
+            <div style={{ position: 'relative' }} className="hero-card">
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '24px', padding: '28px',
+              }}>
+                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Visão geral do motorista
+                </p>
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Saldo disponível</p>
+                  <p style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 700, letterSpacing: '-1px', color: '#4ecca0' }}>R$ 3.240,75</p>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  {[
+                    { label: 'Ganhos do mês', value: 'R$ 8.420' },
+                    { label: 'Corridas',      value: '847'       },
+                    { label: 'Avaliação',     value: '4.9 ★'    },
+                    { label: 'Documentos',    value: '3 ativos'  },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      borderRadius: '10px', padding: '12px',
+                    }}>
+                      <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px' }}>{label}</p>
+                      <p style={{ fontSize: '16px', fontWeight: 600 }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Meta mensal</span>
+                    <span style={{ fontSize: '11px', color: '#4ecca0' }}>84%</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px' }}>
+                    <div style={{ width: '84%', height: '100%', background: '#108865', borderRadius: '999px' }} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+          <style>{`@media(max-width:480px){ .hero-card { display: none; } }`}</style>
         </section>
 
         {/* ── Features ── */}
-        <section style={{
+        <section id="features" style={{
           position: 'relative', zIndex: 1,
           maxWidth: '1100px', margin: '0 auto',
-          padding: '80px 24px',
+          padding: '60px 20px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
         }}>
-          <p style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '2px', color: '#108865', textAlign: 'center', marginBottom: '16px' }}>
+          <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '2px', color: '#108865', textAlign: 'center', marginBottom: '12px' }}>
             Funcionalidades
           </p>
-          <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700, textAlign: 'center', letterSpacing: '-1.5px', margin: '0 0 64px' }}>
+          <h2 style={{ fontSize: 'clamp(24px, 4vw, 44px)', fontWeight: 700, textAlign: 'center', letterSpacing: '-1px', margin: '0 0 48px' }}>
             Tudo que você precisa
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '14px',
+          }}>
             {[
               { icon: '💰', title: 'Controle de ganhos',   desc: 'Registre e acompanhe seus ganhos por plataforma — Uber, Bolt e muito mais.' },
               { icon: '🏦', title: 'Saques simplificados', desc: 'Solicite retiradas com poucos cliques. Aprovação rápida e histórico completo.' },
@@ -322,57 +306,47 @@ export function LandingPage() {
               { icon: '📊', title: 'Analytics avançado',   desc: 'Dashboards com gráficos de receita, corridas por plataforma e top motoristas.' },
               { icon: '🔔', title: 'Notificações',         desc: 'Fique por dentro de aprovações, vencimentos de documentos e metas atingidas.' },
             ].map(({ icon, title, desc }) => (
-              <div
-                key={title}
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  borderRadius: '20px', padding: '28px', transition: 'all 0.2s',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(16,136,101,0.3)';
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(16,136,101,0.05)';
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)';
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)';
-                }}
+              <div key={title} style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '18px', padding: '24px', transition: 'all 0.2s',
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(16,136,101,0.3)'; (e.currentTarget as HTMLElement).style.background = 'rgba(16,136,101,0.05)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
               >
-                <div style={{ fontSize: '28px', marginBottom: '16px' }}>{icon}</div>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '10px', letterSpacing: '-0.3px' }}>{title}</h3>
-                <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, margin: 0 }}>{desc}</p>
+                <div style={{ fontSize: '26px', marginBottom: '14px' }}>{icon}</div>
+                <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px', letterSpacing: '-0.3px' }}>{title}</h3>
+                <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, margin: 0 }}>{desc}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* ── CTA final ── */}
+        {/* ── CTA ── */}
         <section style={{
           position: 'relative', zIndex: 1,
           maxWidth: '1100px', margin: '0 auto',
-          padding: '80px 24px 120px',
+          padding: '40px 20px 80px',
         }}>
           <div style={{
             background: 'linear-gradient(135deg, rgba(16,136,101,0.15), rgba(16,136,101,0.05))',
             border: '1px solid rgba(16,136,101,0.25)',
-            borderRadius: '32px', padding: '80px 48px', textAlign: 'center',
+            borderRadius: '24px', padding: 'clamp(40px, 8vw, 80px) clamp(20px, 5vw, 48px)',
+            textAlign: 'center',
           }}>
-            <h2 style={{ fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 800, letterSpacing: '-2px', margin: '0 0 16px' }}>
+            <h2 style={{ fontSize: 'clamp(24px, 4vw, 48px)', fontWeight: 800, letterSpacing: '-1.5px', margin: '0 0 14px' }}>
               Pronto para começar?
             </h2>
-            <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.5)', margin: '0 0 40px' }}>
+            <p style={{ fontSize: 'clamp(14px, 2vw, 17px)', color: 'rgba(255,255,255,0.5)', margin: '0 0 32px' }}>
               Acesse sua conta e tenha controle total da sua operação.
             </p>
-
-            {/* ← btn-float-lg: classe definida no floatCSS (flutua 8px, sombra maior, pausa no hover) */}
             <button
               onClick={() => navigate('/login')}
               className="btn-float-lg"
               style={{
                 background: '#108865', border: 'none', color: '#fff',
-                padding: '16px 40px', borderRadius: '999px',
-                fontSize: '16px', fontWeight: 600,
-                cursor: 'pointer', transition: 'background 0.2s',
+                padding: '14px 36px', borderRadius: '999px',
+                fontSize: '15px', fontWeight: 600, cursor: 'pointer',
               }}
               onMouseEnter={e => (e.target as HTMLElement).style.background = '#0d7557'}
               onMouseLeave={e => (e.target as HTMLElement).style.background = '#108865'}
@@ -385,13 +359,12 @@ export function LandingPage() {
         {/* ── Footer ── */}
         <footer style={{
           borderTop: '1px solid rgba(255,255,255,0.06)',
-          padding: '32px 24px', textAlign: 'center',
+          padding: '28px 20px', textAlign: 'center',
           color: 'rgba(255,255,255,0.25)', fontSize: '13px',
           position: 'relative', zIndex: 1,
         }}>
           © 2026 DragonFleet. Todos os direitos reservados.
         </footer>
-
       </div>
     </>
   );
