@@ -6,6 +6,8 @@ import { earningsRouter } from '../modules/earnings/earnings.routes';
 import { withdrawalsRouter } from '../modules/withdrawals/withdrawals.routes';
 import { documentsRouter } from '../modules/documents/documents.routes';
 import { notificationsRouter } from '../modules/notifications/notifications.routes';
+import { uploadRoutes } from '../modules/upload/upload.routes';
+import { analyticsRouter } from '../modules/analytics/analytics.routes';
 
 
 const router = Router();
@@ -17,5 +19,7 @@ router.use('/earnings', earningsRouter())
 router.use('/withdrawals', withdrawalsRouter())
 router.use('/documents', documentsRouter())
 router.use('/notifications', notificationsRouter())
+router.use('/upload', uploadRoutes);
+router.use('/analytics', analyticsRouter());
 
 export { router };
