@@ -128,7 +128,7 @@ export function Notifications() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Notificações</h2>
+          <h2 className="text-2xl font-bold text-white">Notificações</h2>
           <p className="text-muted-foreground">
             {unreadCount > 0
               ? `Você tem ${unreadCount} notificação${unreadCount > 1 ? 'ões' : ''} não lida${unreadCount > 1 ? 's' : ''}`
