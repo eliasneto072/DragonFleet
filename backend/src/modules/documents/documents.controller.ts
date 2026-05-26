@@ -3,12 +3,13 @@ import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
 import { documentsService } from './documents.service';
+import { uploadToCloudinary } from '../upload/upload.service';
 import {
-  createDocumentSchema,
   updateDocumentSchema,
   updateDocumentStatusSchema,
   documentIdParamSchema,
 } from './documents.schemas';
+import { DocumentType } from '../../shared/types/enums';
 
 function getActor(req: AuthRequest) {
   if (!req.user?.id) {
@@ -39,15 +40,31 @@ export class DocumentsController {
   };
 
   create = async (req: AuthRequest, res: Response) => {
-    const parsed = createDocumentSchema.parse({ body: req.body });
+  // req.body vem do multipart, não precisa de Zod aqui
+  const type = req.body?.type;
 
-    const document = await documentsService.create(
-      getActor(req),
-      parsed.body
-    );
+  if (!type || !Object.values(DocumentType).includes(type)) {
+    throw new AppError('Tipo de documento inválido ou ausente', 400, 'INVALID_DOCUMENT_TYPE');
+  }
 
-    return ok(res, { document }, 201);
-  };
+  if (!req.file) {
+    throw new AppError('Arquivo não enviado', 400, 'MISSING_FILE');
+  }
+
+  const { fileUrl, fileKey } = await uploadToCloudinary(
+    req.file.buffer,
+    req.file.mimetype,
+    'documents'
+  );
+
+  const document = await documentsService.create(getActor(req), {
+    type: type as DocumentType,
+    fileUrl,
+    fileKey,
+  });
+
+  return ok(res, { document }, 201);
+};
 
   update = async (req: AuthRequest, res: Response) => {
     const parsed = updateDocumentSchema.parse({

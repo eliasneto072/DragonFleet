@@ -16,10 +16,7 @@ function authMiddleware(req, res, next) {
     }
     const token = authHeader.slice('Bearer '.length);
     try {
-        const payload = jsonwebtoken_1.default.verify(token, env_1.env.JWT_SECRET, {
-            issuer: env_1.env.JWT_ISSUER,
-            audience: env_1.env.JWT_AUDIENCE,
-        });
+        const payload = jsonwebtoken_1.default.verify(token, env_1.env.JWT_SECRET);
         const userId = payload.sub;
         if (!userId) {
             return res.status(401).json({
