@@ -4,7 +4,7 @@ exports.documentsController = exports.DocumentsController = void 0;
 const response_1 = require("../../shared/http/response");
 const AppError_1 = require("../../shared/errors/AppError");
 const documents_service_1 = require("./documents.service");
-const upload_service_1 = require("../upload/upload.service");
+const upload_service_1 = require("../upload/upload.service.js");
 const documents_schemas_1 = require("./documents.schemas");
 const enums_1 = require("../../shared/types/enums");
 function getActor(req) {
