@@ -55,4 +55,6 @@ export {
   WithdrawalStatus,
   VehicleStatus,
   EarningPlatform,
+  TicketStatus,
+  TicketCategory,
 } from '@prisma/client';
