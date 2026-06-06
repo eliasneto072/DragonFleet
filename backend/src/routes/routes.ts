@@ -8,6 +8,7 @@ import { documentsRouter } from '../modules/documents/documents.routes';
 import { notificationsRouter } from '../modules/notifications/notifications.routes';
 import { uploadRoutes } from '../modules/upload/upload.routes';
 import { analyticsRouter } from '../modules/analytics/analytics.routes';
+import { supportRouter } from '../modules/support/support.routes';
 
 
 const router = Router();
@@ -21,5 +22,6 @@ router.use('/documents', documentsRouter())
 router.use('/notifications', notificationsRouter())
 router.use('/upload', uploadRoutes);
 router.use('/analytics', analyticsRouter());
+router.use('/support', supportRouter());
 
 export { router };

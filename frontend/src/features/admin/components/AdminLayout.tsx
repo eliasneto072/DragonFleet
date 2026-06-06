@@ -1,7 +1,7 @@
 // src/features/admin/components/AdminLayout.tsx
 
 import { NavLink, Outlet, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, DollarSign, Car, TrendingUp, Settings, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, DollarSign, Car, TrendingUp, Settings, FileText, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 
 const NAV_ITEMS = [
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/app/admin/financial',  icon: DollarSign,      label: 'Financeiro'     },
   { to: '/app/admin/fleet',      icon: Car,             label: 'Frotas'         },
   { to: '/app/admin/analytics',  icon: TrendingUp,      label: 'Análises'       },
+  { to: '/app/admin/support',    icon: MessageCircle,   label: 'Suporte'        },
   { to: '/app/admin/settings',   icon: Settings,        label: 'Configurações'  },
 ] as const;
 
@@ -51,4 +52,3 @@ export function AdminLayout() {
     </div>
   );
 }
-

@@ -59,6 +59,21 @@ enum EarningPlatform {
   OTHER
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  TECHNICAL
+  FINANCIAL
+  DOCUMENTS
+  ACCOUNT
+  OTHER
+}
+
 /* =========================
    MODELS
 ========================= */
@@ -73,11 +88,13 @@ model User {
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt
 
-  earnings      Earning[]
-  vehicles      Vehicle[]
-  notifications Notification[]
-  documents     Document[]
-  withdrawals   Withdrawal[]
+  earnings        Earning[]
+  vehicles        Vehicle[]
+  notifications   Notification[]
+  documents       Document[]
+  withdrawals     Withdrawal[]
+  supportTickets  SupportTicket[]
+  ticketReplies   TicketReply[]
 
   @@map("users")
 }
@@ -148,8 +165,6 @@ model Document {
   @@map("documents")
 }
 
-// Atualizar model Withdrawal no schema.prisma
-
 model Withdrawal {
   id          String           @id @default(cuid())
   amount      Decimal          @db.Decimal(12, 2)
@@ -164,4 +179,36 @@ model Withdrawal {
   @@index([userId])
   @@index([status])
   @@map("withdrawals")
+}
+
+model SupportTicket {
+  id        String         @id @default(cuid())
+  subject   String
+  category  TicketCategory
+  message   String
+  status    TicketStatus   @default(OPEN)
+  userId    String         @map("user_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies TicketReply[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketReply {
+  id        String   @id @default(cuid())
+  message   String
+  ticketId  String   @map("ticket_id")
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_replies")
 }

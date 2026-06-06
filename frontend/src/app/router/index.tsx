@@ -18,13 +18,14 @@ import ProfilePage         from '@/features/driver/pages/ProfilePage';
 import NotificationsPage   from '@/features/driver/pages/NotificationsPage';
 import SupportPage         from '@/features/driver/pages/SupportPage';
 
-import { AdminDashboardPage }  from '@/features/admin/pages/AdminDashboardPage';
-import { DriversPage }         from '@/features/admin/pages/DriversPage';
-import { FinancialPage }       from '@/features/admin/pages/FinancialPage';
-import { FleetPage }           from '@/features/admin/pages/FleetPage';
-import { AnalyticsPage }       from '@/features/admin/pages/AnalyticsPage';
-import { SettingsPage }        from '@/features/admin/pages/SettingsPage';
-import { DocumentsAdminPage }  from '@/features/admin/pages/DocumentsAdminPage';
+import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
+import { DriversPage }        from '@/features/admin/pages/DriversPage';
+import { FinancialPage }      from '@/features/admin/pages/FinancialPage';
+import { FleetPage }          from '@/features/admin/pages/FleetPage';
+import { AnalyticsPage }      from '@/features/admin/pages/AnalyticsPage';
+import { SettingsPage }       from '@/features/admin/pages/SettingsPage';
+import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
+import { SupportAdminPage }   from '@/features/admin/pages/SupportAdminPage';
 
 export const router = createBrowserRouter([
 
@@ -59,14 +60,15 @@ export const router = createBrowserRouter([
         path: 'admin',
         element: <AdminLayout />,
         children: [
-          { index: true,           element: <Navigate to="dashboard" replace /> },
-          { path: 'dashboard',     element: <AdminDashboardPage /> },
-          { path: 'drivers',       element: <DriversPage /> },
-          { path: 'documents',     element: <DocumentsAdminPage /> },
-          { path: 'financial',     element: <FinancialPage /> },
-          { path: 'fleet',         element: <FleetPage /> },
-          { path: 'analytics',     element: <AnalyticsPage /> },
-          { path: 'settings',      element: <SettingsPage /> },
+          { index: true,         element: <Navigate to="dashboard" replace /> },
+          { path: 'dashboard',   element: <AdminDashboardPage /> },
+          { path: 'drivers',     element: <DriversPage /> },
+          { path: 'documents',   element: <DocumentsAdminPage /> },
+          { path: 'financial',   element: <FinancialPage /> },
+          { path: 'fleet',       element: <FleetPage /> },
+          { path: 'analytics',   element: <AnalyticsPage /> },
+          { path: 'support',     element: <SupportAdminPage /> },
+          { path: 'settings',    element: <SettingsPage /> },
         ],
       },
     ],
