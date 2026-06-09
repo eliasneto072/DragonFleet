@@ -13,4 +13,5 @@ export type UpdateDocumentInput = {
 
 export type UpdateDocumentStatusInput = {
   status: DocumentStatus;
+  notes?: string;
 };

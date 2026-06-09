@@ -39,6 +39,8 @@ services:
       CLOUD_NAME: ${CLOUD_NAME}
       API_KEY: ${API_KEY}
       API_SECRET: ${API_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FRONTEND_URL: ${FRONTEND_URL}
     ports:
       - "3000:3000"
     depends_on:
