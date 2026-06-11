@@ -7,5 +7,6 @@ export type LoginInput = {
 
 export type LoginResult = {
   token: string;
+  refreshToken: string;
   user: IUserPublic;
 };
