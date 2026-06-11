@@ -25,8 +25,9 @@ export const updateNotificationSchema = z.object({
   }),
   body: z
     .object({
-      title: z.string().min(1).optional(),
+      title:   z.string().min(1).optional(),
       message: z.string().min(1).optional(),
+      read:    z.boolean().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required',

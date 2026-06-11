@@ -23,6 +23,7 @@ import { DriversPage }        from '@/features/admin/pages/DriversPage';
 import { FinancialPage }      from '@/features/admin/pages/FinancialPage';
 import { FleetPage }          from '@/features/admin/pages/FleetPage';
 import { AnalyticsPage }      from '@/features/admin/pages/AnalyticsPage';
+import { NotificationsAdminPage } from '@/features/admin/pages/NotificationsAdminPage';
 import { SettingsPage }       from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
 import { SupportAdminPage }   from '@/features/admin/pages/SupportAdminPage';
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
           { path: 'financial',   element: <FinancialPage /> },
           { path: 'fleet',       element: <FleetPage /> },
           { path: 'analytics',   element: <AnalyticsPage /> },
+          { path: 'notifications', element: <NotificationsAdminPage /> },
           { path: 'support',     element: <SupportAdminPage /> },
           { path: 'settings',    element: <SettingsPage /> },
         ],

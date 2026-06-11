@@ -5,6 +5,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = 'DragonFleet <onboarding@resend.dev>';
 
 export const emailService = {
+
+  
   async sendDocumentApproved(to: string, driverName: string, docType: string) {
     await resend.emails.send({
       from:    FROM,
@@ -128,4 +130,33 @@ export const emailService = {
       `,
     });
   },
+
+  async sendNotification(to: string, driverName: string, title: string, message: string) {
+    await resend.emails.send({
+      from:    FROM,
+      to,
+      subject: `🔔 ${title} — DragonFleet`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#f9f9f9;border-radius:12px">
+          <div style="text-align:center;margin-bottom:24px">
+            <h1 style="color:#108865;margin:0">🐉 DragonFleet</h1>
+          </div>
+          <h2 style="color:#1D1D1D">Olá, ${driverName}!</h2>
+          <div style="background:#fff;border-left:4px solid #108865;padding:16px;border-radius:4px;margin:16px 0">
+            <h3 style="margin:0 0 8px;color:#1D1D1D">${title}</h3>
+            <p style="margin:0;color:#444;line-height:1.6">${message}</p>
+          </div>
+          <div style="margin:32px 0;text-align:center">
+            <a href="${process.env.FRONTEND_URL ?? 'http://localhost'}/app/driver/notifications"
+               style="background:#108865;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">
+              Ver Notificações
+            </a>
+          </div>
+          <p style="color:#999;font-size:12px;text-align:center">DragonFleet — Plataforma de Gestão de Frotas</p>
+        </div>
+      `,
+    });
+  },
+
+
 };
