@@ -55,10 +55,10 @@ export function Withdrawals() {
     e.preventDefault();
     const value = parseFloat(amount);
     if (isNaN(value) || value < FINANCIAL.minWithdrawal) {
-      toast.error(`Valor mínimo: R$ ${FINANCIAL.minWithdrawal},00`); return;
+      toast.error(`Valor mínimo: € ${FINANCIAL.minWithdrawal},00`); return;
     }
     if (value > FINANCIAL.maxWithdrawal) {
-      toast.error(`Valor máximo: R$ ${FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00`); return;
+      toast.error(`Valor máximo: € ${FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00`); return;
     }
     createWithdrawal(value);
   }
@@ -99,7 +99,7 @@ export function Withdrawals() {
             <DialogHeader>
               <DialogTitle>Solicitar Retirada</DialogTitle>
               <DialogDescription>
-                Mínimo R$ {FINANCIAL.minWithdrawal},00 · Máximo R$ {FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00
+                Mínimo € {FINANCIAL.minWithdrawal},00 · Máximo € {FINANCIAL.maxWithdrawal.toLocaleString('pt-BR')},00
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
@@ -137,7 +137,7 @@ export function Withdrawals() {
         <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-3xl sm:text-4xl font-bold">R$ {totalWithdrawn.toFixed(2)}</p>
+              <p className="text-3xl sm:text-4xl font-bold">€ {totalWithdrawn.toFixed(2)}</p>
               <p className="text-sm text-blue-100 mt-2">
                 {withdrawals.filter(w => w.status === 'PENDING').length} saque(s) pendente(s)
               </p>
@@ -162,7 +162,7 @@ export function Withdrawals() {
                 <div key={w.id} className="flex items-start justify-between border-b pb-3 last:border-0 gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">R$ {Number(w.amount).toFixed(2)}</p>
+                      <p className="font-medium">€ {Number(w.amount).toFixed(2)}</p>
                       {getStatusBadge(w.status)}
                     </div>
                     {w.notes && <p className="text-xs text-muted-foreground mt-1 truncate">{w.notes}</p>}

@@ -119,7 +119,7 @@ export function AdminDashboard() {
         />
         <StatsCard
           title="Receita do Mês"
-          value={`R$ ${(monthlyRevenue / 1000).toFixed(1)}k`}
+          value={`€ ${(monthlyRevenue / 1000).toFixed(1)}k`}
           description={`${FINANCIAL.companyCommission * 100}% de comissão`}
           icon={<DollarSign className="h-4 w-4" />}
         />
@@ -132,7 +132,7 @@ export function AdminDashboard() {
         <StatsCard
           title="Saques Pendentes"
           value={pendingW.length.toString()}
-          description={`R$ ${pendingWAmount.toFixed(2)} a processar`}
+          description={`€ ${pendingWAmount.toFixed(2)} a processar`}
           icon={<Clock className="h-4 w-4" />}
         />
       </div>
@@ -148,7 +148,7 @@ export function AdminDashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => [`R$ ${v.toFixed(2)}`, 'Receita']} />
+              <Tooltip formatter={(v: number) => [`€ ${v.toFixed(2)}`, 'Receita']} />
               <Line type="monotone" dataKey="receita" stroke="#108865" strokeWidth={2} dot={{ fill: '#108865' }} />
             </LineChart>
           </ResponsiveContainer>
@@ -214,7 +214,7 @@ export function AdminDashboard() {
         <Card>
           <CardHeader><CardTitle>Receita Total</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">R$ {(totalRevenue / 1000).toFixed(1)}k</p>
+            <p className="text-3xl font-bold">€ {(totalRevenue / 1000).toFixed(1)}k</p>
             <p className="text-sm text-muted-foreground mt-2">Comissão acumulada da plataforma</p>
           </CardContent>
         </Card>

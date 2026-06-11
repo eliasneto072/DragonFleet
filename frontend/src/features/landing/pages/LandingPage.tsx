@@ -246,11 +246,11 @@ export function LandingPage() {
                 </p>
                 <div style={{ marginBottom: '20px' }}>
                   <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Saldo disponível</p>
-                  <p style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 700, letterSpacing: '-1px', color: '#4ecca0' }}>R$ 3.240,75</p>
+                  <p style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 700, letterSpacing: '-1px', color: '#4ecca0' }}>€ 3.240,75</p>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
                   {[
-                    { label: 'Ganhos do mês', value: 'R$ 8.420' },
+                    { label: 'Ganhos do mês', value: '€ 8.420' },
                     { label: 'Corridas',      value: '847'       },
                     { label: 'Avaliação',     value: '4.9 ★'    },
                     { label: 'Documentos',    value: '3 ativos'  },

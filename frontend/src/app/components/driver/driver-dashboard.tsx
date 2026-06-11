@@ -315,19 +315,19 @@ export function DriverDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatsCard
           title="Saldo Disponível"
-          value={`R$ ${balance.toFixed(2)}`}
+          value={`€ ${balance.toFixed(2)}`}
           description="Disponível para saque"
           icon={<Wallet className="h-4 w-4" />}
         />
         <StatsCard
           title="Ganhos Totais"
-          value={`R$ ${totalEarnings.toFixed(2)}`}
+          value={`€ ${totalEarnings.toFixed(2)}`}
           description={`${earnings.length} lançamento${earnings.length !== 1 ? 's' : ''} no histórico`}
           icon={<DollarSign className="h-4 w-4" />}
         />
         <StatsCard
           title="Esta Semana"
-          value={`R$ ${thisWeekEarnings.toFixed(2)}`}
+          value={`€ ${thisWeekEarnings.toFixed(2)}`}
           description="Ganhos dos últimos 7 dias"
           icon={<TrendingUp className="h-4 w-4" />}
           trend={
@@ -362,7 +362,7 @@ export function DriverDashboard() {
   if (v >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
   return `R$${v}`;
 }} />
-                  <Tooltip formatter={(v: number) => [`R$ ${v.toFixed(2)}`, 'Ganhos']} />
+                  <Tooltip formatter={(v: number) => [`€ ${v.toFixed(2)}`, 'Ganhos']} />
                   <Line type="monotone" dataKey="earnings" stroke="#108865" strokeWidth={2} dot={{ fill: '#108865' }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -423,7 +423,7 @@ export function DriverDashboard() {
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-green-600">
-                      + R$ {Number(earning.amount).toFixed(2)}
+                      + € {Number(earning.amount).toFixed(2)}
                     </p>
                   </div>
                 </div>

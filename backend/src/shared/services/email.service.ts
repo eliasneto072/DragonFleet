@@ -79,7 +79,7 @@ export const emailService = {
           </div>
           <h2 style="color:#1D1D1D">Olá, ${driverName}!</h2>
           <p style="color:#444;line-height:1.6">
-            O seu pedido de saque de <strong style="color:#108865">R$ ${amount.toFixed(2)}</strong> foi <strong style="color:#108865">aprovado</strong>.
+            O seu pedido de saque de <strong style="color:#108865">€ ${amount.toFixed(2)}</strong> foi <strong style="color:#108865">aprovado</strong>.
           </p>
           <p style="color:#444;line-height:1.6">
             O valor será processado em breve e transferido para a sua conta.
@@ -108,7 +108,7 @@ export const emailService = {
           </div>
           <h2 style="color:#1D1D1D">Olá, ${driverName}!</h2>
           <p style="color:#444;line-height:1.6">
-            O seu pedido de saque de <strong>R$ ${amount.toFixed(2)}</strong> foi <strong style="color:#e53e3e">rejeitado</strong>.
+            O seu pedido de saque de <strong>€ ${amount.toFixed(2)}</strong> foi <strong style="color:#e53e3e">rejeitado</strong>.
           </p>
           ${notes ? `
           <div style="background:#fff3f3;border-left:4px solid #e53e3e;padding:12px 16px;border-radius:4px;margin:16px 0">

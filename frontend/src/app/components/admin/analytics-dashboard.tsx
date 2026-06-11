@@ -178,8 +178,8 @@ export function AnalyticsDashboard() {
         {[
           {
             label: 'Receita do Mês',
-            value: `R$ ${(thisMonthRevenue / 1000).toFixed(1)}k`,
-            sub:   `Total: R$ ${(totalRevenue / 1000).toFixed(1)}k`,
+            value: `€ ${(thisMonthRevenue / 1000).toFixed(1)}k`,
+            sub:   `Total: € ${(totalRevenue / 1000).toFixed(1)}k`,
             icon:  DollarSign,
             color: 'from-green-500 to-green-600',
           },
@@ -329,7 +329,7 @@ export function AnalyticsDashboard() {
                       <p className="text-sm text-muted-foreground">{user!.email}</p>
                     </div>
                   </div>
-                  <span className="text-lg font-bold text-[#108865]">R$ {total.toFixed(2)}</span>
+                  <span className="text-lg font-bold text-[#108865]">€ {total.toFixed(2)}</span>
                 </div>
               ))}
             </div>

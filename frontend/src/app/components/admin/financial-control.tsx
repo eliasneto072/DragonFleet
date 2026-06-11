@@ -177,7 +177,7 @@ export function FinancialControl() {
             <TrendingUp className="h-4 w-4 text-muted-foreground shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-lg sm:text-2xl font-bold">R$ {totalEarnings.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold">€ {totalEarnings.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Todos os motoristas</p>
           </CardContent>
         </Card>
@@ -187,7 +187,7 @@ export function FinancialControl() {
             <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-green-600">R$ {totalPaidAmount.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-600">€ {totalPaidAmount.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">{paidWithdrawals.length} processado(s)</p>
           </CardContent>
         </Card>
@@ -197,7 +197,7 @@ export function FinancialControl() {
             <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-yellow-600">R$ {totalPendingAmount.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-yellow-600">€ {totalPendingAmount.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">{pendingWithdrawals.length} aguardando</p>
           </CardContent>
         </Card>
@@ -207,7 +207,7 @@ export function FinancialControl() {
             <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-blue-600">R$ {platformRevenue.toFixed(2)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-blue-600">€ {platformRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Taxa {FINANCIAL.companyCommission * 100}%</p>
           </CardContent>
         </Card>
@@ -225,7 +225,7 @@ export function FinancialControl() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="categoria" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => [`R$ ${v.toFixed(2)}`, 'Valor']} />
+              <Tooltip formatter={(v: number) => [`€ ${v.toFixed(2)}`, 'Valor']} />
               <Bar dataKey="valor" fill="#108865" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -265,7 +265,7 @@ export function FinancialControl() {
                             <p className="text-sm text-muted-foreground">{driver?.email}</p>
                           </TableCell>
                           <TableCell>{new Date(w.requestedAt).toLocaleDateString('pt-BR')}</TableCell>
-                          <TableCell className="font-bold">R$ {Number(w.amount).toFixed(2)}</TableCell>
+                          <TableCell className="font-bold">€ {Number(w.amount).toFixed(2)}</TableCell>
                           <TableCell>{getStatusBadge(w.status)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex gap-2 justify-end">
@@ -297,7 +297,7 @@ export function FinancialControl() {
                           <p className="text-xs text-muted-foreground">{new Date(w.requestedAt).toLocaleDateString('pt-BR')}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold">R$ {Number(w.amount).toFixed(2)}</p>
+                          <p className="font-bold">€ {Number(w.amount).toFixed(2)}</p>
                           {getStatusBadge(w.status)}
                         </div>
                       </div>
@@ -348,7 +348,7 @@ export function FinancialControl() {
                           <p className="text-sm text-muted-foreground whitespace-nowrap">{driver?.email}</p>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{new Date(w.requestedAt).toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell className="font-bold whitespace-nowrap">R$ {Number(w.amount).toFixed(2)}</TableCell>
+                        <TableCell className="font-bold whitespace-nowrap">€ {Number(w.amount).toFixed(2)}</TableCell>
                         <TableCell>{getStatusBadge(w.status)}</TableCell>
                       </TableRow>
                     );
