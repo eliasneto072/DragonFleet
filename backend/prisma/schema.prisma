@@ -23,12 +23,23 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   BLOCKED
+  AGUARDANDO_REGULARIZACAO
 }
 
 enum DocumentType {
-  CNH
-  CRLV
-  RECIBO
+  // Documentos do motorista (pessoais)
+  CARTAO_CIDADAO
+  REGISTO_CRIMINAL
+  CARTA_CONDUCAO
+  CERTIFICADO_TVDE
+  FOTO_PERFIL
+
+  // Documentos do veículo
+  DUA
+  SEGURO_CARTA_VERDE
+  SEGURO_CONDICOES_ESPECIAIS
+  INSPECAO_PERIODICA
+
   OTHER
 }
 
@@ -36,6 +47,7 @@ enum DocumentStatus {
   PENDING
   APPROVED
   REJECTED
+  EXPIRED
 }
 
 enum WithdrawalStatus {
@@ -154,6 +166,12 @@ model Document {
   fileKey   String         @map("file_key")
   notes     String?
   status    DocumentStatus @default(PENDING)
+
+  // Controlo de validade (usado pelo Registo Criminal: 90 dias a partir da emissão).
+  // Opcional — os restantes documentos não têm expiração automática por agora.
+  issuedAt  DateTime?      @map("issued_at")   // data de emissão informada pelo motorista
+  expiresAt DateTime?      @map("expires_at")  // emissão + 90 dias (calculado no backend)
+
   userId    String         @map("user_id")
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt
@@ -162,6 +180,7 @@ model Document {
 
   @@index([userId])
   @@index([type, status])
+  @@index([status, expiresAt])
   @@map("documents")
 }
 

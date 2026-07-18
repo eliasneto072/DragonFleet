@@ -9,10 +9,18 @@ import { IDocumentPublic }    from './documents.types';
 import { emailService }       from '../../shared/services/email.service';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  CNH:    'CNH',
-  CRLV:   'CRLV',
-  RECIBO: 'Recibo Verde',
-  OTHER:  'Outro',
+  // Motorista
+  CARTAO_CIDADAO:             'Cartão de Cidadão',
+  REGISTO_CRIMINAL:           'Registo Criminal',
+  CARTA_CONDUCAO:             'Carta de Condução',
+  CERTIFICADO_TVDE:           'Certificado de Motorista TVDE',
+  FOTO_PERFIL:                'Fotografia de Perfil',
+  // Veículo
+  DUA:                        'DUA — Documento Único Automóvel',
+  SEGURO_CARTA_VERDE:         'Seguro Automóvel (Carta Verde)',
+  SEGURO_CONDICOES_ESPECIAIS: 'Seguro Automóvel (Condições Especiais)',
+  INSPECAO_PERIODICA:         'Inspeção Técnica Periódica',
+  OTHER:                      'Outro',
 };
 
 type Actor = { id: string; role?: UserRole };

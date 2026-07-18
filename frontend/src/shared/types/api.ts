@@ -4,11 +4,23 @@
 // ---------- Enums ----------
 
 export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER';
-export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'AGUARDANDO_REGULARIZACAO';
 
 export type EarningPlatform  = 'UBER' | 'BOLT' | 'FREE_NOW' | 'OTHER';
-export type DocumentType     = 'CNH' | 'CRLV' | 'RECIBO' | 'OTHER';
-export type DocumentStatus   = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type DocumentType =
+  // Motorista
+  | 'CARTAO_CIDADAO'
+  | 'REGISTO_CRIMINAL'
+  | 'CARTA_CONDUCAO'
+  | 'CERTIFICADO_TVDE'
+  | 'FOTO_PERFIL'
+  // Veículo
+  | 'DUA'
+  | 'SEGURO_CARTA_VERDE'
+  | 'SEGURO_CONDICOES_ESPECIAIS'
+  | 'INSPECAO_PERIODICA'
+  | 'OTHER';
+export type DocumentStatus   = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
 export type VehicleStatus    = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'SOLD';
 
@@ -50,6 +62,8 @@ export interface ApiDocument {
   fileKey:   string;
   notes?:    string | null;
   status:    DocumentStatus;
+  issuedAt?:  string | null;
+  expiresAt?: string | null;
   userId:    string;
   createdAt: string;
   updatedAt: string;
