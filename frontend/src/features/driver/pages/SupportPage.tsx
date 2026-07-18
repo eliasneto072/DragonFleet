@@ -1,0 +1,6 @@
+// src/features/driver/pages/SupportPage.tsx
+import { Support } from '@/app/components/driver/support';
+
+export default function SupportPage() {
+  return <Support />;
+}
