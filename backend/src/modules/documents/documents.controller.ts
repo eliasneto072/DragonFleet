@@ -42,6 +42,7 @@ export class DocumentsController {
   create = async (req: AuthRequest, res: Response) => {
   // req.body vem do multipart, não precisa de Zod aqui
   const type = req.body?.type;
+  const issuedAt = req.body?.issuedAt; // opcional; obrigatório p/ Registo Criminal (validado no service)
 
   if (!type || !Object.values(DocumentType).includes(type)) {
     throw new AppError('Tipo de documento inválido ou ausente', 400, 'INVALID_DOCUMENT_TYPE');
@@ -61,6 +62,7 @@ export class DocumentsController {
     type: type as DocumentType,
     fileUrl,
     fileKey,
+    issuedAt,
   });
 
   return ok(res, { document }, 201);

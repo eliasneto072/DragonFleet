@@ -6,8 +6,10 @@ export interface IDocument {
     type: DocumentType
     fileUrl: string
     fileKey: string
-    notes?: string
+    notes?: string | null
     status: DocumentStatus
+    issuedAt?: Date | null
+    expiresAt?: Date | null
     userId: string
     createdAt: Date
     updatedAt: Date

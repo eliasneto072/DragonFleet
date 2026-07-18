@@ -11,7 +11,10 @@ export class DocumentsRepository implements IDocumentRepository {
     type: true,
     fileUrl: true,
     fileKey: true,
+    notes: true,
     status: true,
+    issuedAt: true,
+    expiresAt: true,
     userId: true,
     createdAt: true,
     updatedAt: true,
@@ -78,6 +81,8 @@ export class DocumentsRepository implements IDocumentRepository {
           fileKey: data.fileKey, // ← novo
           status: data.status,
           userId: data.userId,
+          issuedAt: data.issuedAt ?? null,
+          expiresAt: data.expiresAt ?? null,
         },
         select: this.publicSelect,
       });

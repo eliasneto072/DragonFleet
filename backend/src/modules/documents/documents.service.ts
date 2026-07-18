@@ -9,18 +9,10 @@ import { IDocumentPublic }    from './documents.types';
 import { emailService }       from '../../shared/services/email.service';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  // Motorista
-  CARTAO_CIDADAO:             'Cartão de Cidadão',
-  REGISTO_CRIMINAL:           'Registo Criminal',
-  CARTA_CONDUCAO:             'Carta de Condução',
-  CERTIFICADO_TVDE:           'Certificado de Motorista TVDE',
-  FOTO_PERFIL:                'Fotografia de Perfil',
-  // Veículo
-  DUA:                        'DUA — Documento Único Automóvel',
-  SEGURO_CARTA_VERDE:         'Seguro Automóvel (Carta Verde)',
-  SEGURO_CONDICOES_ESPECIAIS: 'Seguro Automóvel (Condições Especiais)',
-  INSPECAO_PERIODICA:         'Inspeção Técnica Periódica',
-  OTHER:                      'Outro',
+  CNH:    'CNH',
+  CRLV:   'CRLV',
+  RECIBO: 'Recibo Verde',
+  OTHER:  'Outro',
 };
 
 type Actor = { id: string; role?: UserRole };
@@ -66,12 +58,44 @@ export class DocumentsService {
       throw new AppError('Document type already exists for this user', 409, 'DOCUMENT_TYPE_ALREADY_EXISTS');
     }
 
+    // Regra dos 90 dias: o Registo Criminal exige data de emissão e expira 90
+    // dias depois dessa data (prazo legal em Portugal). Os outros documentos não
+    // têm expiração automática por agora.
+    let issuedAt: Date | null = null;
+    let expiresAt: Date | null = null;
+
+    if (input.type === DocumentType.REGISTO_CRIMINAL) {
+      if (!input.issuedAt) {
+        throw new AppError(
+          'A data de emissão é obrigatória para o Registo Criminal.',
+          400,
+          'ISSUE_DATE_REQUIRED',
+        );
+      }
+      issuedAt = new Date(input.issuedAt);
+      if (isNaN(issuedAt.getTime())) {
+        throw new AppError('Data de emissão inválida.', 400, 'INVALID_ISSUE_DATE');
+      }
+      // Não aceitar data futura
+      if (issuedAt.getTime() > Date.now()) {
+        throw new AppError('A data de emissão não pode ser futura.', 400, 'ISSUE_DATE_IN_FUTURE');
+      }
+      expiresAt = new Date(issuedAt);
+      expiresAt.setDate(expiresAt.getDate() + 90);
+    } else if (input.issuedAt) {
+      // Se vier data de emissão para outros tipos, guardamos (sem expiração).
+      const d = new Date(input.issuedAt);
+      if (!isNaN(d.getTime())) issuedAt = d;
+    }
+
     const data: CreateDocumentData = {
       type:    input.type,
       fileUrl: input.fileUrl,
       fileKey: input.fileKey,
       status:  DocumentStatus.PENDING,
       userId:  actor.id,
+      issuedAt,
+      expiresAt,
     };
 
     return documentsRepository.create(data);

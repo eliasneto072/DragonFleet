@@ -6,6 +6,8 @@ export type CreateDocumentData = {
   fileKey: string; // ← novo
   status: DocumentStatus; // service decide (default PENDING)
   userId: string;
+  issuedAt?: Date | null;  // data de emissão (Registo Criminal)
+  expiresAt?: Date | null; // emissão + 90 dias
 };
 
 export type UpdateDocumentData = {
