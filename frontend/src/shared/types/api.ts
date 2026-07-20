@@ -22,7 +22,7 @@ export type DocumentType =
   | 'OTHER';
 export type DocumentStatus   = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
-export type VehicleStatus    = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'SOLD';
+export type VehicleStatus    = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'SOLD';
 
 // ---------- Modelos ----------
 
@@ -65,6 +65,7 @@ export interface ApiDocument {
   issuedAt?:  string | null;
   expiresAt?: string | null;
   userId:    string;
+  vehicleId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,8 +85,23 @@ export interface ApiVehicle {
   model:     string;
   plate:     string;
   year:      number;
+  vin:       string | null;
   status:    VehicleStatus;
-  userId:    string;
+  activationForced: boolean;
+  userId:    string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApiVehicleAssignment {
+  id:        string;
+  vehicleId: string;
+  userId:    string | null;
+  startedAt: string;
+  endedAt:   string | null;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
 }

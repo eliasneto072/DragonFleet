@@ -1,13 +1,14 @@
 // src/features/driver/services/vehicles.service.ts
 
 import { apiClient } from '@/shared/lib/api-client';
-import type { ApiVehicle, VehicleStatus } from '@/shared/types/api';
+import type { ApiVehicle, ApiVehicleAssignment, VehicleStatus } from '@/shared/types/api';
 
 interface CreateVehicleInput {
   brand:   string;
   model:   string;
   plate:   string;
   year:    number;
+  vin?:    string;
   status?: VehicleStatus;
 }
 
@@ -16,6 +17,7 @@ interface UpdateVehicleInput {
   model?:  string;
   plate?:  string;
   year?:   number;
+  vin?:    string;
   status?: VehicleStatus;  // apenas admin/manager pode alterar
 }
 
@@ -48,5 +50,27 @@ export const vehiclesService = {
   /** DELETE /vehicles/:id */
   remove(id: string): Promise<void> {
     return apiClient.delete(`/vehicles/${id}`);
+  },
+
+  // ── Atribuição (admin/manager) ──────────────────────────────────────────
+  /** POST /vehicles/:id/assign */
+  assign(id: string, userId: string): Promise<{ vehicle: ApiVehicle }> {
+    return apiClient.post(`/vehicles/${id}/assign`, { userId });
+  },
+
+  /** POST /vehicles/:id/unassign */
+  unassign(id: string): Promise<{ vehicle: ApiVehicle }> {
+    return apiClient.post(`/vehicles/${id}/unassign`, {});
+  },
+
+  /** GET /vehicles/:id/assignments */
+  assignmentHistory(id: string): Promise<{ history: ApiVehicleAssignment[] }> {
+    return apiClient.get(`/vehicles/${id}/assignments`);
+  },
+
+  // ── Ativação híbrida (admin/manager) ────────────────────────────────────
+  /** POST /vehicles/:id/force-activation */
+  forceActivation(id: string, forced: boolean): Promise<{ vehicle: ApiVehicle }> {
+    return apiClient.post(`/vehicles/${id}/force-activation`, { forced });
   },
 };
