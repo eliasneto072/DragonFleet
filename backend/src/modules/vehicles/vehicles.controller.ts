@@ -86,6 +86,13 @@ export class VehiclesController {
     const history = await vehiclesService.getAssignmentHistory(getActor(req), parsed.params.id);
     return ok(res, { history });
   };
+
+  forceActivation = async (req: AuthRequest, res: Response) => {
+    const parsed = vehicleIdParamSchema.parse({ params: req.params });
+    const forced = req.body?.forced !== false; // default true
+    const vehicle = await vehiclesService.setForcedActivation(getActor(req), parsed.params.id, forced);
+    return ok(res, { vehicle });
+  };
 }
 
 export const vehiclesController = new VehiclesController();

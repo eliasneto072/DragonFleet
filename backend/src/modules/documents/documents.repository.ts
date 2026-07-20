@@ -16,6 +16,7 @@ export class DocumentsRepository implements IDocumentRepository {
     issuedAt: true,
     expiresAt: true,
     userId: true,
+    vehicleId: true,
     createdAt: true,
     updatedAt: true,
   } as const;

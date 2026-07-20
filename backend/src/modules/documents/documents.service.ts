@@ -7,12 +7,21 @@ import { CreateDocumentData, UpdateDocumentData } from './documents.repository.t
 import { CreateDocumentInput, UpdateDocumentInput, UpdateDocumentStatusInput } from './documents.service.types';
 import { IDocumentPublic }    from './documents.types';
 import { emailService }       from '../../shared/services/email.service';
+import { reevaluateVehicleStatus } from '../vehicles/activation.service';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  CNH:    'CNH',
-  CRLV:   'CRLV',
-  RECIBO: 'Recibo Verde',
-  OTHER:  'Outro',
+  // Motorista
+  CARTAO_CIDADAO:             'Cartão de Cidadão',
+  REGISTO_CRIMINAL:           'Registo Criminal',
+  CARTA_CONDUCAO:             'Carta de Condução',
+  CERTIFICADO_TVDE:           'Certificado de Motorista TVDE',
+  FOTO_PERFIL:                'Fotografia de Perfil',
+  // Veículo
+  DUA:                        'DUA — Documento Único Automóvel',
+  SEGURO_CARTA_VERDE:         'Seguro Automóvel (Carta Verde)',
+  SEGURO_CONDICOES_ESPECIAIS: 'Seguro Automóvel (Condições Especiais)',
+  INSPECAO_PERIODICA:         'Inspeção Técnica Periódica',
+  OTHER:                      'Outro',
 };
 
 type Actor = { id: string; role?: UserRole };
@@ -137,6 +146,15 @@ export class DocumentsService {
     };
 
     const updated = await documentsRepository.update(id, data);
+
+    // ── Reavaliar ativação do veículo (se for documento de veículo) ────────
+    if (doc.vehicleId) {
+      try {
+        await reevaluateVehicleStatus(doc.vehicleId);
+      } catch (actErr) {
+        console.error('[activation] Falha ao reavaliar status do veículo:', actErr);
+      }
+    }
 
     // ── Disparar email ao driver ──────────────────────────────────────────
     try {

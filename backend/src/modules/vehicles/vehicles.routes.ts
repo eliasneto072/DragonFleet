@@ -20,5 +20,8 @@ export function vehiclesRouter(): Router {
   router.post('/:id/assign', requireStaff, vehiclesController.assign);
   router.post('/:id/unassign', requireStaff, vehiclesController.unassign);
 
+  // Ativação híbrida — admin força/remove exceção
+  router.post('/:id/force-activation', requireStaff, vehiclesController.forceActivation);
+
   return router;
 }

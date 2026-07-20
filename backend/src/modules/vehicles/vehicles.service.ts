@@ -4,6 +4,7 @@ import { usersRepository } from '../users/users.repository';
 import { CreateVehicleData, UpdateVehicleData } from './vehicles.repository.types';
 import { vehiclesRepository } from './vehicles.repository';
 import { assignmentsRepository } from './assignments.repository';
+import { forceActivation as forceActivationLogic } from './activation.service';
 import { prisma } from '../../config/prisma';
 import { CreateVehicleInput, UpdateVehicleInput } from './vehicles.service.types';
 import { IVehiclePublic, IVehicleAssignmentWithUser } from './vehicles.types';
@@ -209,6 +210,22 @@ export class VehiclesService {
     }
     await this.ensureVehicleExists(vehicleId);
     return assignmentsRepository.listByVehicle(vehicleId);
+  }
+
+  // ── Ativação híbrida (só admin/manager) ────────────────────────────────────
+
+  /**
+   * Admin força (ou remove a força de) a ativação de um veículo.
+   * forced=true → veículo fica ACTIVE mesmo sem os documentos todos.
+   * forced=false → volta a seguir a regra automática dos documentos.
+   */
+  async setForcedActivation(actor: Actor, vehicleId: string, forced: boolean): Promise<IVehiclePublic> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Apenas administradores podem forçar a ativação.', 403, 'FORBIDDEN');
+    }
+    await this.ensureVehicleExists(vehicleId);
+    await forceActivationLogic(vehicleId, forced);
+    return this.ensureVehicleExists(vehicleId);
   }
 }
 

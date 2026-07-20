@@ -11,6 +11,7 @@ export interface IDocument {
     issuedAt?: Date | null
     expiresAt?: Date | null
     userId: string
+    vehicleId?: string | null
     createdAt: Date
     updatedAt: Date
 }
