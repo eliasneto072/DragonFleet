@@ -30,6 +30,7 @@ const STATUS_STYLES: Record<UserStatus, { label: string; cls: string }> = {
   ACTIVE:   { label: 'Ativo',      cls: 'bg-brand-50 text-brand-700' },
   INACTIVE: { label: 'Inativo',    cls: 'bg-secondary text-muted-foreground' },
   BLOCKED:  { label: 'Bloqueado',  cls: 'bg-destructive/10 text-destructive' },
+  AGUARDANDO_REGULARIZACAO: { label: 'Aguardando regularização', cls: 'bg-amber-100 text-amber-700' },
 };
 
 function StatusPill({ status }: { status: UserStatus }) {
@@ -74,6 +75,7 @@ export function DriversManagement() {
     total: drivers.length,
     active: drivers.filter((d) => d.status === 'ACTIVE').length,
     blocked: drivers.filter((d) => d.status === 'BLOCKED').length,
+    regularization: drivers.filter((d) => d.status === 'AGUARDANDO_REGULARIZACAO').length,
   };
 
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
@@ -161,7 +163,7 @@ export function DriversManagement() {
       />
 
       {/* Stat row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-card"><CardContent className="pt-5">
           <p className="text-sm text-muted-foreground mb-1">Total</p>
           <p className="text-2xl font-bold">{counts.total}</p>
@@ -169,6 +171,10 @@ export function DriversManagement() {
         <Card className="shadow-card"><CardContent className="pt-5">
           <p className="text-sm text-muted-foreground mb-1">Ativos</p>
           <p className="text-2xl font-bold text-success">{counts.active}</p>
+        </CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-5">
+          <p className="text-sm text-muted-foreground mb-1">Regularização</p>
+          <p className="text-2xl font-bold text-amber-600">{counts.regularization}</p>
         </CardContent></Card>
         <Card className="shadow-card"><CardContent className="pt-5">
           <p className="text-sm text-muted-foreground mb-1">Bloqueados</p>
@@ -190,6 +196,7 @@ export function DriversManagement() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="ACTIVE">Ativos</SelectItem>
                 <SelectItem value="INACTIVE">Inativos</SelectItem>
+                <SelectItem value="AGUARDANDO_REGULARIZACAO">Aguardando regularização</SelectItem>
                 <SelectItem value="BLOCKED">Bloqueados</SelectItem>
               </SelectContent>
             </Select>
