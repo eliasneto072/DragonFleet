@@ -6,9 +6,8 @@ export type CreateVehicleInput = {
     model: string
     plate: string
     year: number
+    vin?: string | null
     status?: VehicleStatus
-    
-    //userId: string
 }
 
 
@@ -17,5 +16,6 @@ export type UpdateVehicleInput = {
     model?: string
     plate?: string
     year?: number
+    vin?: string | null
     status?: VehicleStatus
 }

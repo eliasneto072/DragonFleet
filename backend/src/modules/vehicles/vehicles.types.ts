@@ -7,11 +7,13 @@ export interface IVehicle {
   model: string;
   plate: string;
   year: number;
+  vin: string | null;
 
   status: VehicleStatus;
-  
-  userId: string;
-  
+  activationForced: boolean;
+
+  userId: string | null; // pode ser null (veículo não atribuído)
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,5 +21,18 @@ export interface IVehicle {
 export type IVehiclePublic = IVehicle;
 
 export type IVehicleWithUser = IVehicle & {
-  user?: IUserPublic;
+  user?: IUserPublic | null;
+};
+
+// Registo de atribuição (histórico)
+export interface IVehicleAssignment {
+  id: string;
+  vehicleId: string;
+  userId: string | null;
+  startedAt: Date;
+  endedAt: Date | null;
+}
+
+export type IVehicleAssignmentWithUser = IVehicleAssignment & {
+  user?: IUserPublic | null;
 };

@@ -82,7 +82,8 @@ export class VehiclesService {
       model: input.model,
       plate: input.plate,
       year: input.year,
-      status: input.status ?? VehicleStatus.ACTIVE,
+      vin: input.vin,
+      status: input.status ?? VehicleStatus.PENDING, // nasce pendente até os documentos serem aprovados
       userId: userId,
     };
 
@@ -113,6 +114,7 @@ export class VehiclesService {
       ...(input.model !== undefined ? { model: input.model } : {}),
       ...(input.plate !== undefined ? { plate: input.plate } : {}),
       ...(input.year !== undefined ? { year: input.year } : {}),
+      ...(input.vin !== undefined ? { vin: input.vin } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
     };
 

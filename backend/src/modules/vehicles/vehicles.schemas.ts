@@ -19,9 +19,8 @@ export const createVehicleSchema = z.object({
     model: z.string().min(1),
     plate: z.string().min(5).max(10),
     year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 1),
+    vin: z.string().min(5).max(20).optional(),
     status: z.nativeEnum(VehicleStatus).optional(),
-    //userId: z.string().min(1),
-
   }),
 });
 
@@ -35,6 +34,7 @@ export const updateVehicleSchema = z.object({
       model: z.string().min(1).optional(),
       plate: z.string().min(5).max(10).optional(),
       year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 1).optional(), // fix: era obrigatório antes
+      vin: z.string().min(5).max(20).optional(),
       status: z.nativeEnum(VehicleStatus).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {

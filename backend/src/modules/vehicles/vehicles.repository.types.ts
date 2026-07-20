@@ -5,8 +5,9 @@ export type CreateVehicleData = {
   model: string;
   plate: string;
   year: number;
+  vin?: string | null;
   status: VehicleStatus;
-  userId: string;
+  userId?: string | null; // opcional — veículo pode nascer não atribuído
 };
 
 export type UpdateVehicleData = {
@@ -14,7 +15,10 @@ export type UpdateVehicleData = {
   model?: string;
   plate?: string;
   year?: number;
+  vin?: string | null;
   status?: VehicleStatus;
+  activationForced?: boolean;
+  userId?: string | null;
 };
 
 // Aliases para compatibilidade com interface e service
