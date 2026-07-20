@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
+import { requireStaff } from '../../middlewares/role.middleware';
 import { vehiclesController } from './vehicles.controller';
 
 export function vehiclesRouter(): Router {
@@ -10,9 +11,14 @@ export function vehiclesRouter(): Router {
   router.get('/', vehiclesController.list);
   router.get('/user/:userId', vehiclesController.listByUser); // antes de /:id
   router.get('/:id', vehiclesController.getById);
+  router.get('/:id/assignments', requireStaff, vehiclesController.assignmentHistory);
   router.post('/', vehiclesController.create);
   router.patch('/:id', vehiclesController.update);
   router.delete('/:id', vehiclesController.remove);
+
+  // Atribuição (só admin/manager — reforçado no service também)
+  router.post('/:id/assign', requireStaff, vehiclesController.assign);
+  router.post('/:id/unassign', requireStaff, vehiclesController.unassign);
 
   return router;
 }

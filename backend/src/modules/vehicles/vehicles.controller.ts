@@ -8,6 +8,7 @@ import {
   updateVehicleSchema,
   vehicleIdParamSchema,
   userIdParamSchema,
+  assignVehicleSchema,
 } from './vehicles.schemas';
 
 function getActor(req: AuthRequest) {
@@ -64,6 +65,26 @@ export class VehiclesController {
     const parsed = vehicleIdParamSchema.parse({ params: req.params });
     await vehiclesService.remove(getActor(req), parsed.params.id);
     return res.status(204).send();
+  };
+
+  // ── Atribuição ─────────────────────────────────────────────────────────────
+
+  assign = async (req: AuthRequest, res: Response) => {
+    const parsed = assignVehicleSchema.parse({ params: req.params, body: req.body });
+    const vehicle = await vehiclesService.assign(getActor(req), parsed.params.id, parsed.body.userId);
+    return ok(res, { vehicle });
+  };
+
+  unassign = async (req: AuthRequest, res: Response) => {
+    const parsed = vehicleIdParamSchema.parse({ params: req.params });
+    const vehicle = await vehiclesService.unassign(getActor(req), parsed.params.id);
+    return ok(res, { vehicle });
+  };
+
+  assignmentHistory = async (req: AuthRequest, res: Response) => {
+    const parsed = vehicleIdParamSchema.parse({ params: req.params });
+    const history = await vehiclesService.getAssignmentHistory(getActor(req), parsed.params.id);
+    return ok(res, { history });
   };
 }
 

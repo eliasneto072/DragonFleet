@@ -41,3 +41,13 @@ export const updateVehicleSchema = z.object({
       message: 'At least one field is required',
     }),
 });
+
+// Atribuir veículo a um motorista
+export const assignVehicleSchema = z.object({
+  params: z.object({
+    id: z.string().min(1),
+  }),
+  body: z.object({
+    userId: z.string().min(1),
+  }),
+});

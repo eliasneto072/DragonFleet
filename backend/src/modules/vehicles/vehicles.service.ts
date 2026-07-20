@@ -3,8 +3,10 @@ import { UserRole, VehicleStatus } from '../../shared/types/enums';
 import { usersRepository } from '../users/users.repository';
 import { CreateVehicleData, UpdateVehicleData } from './vehicles.repository.types';
 import { vehiclesRepository } from './vehicles.repository';
+import { assignmentsRepository } from './assignments.repository';
+import { prisma } from '../../config/prisma';
 import { CreateVehicleInput, UpdateVehicleInput } from './vehicles.service.types';
-import { IVehiclePublic } from './vehicles.types';
+import { IVehiclePublic, IVehicleAssignmentWithUser } from './vehicles.types';
 
 type Actor = {
   id: string;
@@ -132,6 +134,81 @@ export class VehiclesService {
     await this.ensureVehicleExists(id);
 
     return vehiclesRepository.delete(id);
+  }
+
+  // ── Atribuição (só admin/manager) ──────────────────────────────────────────
+
+  /**
+   * Atribui um veículo a um motorista. Fecha a atribuição anterior (se houver),
+   * abre uma nova no histórico e atualiza o motorista atual do veículo — tudo
+   * numa transação para ficar sempre coerente.
+   */
+  async assign(actor: Actor, vehicleId: string, userId: string): Promise<IVehiclePublic> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Apenas administradores podem atribuir veículos.', 403, 'FORBIDDEN');
+    }
+
+    await this.ensureVehicleExists(vehicleId);
+    await this.ensureUserExists(userId);
+
+    const open = await assignmentsRepository.findOpenByVehicle(vehicleId);
+    // Já atribuído a este mesmo motorista? Nada a fazer.
+    if (open && open.userId === userId) {
+      return this.ensureVehicleExists(vehicleId);
+    }
+
+    await prisma.$transaction([
+      // Fecha a atribuição aberta (se houver)
+      prisma.vehicleAssignment.updateMany({
+        where: { vehicleId, endedAt: null },
+        data: { endedAt: new Date() },
+      }),
+      // Abre a nova atribuição
+      prisma.vehicleAssignment.create({
+        data: { vehicleId, userId },
+      }),
+      // Atualiza o motorista atual do veículo
+      prisma.vehicle.update({
+        where: { id: vehicleId },
+        data: { userId },
+      }),
+    ]);
+
+    return this.ensureVehicleExists(vehicleId);
+  }
+
+  /**
+   * Remove a atribuição atual do veículo (fica "não atribuído"). Fecha a
+   * atribuição aberta no histórico e limpa o motorista atual.
+   */
+  async unassign(actor: Actor, vehicleId: string): Promise<IVehiclePublic> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Apenas administradores podem desatribuir veículos.', 403, 'FORBIDDEN');
+    }
+
+    await this.ensureVehicleExists(vehicleId);
+
+    await prisma.$transaction([
+      prisma.vehicleAssignment.updateMany({
+        where: { vehicleId, endedAt: null },
+        data: { endedAt: new Date() },
+      }),
+      prisma.vehicle.update({
+        where: { id: vehicleId },
+        data: { userId: null },
+      }),
+    ]);
+
+    return this.ensureVehicleExists(vehicleId);
+  }
+
+  /** Histórico de atribuições de um veículo (só admin/manager). */
+  async getAssignmentHistory(actor: Actor, vehicleId: string): Promise<IVehicleAssignmentWithUser[]> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+    await this.ensureVehicleExists(vehicleId);
+    return assignmentsRepository.listByVehicle(vehicleId);
   }
 }
 
