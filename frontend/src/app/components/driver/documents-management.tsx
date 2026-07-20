@@ -8,18 +8,12 @@ import { Badge } from '@/app/components/ui/badge';
 import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle, ExternalLink, Paperclip, X } from 'lucide-react';
+import { FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle, ExternalLink, Paperclip, X, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { DocumentType, DocumentStatus } from '@/shared/types/api';
-
-const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
-  CNH:    'CNH — Carteira Nacional de Habilitação',
-  CRLV:   'CRLV — Certificado do Veículo',
-  RECIBO: 'Recibo',
-  OTHER:  'Outro',
-};
+import { DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, requiresIssueDate, daysUntil } from '@/shared/lib/document-labels';
 
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_SIZE_MB = 10;
@@ -44,6 +38,12 @@ function getStatusBadge(status: DocumentStatus) {
           <XCircle className="h-3 w-3 mr-1" />Rejeitado
         </Badge>
       );
+    case 'EXPIRED':
+      return (
+        <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">
+          <CalendarClock className="h-3 w-3 mr-1" />Expirado
+        </Badge>
+      );
     default:
       return null;
   }
@@ -61,6 +61,7 @@ export function DocumentsManagement() {
   const [docType, setDocType]   = useState<DocumentType | ''>('');
   const [file, setFile]         = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
+  const [issuedAt, setIssuedAt] = useState(''); // data de emissão (Registo Criminal)
 
   // ── Leitura ───────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
@@ -72,7 +73,7 @@ export function DocumentsManagement() {
 
   // ── Criar documento ───────────────────────────────────────────────────────
   const { mutate: createDocument, isPending } = useMutation({
-    mutationFn: () => documentsService.create(docType as DocumentType, file!),
+    mutationFn: () => documentsService.create(docType as DocumentType, file!, issuedAt || undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
       toast.success('Documento enviado! Aguardando aprovação.');
@@ -88,6 +89,7 @@ export function DocumentsManagement() {
     setDocType('');
     setFile(null);
     setFileError('');
+    setIssuedAt('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -126,6 +128,10 @@ export function DocumentsManagement() {
     e.preventDefault();
     if (!docType) { toast.error('Selecione o tipo do documento.'); return; }
     if (!file)    { toast.error('Selecione um arquivo.');          return; }
+    if (requiresIssueDate(docType) && !issuedAt) {
+      toast.error('Informe a data de emissão do Registo Criminal.');
+      return;
+    }
     createDocument();
   }
 
@@ -189,7 +195,7 @@ export function DocumentsManagement() {
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(DOCUMENT_TYPE_LABELS) as DocumentType[]).map((key) => (
+                    {DRIVER_DOCUMENT_TYPES.map((key) => (
                       <SelectItem key={key} value={key}>
                         {DOCUMENT_TYPE_LABELS[key]}
                       </SelectItem>
@@ -197,6 +203,25 @@ export function DocumentsManagement() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Data de emissão — só para o Registo Criminal (regra dos 90 dias) */}
+              {docType && requiresIssueDate(docType) && (
+                <div className="space-y-2">
+                  <Label htmlFor="issuedAt">Data de emissão</Label>
+                  <input
+                    id="issuedAt"
+                    type="date"
+                    value={issuedAt}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setIssuedAt(e.target.value)}
+                    className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    O Registo Criminal é válido por 90 dias a partir da data de emissão.
+                  </p>
+                </div>
+              )}
 
               {/* Área de upload */}
               <div className="space-y-2">
@@ -288,7 +313,7 @@ export function DocumentsManagement() {
                       {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.type}
                     </CardTitle>
                     <CardDescription>
-                      {new Date(doc.createdAt).toLocaleDateString('pt-BR')}
+                      {new Date(doc.createdAt).toLocaleDateString('pt-PT')}
                     </CardDescription>
                   </div>
                 </div>
@@ -296,8 +321,27 @@ export function DocumentsManagement() {
               </div>
             </CardHeader>
             <CardContent>
-              {doc.notes && (
-                <p className="text-sm text-muted-foreground mb-3">{doc.notes}</p>
+              {/* Validade (Registo Criminal) */}
+              {doc.expiresAt && doc.status !== 'EXPIRED' && (() => {
+                const dias = daysUntil(doc.expiresAt);
+                const urgente = dias !== null && dias <= 7;
+                return (
+                  <p className={`text-xs mb-3 flex items-center gap-1 ${urgente ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>
+                    <CalendarClock className="h-3 w-3 shrink-0" />
+                    {dias !== null && dias >= 0
+                      ? `Válido até ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')} (${dias} dia${dias === 1 ? '' : 's'})`
+                      : `Expirou em ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')}`}
+                  </p>
+                );
+              })()}
+              {doc.status === 'EXPIRED' && (
+                <p className="text-xs mb-3 flex items-center gap-1 text-orange-600 font-medium">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  Documento expirado. Envie um novo Registo Criminal atualizado.
+                </p>
+              )}
+              {doc.notes && doc.notes.replace('[avisado-7d]', '').trim() && (
+                <p className="text-sm text-muted-foreground mb-3">{doc.notes.replace('[avisado-7d]', '').trim()}</p>
               )}
               <Button
                 variant="outline"

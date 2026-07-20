@@ -18,21 +18,16 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { usersService }     from '@/features/admin/services/users.service';
 import { queryKeys }        from '@/shared/lib/query-keys';
 import type { DocumentStatus, ApiDocument } from '@/shared/types/api';
+import { DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS } from '@/shared/lib/document-labels';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const DOC_TYPE_LABELS: Record<string, string> = {
-  CNH:   'CNH',
-  CRLV:  'CRLV',
-  RECIBO: 'Recibo Verde',
-  OTHER: 'Outro',
-};
 
 function getStatusBadge(status: DocumentStatus) {
   switch (status) {
     case 'APPROVED': return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
     case 'PENDING':  return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
     case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
+    case 'EXPIRED':  return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><Clock className="h-3 w-3 mr-1" />Expirado</Badge>;
     default: return null;
   }
 }
