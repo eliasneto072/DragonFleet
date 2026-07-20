@@ -4,6 +4,7 @@ import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
 import { documentsService } from './documents.service';
 import { uploadToCloudinary } from '../upload/upload.service';
+import { runDocumentsExpiryCheck } from '../../jobs/documents-expiry.job';
 import {
   updateDocumentSchema,
   updateDocumentStatusSchema,
@@ -104,6 +105,12 @@ export class DocumentsController {
     await documentsService.remove(getActor(req), parsed.params.id);
 
     return res.status(204).send();
+  };
+
+  // Dispara a verificação de validade manualmente (admin). Retorna o resumo.
+  runExpiryCheck = async (_req: AuthRequest, res: Response) => {
+    const result = await runDocumentsExpiryCheck();
+    return ok(res, { result });
   };
 }
 
