@@ -261,7 +261,7 @@ export function FleetManagement() {
                     <tr
                       key={v.id}
                       className="border-b last:border-0 hover:bg-secondary/40 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/app/admin/vehicles/${v.id}`)}
+                      onClick={() => navigate(`/app/admin/fleet/${v.id}`)}
                     >
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
