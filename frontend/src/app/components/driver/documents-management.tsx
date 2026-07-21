@@ -53,20 +53,27 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+function viewDocument(id: string) {
+  documentsService.openFile(id).catch((err: any) =>
+    toast.error(err?.message ?? 'Erro ao abrir o documento.'),
+  );
+}
+
 export function DocumentsManagement() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [open, setOpen]         = useState(false);
-  const [docType, setDocType]   = useState<DocumentType | ''>('');
-  const [file, setFile]         = useState<File | null>(null);
+  const [open, setOpen] = useState(false);
+  const [docType, setDocType] = useState<DocumentType | ''>('');
+  const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
   const [issuedAt, setIssuedAt] = useState(''); // data de emissão (Registo Criminal)
 
   // ── Leitura ───────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.documents.list,
-    queryFn:  () => documentsService.list(),
+    queryFn: () => documentsService.list(),
   });
 
   const documents = data?.documents ?? [];
@@ -127,7 +134,7 @@ export function DocumentsManagement() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!docType) { toast.error('Selecione o tipo do documento.'); return; }
-    if (!file)    { toast.error('Selecione um arquivo.');          return; }
+    if (!file) { toast.error('Selecione um arquivo.'); return; }
     if (requiresIssueDate(docType) && !issuedAt) {
       toast.error('Informe a data de emissão do Registo Criminal.');
       return;
@@ -347,7 +354,7 @@ export function DocumentsManagement() {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => window.open(doc.fileUrl, '_blank')}
+                onClick={() => viewDocument(doc.id)}
               >
                 <ExternalLink className="h-3 w-3 mr-1" />
                 Visualizar

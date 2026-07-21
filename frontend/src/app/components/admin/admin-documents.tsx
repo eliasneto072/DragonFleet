@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
-import { usersService }     from '@/features/admin/services/users.service';
-import { queryKeys }        from '@/shared/lib/query-keys';
+import { usersService } from '@/features/admin/services/users.service';
+import { queryKeys } from '@/shared/lib/query-keys';
 import type { DocumentStatus, ApiDocument } from '@/shared/types/api';
 import { DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS } from '@/shared/lib/document-labels';
 
@@ -25,11 +25,18 @@ import { DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS } from '@/shared/lib/document-l
 function getStatusBadge(status: DocumentStatus) {
   switch (status) {
     case 'APPROVED': return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
-    case 'PENDING':  return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
+    case 'PENDING': return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
     case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-    case 'EXPIRED':  return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><Clock className="h-3 w-3 mr-1" />Expirado</Badge>;
+    case 'EXPIRED': return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><Clock className="h-3 w-3 mr-1" />Expirado</Badge>;
     default: return null;
   }
+}
+
+// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+function viewDocument(id: string) {
+  documentsService.openFile(id).catch((err: any) =>
+    toast.error(err?.message ?? 'Erro ao abrir o documento.'),
+  );
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -37,11 +44,11 @@ function getStatusBadge(status: DocumentStatus) {
 export function AdminDocuments() {
   const queryClient = useQueryClient();
 
-  const docsQ  = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
-  const usersQ = useQuery({ queryKey: queryKeys.users.list,     queryFn: () => usersService.list() });
+  const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
 
   const isLoading = docsQ.isLoading || usersQ.isLoading;
-  const isError   = docsQ.isError   || usersQ.isError;
+  const isError = docsQ.isError || usersQ.isError;
 
   const { mutate: updateStatus, isPending: updating } = useMutation({
     mutationFn: ({ id, status, notes }: { id: string; status: DocumentStatus; notes?: string }) =>
@@ -82,10 +89,10 @@ export function AdminDocuments() {
     );
   }
 
-  const documents = docsQ.data?.documents  ?? [];
-  const users     = usersQ.data?.users     ?? [];
+  const documents = docsQ.data?.documents ?? [];
+  const users = usersQ.data?.users ?? [];
 
-  const pending  = documents.filter(d => d.status === 'PENDING');
+  const pending = documents.filter(d => d.status === 'PENDING');
   const approved = documents.filter(d => d.status === 'APPROVED');
   const rejected = documents.filter(d => d.status === 'REJECTED');
 
@@ -142,11 +149,11 @@ export function AdminDocuments() {
         <TableCell>{getStatusBadge(doc.status)}</TableCell>
         <TableCell>
           <div className="flex gap-2 justify-end flex-wrap">
-            {/* Ver ficheiro */}
+            {/* Ver ficheiro — via endpoint autenticado */}
             <Button
               size="sm"
               variant="outline"
-              onClick={() => window.open(doc.fileUrl, '_blank')}
+              onClick={() => viewDocument(doc.id)}
             >
               <Eye className="h-3 w-3 mr-1" />Ver
             </Button>
@@ -196,7 +203,7 @@ export function AdminDocuments() {
           <div>{getStatusBadge(doc.status)}</div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => window.open(doc.fileUrl, '_blank')}>
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => viewDocument(doc.id)}>
             <Eye className="h-3 w-3 mr-1" />Ver
           </Button>
           {doc.status !== 'APPROVED' && (

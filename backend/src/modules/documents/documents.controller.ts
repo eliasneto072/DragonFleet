@@ -40,34 +40,73 @@ export class DocumentsController {
     return ok(res, { document });
   };
 
+  // Serve o arquivo do documento com validação de permissão (dono ou admin/manager).
+  // O frontend nunca mais toca na URL do Cloudinary diretamente — quem decide o
+  // acesso é o backend (JWT + ownership), não a obscuridade do link. [RGPD]
+  getFile = async (req: AuthRequest, res: Response) => {
+    const parsed = documentIdParamSchema.parse({ params: req.params });
+
+    // getById já valida: dono do documento OU admin/manager. Reaproveitamos.
+    const document = await documentsService.getById(
+      getActor(req),
+      parsed.params.id
+    );
+
+    const upstream = await fetch(document.fileUrl);
+
+    if (!upstream.ok) {
+      throw new AppError(
+        'Não foi possível obter o arquivo. O documento pode precisar de ser reenviado.',
+        502,
+        'FILE_FETCH_FAILED'
+      );
+    }
+
+    const contentType =
+      upstream.headers.get('content-type') ?? 'application/octet-stream';
+
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', buffer.length);
+    // "inline" = abre no visualizador do navegador em vez de forçar download
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${document.type.toLowerCase()}-${document.id}"`
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    return res.send(buffer);
+  };
+
   create = async (req: AuthRequest, res: Response) => {
-  // req.body vem do multipart, não precisa de Zod aqui
-  const type = req.body?.type;
-  const issuedAt = req.body?.issuedAt; // opcional; obrigatório p/ Registo Criminal (validado no service)
+    // req.body vem do multipart, não precisa de Zod aqui
+    const type = req.body?.type;
+    const issuedAt = req.body?.issuedAt; // opcional; obrigatório p/ Registo Criminal (validado no service)
 
-  if (!type || !Object.values(DocumentType).includes(type)) {
-    throw new AppError('Tipo de documento inválido ou ausente', 400, 'INVALID_DOCUMENT_TYPE');
-  }
+    if (!type || !Object.values(DocumentType).includes(type)) {
+      throw new AppError('Tipo de documento inválido ou ausente', 400, 'INVALID_DOCUMENT_TYPE');
+    }
 
-  if (!req.file) {
-    throw new AppError('Arquivo não enviado', 400, 'MISSING_FILE');
-  }
+    if (!req.file) {
+      throw new AppError('Arquivo não enviado', 400, 'MISSING_FILE');
+    }
 
-  const { fileUrl, fileKey } = await uploadToCloudinary(
-    req.file.buffer,
-    req.file.mimetype,
-    'documents'
-  );
+    const { fileUrl, fileKey } = await uploadToCloudinary(
+      req.file.buffer,
+      req.file.mimetype,
+      'documents'
+    );
 
-  const document = await documentsService.create(getActor(req), {
-    type: type as DocumentType,
-    fileUrl,
-    fileKey,
-    issuedAt,
-  });
+    const document = await documentsService.create(getActor(req), {
+      type: type as DocumentType,
+      fileUrl,
+      fileKey,
+      issuedAt,
+    });
 
-  return ok(res, { document }, 201);
-};
+    return ok(res, { document }, 201);
+  };
 
   update = async (req: AuthRequest, res: Response) => {
     const parsed = updateDocumentSchema.parse({

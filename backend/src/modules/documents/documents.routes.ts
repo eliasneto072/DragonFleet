@@ -11,6 +11,7 @@ export function documentsRouter(): Router {
 
   router.get('/', documentsController.list);
   router.get('/:id', documentsController.getById);
+  router.get('/:id/file', documentsController.getFile); // ← serve o arquivo com auth
   router.post('/', upload.single('file'), documentsController.create); // ← multipart
   router.patch('/:id', documentsController.update);
   router.patch('/:id/status', documentsController.updateStatus);

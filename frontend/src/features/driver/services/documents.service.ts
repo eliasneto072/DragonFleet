@@ -6,7 +6,7 @@ import type { ApiDocument, DocumentType, DocumentStatus } from '@/shared/types/a
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 interface UpdateDocumentInput {
-  type?:    DocumentType;
+  type?: DocumentType;
   fileUrl?: string;
 }
 
@@ -24,6 +24,47 @@ export const documentsService = {
   /** GET /documents/:id */
   getById(id: string): Promise<{ document: ApiDocument }> {
     return apiClient.get(`/documents/${id}`);
+  },
+
+  /**
+   * GET /documents/:id/file — abre o arquivo numa nova aba.
+   * Busca com o token JWT (window.open puro não envia headers) e abre como blob.
+   * Abrimos a janela ANTES do fetch para não ser bloqueada pelo popup blocker.
+   */
+  async openFile(id: string): Promise<void> {
+    const token = localStorage.getItem('dragonfleet:token');
+    const win = window.open('', '_blank');
+
+    try {
+      const res = await fetch(`${BASE_URL}/documents/${id}/file`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.message ?? 'Erro ao abrir o documento.');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      if (win) {
+        win.location.href = url;
+      } else {
+        // Fallback se o popup foi bloqueado
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.click();
+      }
+
+      // Libera a memória depois que a aba já carregou o blob
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      win?.close();
+      throw err;
+    }
   },
 
   /**
