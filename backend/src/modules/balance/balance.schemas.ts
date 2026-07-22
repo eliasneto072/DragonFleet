@@ -14,6 +14,7 @@ export const createAdjustmentSchema = z.object({
   body: z.object({
     type: z.nativeEnum(AdjustmentType),
     amount: z.coerce.number().positive('O valor deve ser maior que zero.'),
-    reason: z.string().trim().min(3, 'Descreva o motivo do ajuste.').max(500),
+    // Motivo opcional. Se vier, no máximo 500 caracteres.
+    reason: z.string().trim().max(500).optional(),
   }),
 });
