@@ -101,6 +101,7 @@ export class DocumentsRepository implements IDocumentRepository {
           ...(data.type !== undefined ? { type: data.type } : {}),
           ...(data.fileUrl !== undefined ? { fileUrl: data.fileUrl } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes } : {}), // ← persistir notas
         },
         select: this.publicSelect,
       });

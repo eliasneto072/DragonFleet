@@ -11,7 +11,7 @@ import { analyticsRouter } from '../modules/analytics/analytics.routes';
 import { supportRouter } from '../modules/support/support.routes';
 import { reportsRouter } from '../modules/reports/reports.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
-
+import { balanceRouter } from '../modules/balance/balance.routes';
 
 const router = Router();
 
@@ -27,5 +27,6 @@ router.use('/analytics', analyticsRouter());
 router.use('/support', supportRouter());
 router.use('/reports', reportsRouter());
 router.use('/settings', settingsRouter());
+router.use('/balance', balanceRouter());
 
 export { router };

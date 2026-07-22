@@ -1,11 +1,11 @@
 // src/app/components/admin/drivers-management.tsx
 //
-// Redesigned (light fintech shell). Same data layer, queries and mutations.
-// Adds: PageHeader, avatar initials, refined status pills, stat row, cleaner
-// table + mobile cards. Currency/date via shared helpers where relevant.
+// Lista de motoristas (admin). O clique em "Ver" navega para a ficha
+// completa do motorista (drivers/:id) com saldo, ajustes e documentos.
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -13,23 +13,19 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/app/components/ui/table';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
-} from '@/app/components/ui/dialog';
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
-import { Search, Eye, UserCheck, UserX, Ban, Mail, Loader2, AlertCircle, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import { Search, Eye, Mail, Loader2, AlertCircle, Users } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { ApiUser, UserStatus } from '@/shared/types/api';
 
 const STATUS_STYLES: Record<UserStatus, { label: string; cls: string }> = {
-  ACTIVE:   { label: 'Ativo',      cls: 'bg-brand-50 text-brand-700' },
-  INACTIVE: { label: 'Inativo',    cls: 'bg-secondary text-muted-foreground' },
-  BLOCKED:  { label: 'Bloqueado',  cls: 'bg-destructive/10 text-destructive' },
+  ACTIVE: { label: 'Ativo', cls: 'bg-brand-50 text-brand-700' },
+  INACTIVE: { label: 'Inativo', cls: 'bg-secondary text-muted-foreground' },
+  BLOCKED: { label: 'Bloqueado', cls: 'bg-destructive/10 text-destructive' },
   AGUARDANDO_REGULARIZACAO: { label: 'Aguardando regularização', cls: 'bg-amber-100 text-amber-700' },
 };
 
@@ -52,12 +48,11 @@ function Avatar({ name }: { name: string }) {
 }
 
 export function DriversManagement() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.users.list,
     queryFn: () => usersService.list(),
   });
@@ -78,16 +73,9 @@ export function DriversManagement() {
     regularization: drivers.filter((d) => d.status === 'AGUARDANDO_REGULARIZACAO').length,
   };
 
-  const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: UserStatus }) =>
-      usersService.update(id, { status }),
-    onSuccess: ({ user }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-      toast.success(`Motorista ${user.status === 'ACTIVE' ? 'ativado' : 'atualizado'} com sucesso.`);
-      setSelectedUser(null);
-    },
-    onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar motorista.'),
-  });
+  function openDriver(user: ApiUser) {
+    navigate(`/app/admin/drivers/${user.id}`);
+  }
 
   if (isLoading) {
     return (
@@ -102,57 +90,10 @@ export function DriversManagement() {
       <div className="flex flex-col items-center justify-center py-20 gap-3">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Erro ao carregar motoristas.</p>
-        <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.all })}>
-          Tentar novamente
-        </Button>
+        <Button variant="outline" onClick={() => refetch()}>Tentar novamente</Button>
       </div>
     );
   }
-
-  const actionButtons = (u: ApiUser) => (
-    <div className="flex flex-col gap-2">
-      {u.status !== 'ACTIVE' && (
-        <Button className="flex-1" disabled={updatingStatus} onClick={() => updateStatus({ id: u.id, status: 'ACTIVE' })}>
-          {updatingStatus ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}Ativar
-        </Button>
-      )}
-      {u.status === 'ACTIVE' && (
-        <Button variant="outline" className="flex-1" disabled={updatingStatus} onClick={() => updateStatus({ id: u.id, status: 'INACTIVE' })}>
-          {updatingStatus ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserX className="h-4 w-4 mr-2" />}Desativar
-        </Button>
-      )}
-      {u.status !== 'BLOCKED' && (
-        <Button variant="destructive" className="flex-1" disabled={updatingStatus} onClick={() => updateStatus({ id: u.id, status: 'BLOCKED' })}>
-          <Ban className="h-4 w-4 mr-2" />Bloquear
-        </Button>
-      )}
-    </div>
-  );
-
-  const detailDialog = (
-    <DialogContent className="max-w-lg">
-      <DialogHeader>
-        <DialogTitle>Detalhes do motorista</DialogTitle>
-        <DialogDescription>Informações e ações de gestão</DialogDescription>
-      </DialogHeader>
-      {selectedUser && (
-        <div className="space-y-6 mt-2">
-          <div className="flex items-center gap-3">
-            <Avatar name={selectedUser.name} />
-            <div>
-              <p className="font-semibold">{selectedUser.name}</p>
-              <StatusPill status={selectedUser.status} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><p className="text-muted-foreground">E-mail</p><p className="font-medium break-all">{selectedUser.email}</p></div>
-            <div><p className="text-muted-foreground">Membro desde</p><p className="font-medium">{formatDate(selectedUser.createdAt)}</p></div>
-          </div>
-          {actionButtons(selectedUser)}
-        </div>
-      )}
-    </DialogContent>
-  );
 
   return (
     <div className="space-y-6">
@@ -221,7 +162,11 @@ export function DriversManagement() {
                 <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-10">Nenhum motorista encontrado.</TableCell></TableRow>
               )}
               {filtered.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow
+                  key={user.id}
+                  className="cursor-pointer hover:bg-muted/40"
+                  onClick={() => openDriver(user)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar name={user.name} />
@@ -234,12 +179,13 @@ export function DriversManagement() {
                   <TableCell><StatusPill status={user.status} /></TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedUser(user)}><Eye className="h-4 w-4" /></Button>
-                      </DialogTrigger>
-                      {detailDialog}
-                    </Dialog>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); openDriver(user); }}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />Ver
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -255,7 +201,7 @@ export function DriversManagement() {
           <Card className="shadow-card"><CardContent className="text-center text-muted-foreground py-10">Nenhum motorista encontrado.</CardContent></Card>
         )}
         {filtered.map((user) => (
-          <Card key={user.id} className="shadow-card">
+          <Card key={user.id} className="shadow-card cursor-pointer active:bg-muted/40" onClick={() => openDriver(user)}>
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start gap-3">
                 <Avatar name={user.name} />
@@ -266,12 +212,9 @@ export function DriversManagement() {
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <StatusPill status={user.status} />
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" onClick={() => setSelectedUser(user)}><Eye className="h-3 w-3 mr-1" />Ver</Button>
-                    </DialogTrigger>
-                    {detailDialog}
-                  </Dialog>
+                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openDriver(user); }}>
+                    <Eye className="h-3 w-3 mr-1" />Ver
+                  </Button>
                 </div>
               </div>
             </CardContent>

@@ -1,11 +1,13 @@
 // src/app/components/driver/driver-dashboard.tsx
 //
 // Redesigned (Design System v2 / "Variation A"):
-//  - Deep-green balance hero card with quick actions
-//  - Neutral KPI cards with depth
-//  - Per-platform earnings breakdown (rows w/ share %)
-//  - Currency unified to formatCurrency() — fixes the old €/R$ mix
-//  - Same data layer, services and modal logic as before
+// - Deep-green balance hero card with quick actions
+// - Neutral KPI cards with depth
+// - Per-platform earnings breakdown (rows w/ share %)
+// - Currency unified to formatCurrency() — fixes the old €/R$ mix
+// - Same data layer, services and modal logic as before
+//
+// Saldo: usa GET /balance/:userId (mesma fonte do admin, inclui ajustes).
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +32,7 @@ import {
 import { toast } from 'sonner';
 import { earningsService } from '@/features/driver/services/earnings.service';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { balanceService } from '@/features/admin/services/balance.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { formatCurrency, formatCurrencyCompact, formatPercent, formatDate } from '@/shared/lib/format';
@@ -42,10 +45,10 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 const PLATFORM_BADGE: Record<string, { letter: string; bg: string; fg: string }> = {
-  UBER:     { letter: 'U', bg: '#1D1D1D', fg: '#ffffff' },
-  BOLT:     { letter: 'B', bg: '#108865', fg: '#ffffff' },
+  UBER: { letter: 'U', bg: '#1D1D1D', fg: '#ffffff' },
+  BOLT: { letter: 'B', bg: '#108865', fg: '#ffffff' },
   FREE_NOW: { letter: 'F', bg: '#5dbf9c', fg: '#073d2f' },
-  OTHER:    { letter: 'O', bg: '#8fd4ba', fg: '#073d2f' },
+  OTHER: { letter: 'O', bg: '#8fd4ba', fg: '#073d2f' },
 };
 
 const PLATFORMS: { value: EarningPlatform; label: string }[] = [
@@ -147,6 +150,7 @@ function buildPlatformBreakdown(earnings: ApiEarning[], days = 30) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+// Fallback local enquanto o endpoint de saldo carrega.
 function calcBalance(earnings: ApiEarning[], withdrawals: ApiWithdrawal[]) {
   const totalEarned = earnings.reduce((s, e) => s + Number(e.amount), 0);
   const totalWithdrawn = withdrawals
@@ -174,6 +178,7 @@ function AddEarningModal({ open, onClose }: AddEarningModalProps) {
       earningsService.create({ amount: parseFloat(amount), platform, date }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.earnings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
       toast.success('Ganho registado com sucesso!');
       handleClose();
     },
@@ -205,7 +210,7 @@ function AddEarningModal({ open, onClose }: AddEarningModalProps) {
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="amount">Valor (R$)</Label>
+            <Label htmlFor="amount">Valor (€)</Label>
             <Input
               id="amount" type="number" min="0.01" step="0.01" placeholder="0,00"
               value={amount} onChange={(e) => setAmount(e.target.value)}
@@ -265,6 +270,12 @@ export function DriverDashboard() {
     queryFn: () => withdrawalsService.list(),
   });
 
+  const balanceQuery = useQuery({
+    queryKey: queryKeys.balance.summary(user?.id ?? ''),
+    queryFn: () => balanceService.getSummary(user!.id),
+    enabled: !!user?.id,
+  });
+
   const isLoading = earningsQuery.isLoading || withdrawalsQuery.isLoading;
   const isError = earningsQuery.isError || withdrawalsQuery.isError;
 
@@ -291,7 +302,9 @@ export function DriverDashboard() {
 
   // Cálculos
   const totalEarnings = earnings.reduce((s, e) => s + Number(e.amount), 0);
-  const balance = calcBalance(earnings, withdrawals);
+  // Fonte única de verdade: mesmo endpoint que o admin usa (inclui ajustes).
+  // Fallback para o cálculo local enquanto a query de saldo carrega.
+  const balance = balanceQuery.data?.balance.available ?? calcBalance(earnings, withdrawals);
   const thisWeekStart = startOfWeek();
   const lastWeekStart = startOfLastWeek();
   // End of this week (start + 7 days) so "this week" can't leak future dates.
@@ -471,7 +484,7 @@ export function DriverDashboard() {
                   <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
                   <YAxis
                     stroke="var(--muted-foreground)" fontSize={12}
-                    tickFormatter={(v) => (v === 0 ? 'R$0' : formatCurrencyCompact(v))}
+                    tickFormatter={(v) => (v === 0 ? '€0' : formatCurrencyCompact(v))}
                   />
                   <Tooltip formatter={(v: number) => [formatCurrency(v), 'Ganhos']} />
                   <Line type="monotone" dataKey="earnings" stroke="#108865" strokeWidth={2.5} dot={{ fill: '#108865', r: 3 }} />
