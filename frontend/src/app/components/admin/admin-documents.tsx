@@ -1,10 +1,12 @@
 // src/app/components/admin/admin-documents.tsx
 //
 // Dashboard de documentos do admin:
-// - Filtros: pesquisa por motorista, status, tipo e validade ("a expirar")
-// - Cards de resumo clicáveis (atalho de filtro), incluindo Expirados e A expirar
-// - Linhas limpas: apenas "Ver" + "Analisar"; ações ficam no dialog de análise
-// - Rejeição com motivo escrito pelo admin (segue no email ao motorista)
+// - Abas por categoria (Todos / Motorista / Veículo)
+// - Cards de resumo clicáveis como TOGGLE de filtro (clicar de novo limpa)
+// - Ordenação por urgência (ação necessária primeiro), não por data
+// - Progresso de cadastro por motorista, sensível à aba ativa
+// - Coluna de validade com destaque de urgência
+// - "Ver" + "Analisar"; ações no dialog de análise; rejeição com motivo opcional
 // - "Ver" via endpoint autenticado do backend
 
 import { useMemo, useState } from 'react';
@@ -31,9 +33,33 @@ import {
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { usersService } from '@/features/admin/services/users.service';
+import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
-import type { DocumentStatus, ApiDocument } from '@/shared/types/api';
-import { DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil } from '@/shared/lib/document-labels';
+import type { DocumentStatus, ApiDocument, DocumentType } from '@/shared/types/api';
+import {
+  DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil, VEHICLE_DOCUMENT_TYPES, DRIVER_DOCUMENT_TYPES,
+} from '@/shared/lib/document-labels';
+
+// ── Categorias (derivadas do tipo — sem tocar no banco) ─────────────────────────
+
+type Category = 'all' | 'driver' | 'vehicle';
+
+function categoryOf(type: DocumentType): 'driver' | 'vehicle' {
+  return VEHICLE_DOCUMENT_TYPES.includes(type) ? 'vehicle' : 'driver';
+}
+
+// Prioridade de exibição: o que precisa de ação vem primeiro.
+// Rejeitado → A expirar (≤30d) → Pendente → Expirado → Aprovado.
+function urgencyRank(doc: ApiDocument): number {
+  if (doc.status === 'REJECTED') return 0;
+  if (doc.status !== 'EXPIRED' && doc.expiresAt) {
+    const dias = daysUntil(doc.expiresAt);
+    if (dias !== null && dias >= 0 && dias <= 30) return 1; // a expirar
+  }
+  if (doc.status === 'PENDING') return 2;
+  if (doc.status === 'EXPIRED') return 3;
+  return 4; // aprovado (ou sem urgência)
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +112,7 @@ export function AdminDocuments() {
 
   // Filtros
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<Category>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | DocumentStatus>('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [expiryFilter, setExpiryFilter] = useState<'all' | '30' | '15' | '7'>('all');
@@ -97,9 +124,10 @@ export function AdminDocuments() {
 
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
   const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
 
-  const isLoading = docsQ.isLoading || usersQ.isLoading;
-  const isError = docsQ.isError || usersQ.isError;
+  const isLoading = docsQ.isLoading || usersQ.isLoading || vehiclesQ.isLoading;
+  const isError = docsQ.isError || usersQ.isError || vehiclesQ.isError;
 
   const { mutate: updateStatus, isPending: updating } = useMutation({
     mutationFn: ({ id, status, notes }: { id: string; status: DocumentStatus; notes?: string }) =>
@@ -126,11 +154,63 @@ export function AdminDocuments() {
 
   const documents = docsQ.data?.documents ?? [];
   const users = usersQ.data?.users ?? [];
+  const vehicles = vehiclesQ.data?.vehicles ?? [];
 
   const getDriver = (userId: string) => {
     const u = users.find(u => u.id === userId);
     return { name: u?.name ?? '—', email: u?.email ?? '' };
   };
+
+  // Nº de veículos por motorista (para compor o denominador do progresso).
+  const vehicleCountByUser = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const v of vehicles) {
+      if (v.userId) map[v.userId] = (map[v.userId] ?? 0) + 1;
+    }
+    return map;
+  }, [vehicles]);
+
+  // Progresso de cadastro por motorista, sensível à aba (categoria) selecionada:
+  // - "all"     → aprovados (pessoais + veículo) / total exigido (5 + 4×veículos)
+  // - "driver"  → aprovados pessoais / 5
+  // - "vehicle" → aprovados de veículo / (4 × nº de veículos do motorista)
+  const driverProgress = useMemo(() => {
+    const personalRequired = DRIVER_DOCUMENT_TYPES.length;   // 5
+    const perVehicleRequired = VEHICLE_DOCUMENT_TYPES.length; // 4
+
+    const map: Record<string, { approved: number; total: number }> = {};
+
+    const ensure = (userId: string) => {
+      if (!map[userId]) {
+        const numVehicles = vehicleCountByUser[userId] ?? 0;
+        let total: number;
+        if (category === 'driver') {
+          total = personalRequired;
+        } else if (category === 'vehicle') {
+          total = perVehicleRequired * numVehicles;
+        } else {
+          total = personalRequired + perVehicleRequired * numVehicles;
+        }
+        map[userId] = { approved: 0, total };
+      }
+      return map[userId];
+    };
+
+    for (const d of documents) {
+      const isPersonalRequired = !d.vehicleId && DRIVER_DOCUMENT_TYPES.includes(d.type);
+      const isVehicleRequired = !!d.vehicleId && VEHICLE_DOCUMENT_TYPES.includes(d.type);
+
+      // Filtra o que conta conforme a aba:
+      if (category === 'driver' && !isPersonalRequired) continue;
+      if (category === 'vehicle' && !isVehicleRequired) continue;
+      if (category === 'all' && !isPersonalRequired && !isVehicleRequired) continue;
+
+      const p = ensure(d.userId);
+      if (d.status === 'APPROVED') p.approved += 1;
+    }
+
+    return map;
+  }, [documents, vehicleCountByUser, category]);
 
   // Contagens (sobre o total, independente dos filtros)
   const counts = useMemo(() => {
@@ -148,7 +228,14 @@ export function AdminDocuments() {
     };
   }, [documents]);
 
-  // Aplicação dos filtros
+  // Contagem por categoria (para os badges das abas)
+  const categoryCounts = useMemo(() => ({
+    all: documents.length,
+    driver: documents.filter(d => categoryOf(d.type) === 'driver').length,
+    vehicle: documents.filter(d => categoryOf(d.type) === 'vehicle').length,
+  }), [documents]);
+
+  // Aplicação dos filtros + ordenação por urgência
   const filtered = useMemo(() => {
     return documents.filter(doc => {
       const driver = getDriver(doc.userId);
@@ -158,6 +245,7 @@ export function AdminDocuments() {
         driver.name.toLowerCase().includes(q) ||
         driver.email.toLowerCase().includes(q);
 
+      const matchCategory = category === 'all' || categoryOf(doc.type) === category;
       const matchStatus = statusFilter === 'all' || doc.status === statusFilter;
       const matchType = typeFilter === 'all' || doc.type === typeFilter;
 
@@ -170,27 +258,50 @@ export function AdminDocuments() {
           dias !== null && dias >= 0 && dias <= limit;
       }
 
-      return matchSearch && matchStatus && matchType && matchExpiry;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [documents, users, search, statusFilter, typeFilter, expiryFilter]);
+      return matchSearch && matchCategory && matchStatus && matchType && matchExpiry;
+    }).sort((a, b) => {
+      // 1º por urgência; empate → mais recente primeiro
+      const ra = urgencyRank(a);
+      const rb = urgencyRank(b);
+      if (ra !== rb) return ra - rb;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [documents, users, search, category, statusFilter, typeFilter, expiryFilter]);
 
   const hasActiveFilters =
-    search !== '' || statusFilter !== 'all' || typeFilter !== 'all' || expiryFilter !== 'all';
+    search !== '' || category !== 'all' || statusFilter !== 'all' || typeFilter !== 'all' || expiryFilter !== 'all';
 
   function clearFilters() {
     setSearch('');
+    setCategory('all');
     setStatusFilter('all');
     setTypeFilter('all');
     setExpiryFilter('all');
   }
 
+  // Toggle de filtro por status via card: clicar no card ativo limpa; senão aplica.
+  function toggleStatusFilter(status: DocumentStatus) {
+    if (statusFilter === status && expiryFilter === 'all') {
+      setStatusFilter('all');
+    } else {
+      setStatusFilter(status);
+      setExpiryFilter('all');
+    }
+  }
+
+  function toggleExpiryFilter() {
+    if (expiryFilter === '30') {
+      setExpiryFilter('all');
+    } else {
+      setExpiryFilter('30');
+      setStatusFilter('all');
+    }
+  }
+
   function handleRejectConfirm() {
     if (!rejectDoc) return;
-    if (!rejectReason.trim()) {
-      toast.error('Escreva o motivo da rejeição — ele será enviado ao motorista.');
-      return;
-    }
-    updateStatus({ id: rejectDoc.id, status: 'REJECTED', notes: rejectReason.trim() });
+    // Motivo opcional: se vazio, rejeita sem motivo (email omite a razão).
+    updateStatus({ id: rejectDoc.id, status: 'REJECTED', notes: rejectReason.trim() || undefined });
   }
 
   if (isLoading) {
@@ -213,7 +324,7 @@ export function AdminDocuments() {
     );
   }
 
-  // Card de resumo clicável (atalho de filtro)
+  // Card de resumo clicável (toggle de filtro)
   function StatCard({
     label, value, colorCls, icon, active, onClick,
   }: {
@@ -235,6 +346,41 @@ export function AdminDocuments() {
     );
   }
 
+  // Indicador de progresso do motorista, conforme a aba ativa
+  function DriverProgress({ userId }: { userId: string }) {
+    const p = driverProgress[userId];
+    if (!p || p.total === 0) return null;
+    const complete = p.approved === p.total;
+    const scopeLabel =
+      category === 'driver' ? 'pessoais'
+      : category === 'vehicle' ? 'de veículo'
+      : 'pessoais + veículo';
+    return (
+      <span
+        className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${complete ? 'bg-green-100 text-green-700' : 'bg-secondary text-muted-foreground'}`}
+        title={`${p.approved} de ${p.total} documentos ${scopeLabel} aprovados`}
+      >
+        {complete && <CheckCircle className="h-3 w-3" />}
+        {p.approved}/{p.total}
+      </span>
+    );
+  }
+
+  // Aba de categoria
+  function CategoryTab({ value, label }: { value: Category; label: string }) {
+    const active = category === value;
+    const count = categoryCounts[value];
+    return (
+      <button
+        onClick={() => setCategory(value)}
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:bg-secondary/70'}`}
+      >
+        {label}
+        <span className={`text-xs px-1.5 rounded-full ${active ? 'bg-primary-foreground/20' : 'bg-background/60'}`}>{count}</span>
+      </button>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -242,38 +388,45 @@ export function AdminDocuments() {
         <p className="text-muted-foreground">Analise e valide os documentos enviados pelos motoristas</p>
       </div>
 
-      {/* Cards de resumo — clicáveis como atalho de filtro */}
+      {/* Cards de resumo — toggles de filtro */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
           label="Pendentes" value={counts.pending} colorCls="text-yellow-600"
           icon={<Clock className="h-4 w-4 text-yellow-600 shrink-0" />}
           active={statusFilter === 'PENDING' && expiryFilter === 'all'}
-          onClick={() => { clearFilters(); setStatusFilter('PENDING'); }}
+          onClick={() => toggleStatusFilter('PENDING')}
         />
         <StatCard
           label="Aprovados" value={counts.approved} colorCls="text-green-600"
           icon={<CheckCircle className="h-4 w-4 text-green-600 shrink-0" />}
           active={statusFilter === 'APPROVED' && expiryFilter === 'all'}
-          onClick={() => { clearFilters(); setStatusFilter('APPROVED'); }}
+          onClick={() => toggleStatusFilter('APPROVED')}
         />
         <StatCard
           label="Rejeitados" value={counts.rejected} colorCls="text-red-600"
           icon={<XCircle className="h-4 w-4 text-red-600 shrink-0" />}
           active={statusFilter === 'REJECTED' && expiryFilter === 'all'}
-          onClick={() => { clearFilters(); setStatusFilter('REJECTED'); }}
+          onClick={() => toggleStatusFilter('REJECTED')}
         />
         <StatCard
           label="Expirados" value={counts.expired} colorCls="text-orange-600"
           icon={<CalendarClock className="h-4 w-4 text-orange-600 shrink-0" />}
           active={statusFilter === 'EXPIRED' && expiryFilter === 'all'}
-          onClick={() => { clearFilters(); setStatusFilter('EXPIRED'); }}
+          onClick={() => toggleStatusFilter('EXPIRED')}
         />
         <StatCard
           label="A expirar (30d)" value={counts.expiringSoon} colorCls="text-amber-600"
           icon={<AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />}
           active={expiryFilter === '30'}
-          onClick={() => { clearFilters(); setExpiryFilter('30'); }}
+          onClick={toggleExpiryFilter}
         />
+      </div>
+
+      {/* Abas por categoria */}
+      <div className="flex gap-2 flex-wrap">
+        <CategoryTab value="all" label="Todos" />
+        <CategoryTab value="driver" label="Motorista" />
+        <CategoryTab value="vehicle" label="Veículo" />
       </div>
 
       {/* Barra de filtros */}
@@ -336,7 +489,7 @@ export function AdminDocuments() {
           <CardTitle>Documentos</CardTitle>
           <CardDescription>
             {filtered.length} de {documents.length}
-            {hasActiveFilters ? ' (filtros ativos)' : ' no total'}
+            {hasActiveFilters ? ' (filtros ativos)' : ' no total'} · ordenados por urgência
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -364,7 +517,10 @@ export function AdminDocuments() {
                       return (
                         <TableRow key={doc.id}>
                           <TableCell>
-                            <p className="font-medium whitespace-nowrap">{driver.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium whitespace-nowrap">{driver.name}</p>
+                              <DriverProgress userId={doc.userId} />
+                            </div>
                             <p className="text-sm text-muted-foreground whitespace-nowrap">{driver.email}</p>
                           </TableCell>
                           <TableCell>
@@ -409,7 +565,10 @@ export function AdminDocuments() {
                     <div key={doc.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex justify-between items-start gap-2">
                         <div className="min-w-0">
-                          <p className="font-medium truncate">{driver.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{driver.name}</p>
+                            <DriverProgress userId={doc.userId} />
+                          </div>
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             {doc.vehicleId ? <Car className="h-3 w-3 shrink-0" /> : <User className="h-3 w-3 shrink-0" />}
                             {DOC_TYPE_LABELS[doc.type] ?? doc.type}
@@ -552,7 +711,7 @@ export function AdminDocuments() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de rejeição com motivo */}
+      {/* Dialog de rejeição com motivo (opcional) */}
       <Dialog open={rejectDoc !== null} onOpenChange={(v) => { if (!v) { setRejectDoc(null); setRejectReason(''); } }}>
         <DialogContent>
           <DialogHeader>
@@ -561,7 +720,7 @@ export function AdminDocuments() {
               {rejectDoc && (
                 <>
                   <strong>{DOC_TYPE_LABELS[rejectDoc.type] ?? rejectDoc.type}</strong> de{' '}
-                  <strong>{getDriver(rejectDoc.userId).name}</strong>. O motivo será enviado por email ao motorista.
+                  <strong>{getDriver(rejectDoc.userId).name}</strong>. Se indicar um motivo, ele é enviado por email ao motorista.
                 </>
               )}
             </DialogDescription>
@@ -572,20 +731,16 @@ export function AdminDocuments() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={4}
-              placeholder="Ex: Documento ilegível — reenvie uma foto nítida da frente e do verso."
+              placeholder="Motivo (opcional) — ex: documento ilegível, reenvie uma foto nítida da frente e do verso."
               className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none resize-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <AlertCircle className="h-3 w-3 shrink-0" />
-              Seja específico: o motorista verá exatamente este texto.
-            </p>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setRejectDoc(null); setRejectReason(''); }} disabled={updating}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleRejectConfirm} disabled={updating || !rejectReason.trim()}>
+            <Button variant="destructive" onClick={handleRejectConfirm} disabled={updating}>
               {updating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rejeitando…</> : <><XCircle className="h-4 w-4 mr-2" />Rejeitar documento</>}
             </Button>
           </DialogFooter>
