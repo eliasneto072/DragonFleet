@@ -5,6 +5,7 @@ export type CreateDocumentInput = {
   fileUrl: string;
   fileKey: string;
   issuedAt?: string; // data de emissão (ISO) — usada pelo Registo Criminal
+  vehicleId?: string; // se presente, documento pertence a um veículo (não é pessoal)
 };
 
 export type UpdateDocumentInput = {

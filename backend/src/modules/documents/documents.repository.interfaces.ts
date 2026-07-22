@@ -7,6 +7,7 @@ export interface IDocumentRepository {
   findById(id: string): Promise<IDocumentPublic | null>;
   findByUserId(userId: string): Promise<IDocumentPublic[]>;
   findByUserIdAndType(userId: string, type: DocumentType): Promise<IDocumentPublic | null>;
+  findByVehicleIdAndType(vehicleId: string, type: DocumentType): Promise<IDocumentPublic | null>;
   create(data: CreateDocumentData): Promise<IDocumentPublic>;
   update(id: string, data: UpdateDocumentData): Promise<IDocumentPublic>;
   replace(id: string, data: ReplaceDocumentData): Promise<IDocumentPublic>;

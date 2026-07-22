@@ -1,10 +1,10 @@
 // src/app/components/admin/vehicle-detail.tsx
 //
 // Detalhe do veículo (admin). Onde a ação acontece:
-//  - dados do veículo + estado
-//  - os 4 documentos obrigatórios (ver, aprovar, rejeitar)
-//  - atribuição a um motorista (+ histórico)
-//  - controlo de ativação (forçar/remover exceção)
+// - dados do veículo + estado
+// - os 4 documentos obrigatórios (ver, aprovar, rejeitar com motivo opcional)
+// - atribuição a um motorista (+ histórico)
+// - controlo de ativação (forçar/remover exceção)
 
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -14,6 +14,9 @@ import { Button } from '@/app/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/app/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -35,13 +38,18 @@ import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
 
 function docStatusBadge(status: DocumentStatus) {
   const map: Record<DocumentStatus, { cls: string; label: string; Icon: typeof CheckCircle }> = {
-    APPROVED: { cls: 'bg-green-100 text-green-700',  label: 'Aprovado',  Icon: CheckCircle },
-    PENDING:  { cls: 'bg-yellow-100 text-yellow-700', label: 'Pendente', Icon: Clock },
-    REJECTED: { cls: 'bg-red-100 text-red-700',      label: 'Rejeitado', Icon: XCircle },
-    EXPIRED:  { cls: 'bg-orange-100 text-orange-700', label: 'Expirado', Icon: Clock },
+    APPROVED: { cls: 'bg-green-100 text-green-700', label: 'Aprovado', Icon: CheckCircle },
+    PENDING: { cls: 'bg-yellow-100 text-yellow-700', label: 'Pendente', Icon: Clock },
+    REJECTED: { cls: 'bg-red-100 text-red-700', label: 'Rejeitado', Icon: XCircle },
+    EXPIRED: { cls: 'bg-orange-100 text-orange-700', label: 'Expirado', Icon: Clock },
   };
   const { cls, label, Icon } = map[status];
   return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}><Icon className="h-3 w-3" />{label}</span>;
+}
+
+// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+function viewDocument(id: string) {
+  documentsService.openFile(id).catch((err: any) => toast.error(err?.message ?? 'Erro ao abrir o documento.'));
 }
 
 export function VehicleDetail() {
@@ -50,13 +58,17 @@ export function VehicleDetail() {
   const queryClient = useQueryClient();
   const [selectedDriver, setSelectedDriver] = useState('');
 
+  // Dialog de rejeição de documento (motivo opcional)
+  const [rejectDoc, setRejectDoc] = useState<ApiDocument | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
   const vehicleQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id], queryFn: () => vehiclesService.getById(id), enabled: !!id });
-  const usersQ   = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
-  const docsQ    = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
   const historyQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id, 'history'], queryFn: () => vehiclesService.assignmentHistory(id), enabled: !!id });
 
   const vehicle = vehicleQ.data?.vehicle;
-  const users   = usersQ.data?.users ?? [];
+  const users = usersQ.data?.users ?? [];
   const drivers = users.filter((u) => u.role === 'DRIVER');
   const allDocs = docsQ.data?.documents ?? [];
   const history = historyQ.data?.history ?? [];
@@ -73,10 +85,15 @@ export function VehicleDetail() {
     queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
   };
 
-  const { mutate: updateDocStatus } = useMutation({
-    mutationFn: ({ docId, status }: { docId: string; status: DocumentStatus }) =>
-      documentsService.updateStatus(docId, { status, notes: status === 'REJECTED' ? 'Documento inválido ou ilegível.' : undefined }),
-    onSuccess: () => { invalidateAll(); toast.success('Documento atualizado.'); },
+  const { mutate: updateDocStatus, isPending: updatingDoc } = useMutation({
+    mutationFn: ({ docId, status, notes }: { docId: string; status: DocumentStatus; notes?: string }) =>
+      documentsService.updateStatus(docId, { status, notes }),
+    onSuccess: (_, { status }) => {
+      invalidateAll();
+      toast.success(status === 'APPROVED' ? 'Documento aprovado.' : 'Documento rejeitado.');
+      setRejectDoc(null);
+      setRejectReason('');
+    },
     onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar documento.'),
   });
 
@@ -151,18 +168,20 @@ export function VehicleDetail() {
                     </div>
                     {doc && (
                       <div className="flex items-center gap-2 shrink-0">
-                        <Button size="sm" variant="outline" onClick={() => window.open(doc.fileUrl, '_blank')}>
+                        <Button size="sm" variant="outline" onClick={() => viewDocument(doc.id)}>
                           <Eye className="h-3 w-3 mr-1" />Ver
                         </Button>
                         {doc.status !== 'APPROVED' && (
                           <Button size="sm" variant="outline" className="text-green-700 hover:text-green-700 hover:border-green-300"
+                            disabled={updatingDoc}
                             onClick={() => updateDocStatus({ docId: doc.id, status: 'APPROVED' })}>
                             <CheckCircle className="h-3 w-3" />
                           </Button>
                         )}
                         {doc.status !== 'REJECTED' && (
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive hover:border-destructive/40"
-                            onClick={() => updateDocStatus({ docId: doc.id, status: 'REJECTED' })}>
+                            disabled={updatingDoc}
+                            onClick={() => { setRejectDoc(doc); setRejectReason(''); }}>
                             <XCircle className="h-3 w-3" />
                           </Button>
                         )}
@@ -172,7 +191,7 @@ export function VehicleDetail() {
                 );
               })}
               <p className="text-xs text-muted-foreground pt-1">
-                O veículo ativa automaticamente quando os 4 documentos estiverem aprovados.
+                O veículo ativa automaticamente quando os 4 documentos estiverem aprovados. O motorista envia os documentos a partir da área dele.
               </p>
             </CardContent>
           </Card>
@@ -279,6 +298,46 @@ export function VehicleDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Dialog de rejeição de documento (motivo opcional) */}
+      <Dialog open={rejectDoc !== null} onOpenChange={(v) => { if (!v) { setRejectDoc(null); setRejectReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rejeitar documento</DialogTitle>
+            <DialogDescription>
+              {rejectDoc && (
+                <>
+                  <strong>{DOCUMENT_TYPE_LABELS[rejectDoc.type] ?? rejectDoc.type}</strong> deste veículo.
+                  Se indicar um motivo, ele é enviado por email ao motorista.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              placeholder="Motivo (opcional) — ex: apólice ilegível, reenvie o PDF completo."
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none resize-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectDoc(null); setRejectReason(''); }} disabled={updatingDoc}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => rejectDoc && updateDocStatus({ docId: rejectDoc.id, status: 'REJECTED', notes: rejectReason.trim() || undefined })}
+              disabled={updatingDoc}
+            >
+              {updatingDoc ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rejeitando…</> : <><XCircle className="h-4 w-4 mr-2" />Rejeitar documento</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

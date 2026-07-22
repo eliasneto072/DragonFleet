@@ -2,6 +2,7 @@
 import { AppError } from '../../shared/errors/AppError';
 import { DocumentStatus, DocumentType, UserRole } from '../../shared/types/enums';
 import { usersRepository } from '../users/users.repository';
+import { vehiclesRepository } from '../vehicles/vehicles.repository';
 import { documentsRepository } from './documents.repository';
 import { CreateDocumentData, UpdateDocumentData, ReplaceDocumentData } from './documents.repository.types';
 import { CreateDocumentInput, UpdateDocumentInput, UpdateDocumentStatusInput } from './documents.service.types';
@@ -23,6 +24,14 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   INSPECAO_PERIODICA: 'Inspeção Técnica Periódica',
   OTHER: 'Outro',
 };
+
+// Tipos que são de veículo (o resto é pessoal).
+const VEHICLE_DOC_TYPES: DocumentType[] = [
+  DocumentType.DUA,
+  DocumentType.SEGURO_CARTA_VERDE,
+  DocumentType.SEGURO_CONDICOES_ESPECIAIS,
+  DocumentType.INSPECAO_PERIODICA,
+];
 
 // Estados em que um documento pode ser reenviado (substituído) pelo motorista.
 const REPLACEABLE_STATUSES: DocumentStatus[] = [DocumentStatus.REJECTED, DocumentStatus.EXPIRED];
@@ -95,11 +104,83 @@ export class DocumentsService {
 
     const { issuedAt, expiresAt } = this.resolveValidity(input.type, input.issuedAt);
 
+    // ── Documento de VEÍCULO ────────────────────────────────────────────────
+    if (input.vehicleId) {
+      if (!VEHICLE_DOC_TYPES.includes(input.type)) {
+        throw new AppError('Este tipo de documento não pertence a um veículo.', 400, 'INVALID_VEHICLE_DOCUMENT_TYPE');
+      }
+
+      const vehicle = await vehiclesRepository.findById(input.vehicleId);
+      if (!vehicle) {
+        throw new AppError('Veículo não encontrado.', 404, 'VEHICLE_NOT_FOUND');
+      }
+
+      // Só o dono do veículo (ou admin/manager) pode enviar documentos dele.
+      if (!canManageDocuments(actor.role) && vehicle.userId !== actor.id) {
+        throw new AppError('Este veículo não pertence a si.', 403, 'FORBIDDEN');
+      }
+
+      const existing = await documentsRepository.findByVehicleIdAndType(input.vehicleId, input.type);
+
+      if (existing) {
+        if (!REPLACEABLE_STATUSES.includes(existing.status)) {
+          const label = DOC_TYPE_LABELS[input.type] ?? input.type;
+          const motivo =
+            existing.status === DocumentStatus.APPROVED
+              ? `O documento "${label}" deste veículo já está aprovado.`
+              : `O documento "${label}" deste veículo já foi enviado e aguarda análise.`;
+          throw new AppError(motivo, 409, 'DOCUMENT_TYPE_ALREADY_EXISTS');
+        }
+
+        const replaceData: ReplaceDocumentData = {
+          fileUrl: input.fileUrl,
+          fileKey: input.fileKey,
+          status: DocumentStatus.PENDING,
+          issuedAt,
+          expiresAt,
+          notes: null,
+        };
+        const replaced = await documentsRepository.replace(existing.id, replaceData);
+
+        try {
+          await reevaluateVehicleStatus(input.vehicleId);
+        } catch (actErr) {
+          console.error('[activation] Falha ao reavaliar status do veículo:', actErr);
+        }
+
+        return replaced;
+      }
+
+      // O documento pertence ao veículo, mas registamos também quem enviou (userId).
+      const data: CreateDocumentData = {
+        type: input.type,
+        fileUrl: input.fileUrl,
+        fileKey: input.fileKey,
+        status: DocumentStatus.PENDING,
+        userId: vehicle.userId ?? actor.id,
+        vehicleId: input.vehicleId,
+        issuedAt,
+        expiresAt,
+      };
+      const created = await documentsRepository.create(data);
+
+      try {
+        await reevaluateVehicleStatus(input.vehicleId);
+      } catch (actErr) {
+        console.error('[activation] Falha ao reavaliar status do veículo:', actErr);
+      }
+
+      return created;
+    }
+
+    // ── Documento PESSOAL ───────────────────────────────────────────────────
+    if (VEHICLE_DOC_TYPES.includes(input.type)) {
+      throw new AppError('Este tipo de documento pertence a um veículo. Envie-o a partir do veículo.', 400, 'VEHICLE_DOCUMENT_REQUIRES_VEHICLE');
+    }
+
     const existing = await documentsRepository.findByUserIdAndType(actor.id, input.type);
 
     if (existing) {
-      // Se o documento anterior já foi aprovado ou ainda está em análise, não
-      // faz sentido reenviar — bloqueamos com mensagem clara.
       if (!REPLACEABLE_STATUSES.includes(existing.status)) {
         const label = DOC_TYPE_LABELS[input.type] ?? input.type;
         const motivo =
@@ -109,37 +190,24 @@ export class DocumentsService {
         throw new AppError(motivo, 409, 'DOCUMENT_TYPE_ALREADY_EXISTS');
       }
 
-      // Documento rejeitado ou expirado → substitui o ficheiro e reinicia o ciclo.
       const replaceData: ReplaceDocumentData = {
         fileUrl: input.fileUrl,
         fileKey: input.fileKey,
         status: DocumentStatus.PENDING,
         issuedAt,
         expiresAt,
-        notes: null, // limpa o motivo de rejeição anterior
+        notes: null,
       };
-
-      const replaced = await documentsRepository.replace(existing.id, replaceData);
-
-      // Se for documento de veículo, reavaliar ativação (voltou a PENDING).
-      if (replaced.vehicleId) {
-        try {
-          await reevaluateVehicleStatus(replaced.vehicleId);
-        } catch (actErr) {
-          console.error('[activation] Falha ao reavaliar status do veículo:', actErr);
-        }
-      }
-
-      return replaced;
+      return documentsRepository.replace(existing.id, replaceData);
     }
 
-    // Não existe documento deste tipo → cria normalmente.
     const data: CreateDocumentData = {
       type: input.type,
       fileUrl: input.fileUrl,
       fileKey: input.fileKey,
       status: DocumentStatus.PENDING,
       userId: actor.id,
+      vehicleId: null,
       issuedAt,
       expiresAt,
     };
@@ -206,7 +274,6 @@ export class DocumentsService {
         }
       }
     } catch (emailErr) {
-      // Não falha a operação principal se o email não enviar
       console.error('[email] Failed to send document status email:', emailErr);
     }
 

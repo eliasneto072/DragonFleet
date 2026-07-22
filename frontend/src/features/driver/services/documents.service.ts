@@ -72,14 +72,16 @@ export const documentsService = {
    * O backend recebe o arquivo e faz o upload para o Cloudinary internamente.
    * NÃO usar apiClient.post aqui pois ele força Content-Type: application/json.
    * `issuedAt` (ISO date) é obrigatório para o Registo Criminal.
+   * `vehicleId` presente → documento pertence a um veículo (não é pessoal).
    */
-  async create(type: DocumentType, file: File, issuedAt?: string): Promise<{ document: ApiDocument }> {
+  async create(type: DocumentType, file: File, issuedAt?: string, vehicleId?: string): Promise<{ document: ApiDocument }> {
     const token = localStorage.getItem('dragonfleet:token');
 
     const formData = new FormData();
     formData.append('type', type);
     formData.append('file', file);
     if (issuedAt) formData.append('issuedAt', issuedAt);
+    if (vehicleId) formData.append('vehicleId', vehicleId);
 
     const res = await fetch(`${BASE_URL}/documents`, {
       method: 'POST',

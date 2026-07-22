@@ -58,17 +58,30 @@ export class DocumentsRepository implements IDocumentRepository {
     }
   }
 
+  // Documento PESSOAL do usuário (vehicleId = null) de um dado tipo.
   async findByUserIdAndType(userId: string, type: DocumentType): Promise<IDocumentPublic | null> {
     try {
-      // Como não existe unique composto (userId, type) no schema atual,
-      // usamos findFirst.
       return await prisma.document.findFirst({
-        where: { userId, type },
+        where: { userId, type, vehicleId: null },
         select: this.publicSelect,
         orderBy: { createdAt: 'desc' },
       });
     } catch (err) {
       logger.error('Erro ao buscar documento por usuário e tipo', err);
+      throw err;
+    }
+  }
+
+  // Documento de VEÍCULO de um dado tipo (unicidade por veículo+tipo).
+  async findByVehicleIdAndType(vehicleId: string, type: DocumentType): Promise<IDocumentPublic | null> {
+    try {
+      return await prisma.document.findFirst({
+        where: { vehicleId, type },
+        select: this.publicSelect,
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (err) {
+      logger.error('Erro ao buscar documento por veículo e tipo', err);
       throw err;
     }
   }
@@ -79,9 +92,10 @@ export class DocumentsRepository implements IDocumentRepository {
         data: {
           type: data.type,
           fileUrl: data.fileUrl,
-          fileKey: data.fileKey, // ← novo
+          fileKey: data.fileKey,
           status: data.status,
           userId: data.userId,
+          vehicleId: data.vehicleId ?? null,
           issuedAt: data.issuedAt ?? null,
           expiresAt: data.expiresAt ?? null,
         },
@@ -101,7 +115,7 @@ export class DocumentsRepository implements IDocumentRepository {
           ...(data.type !== undefined ? { type: data.type } : {}),
           ...(data.fileUrl !== undefined ? { fileUrl: data.fileUrl } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
-          ...(data.notes !== undefined ? { notes: data.notes } : {}), // ← persistir notas
+          ...(data.notes !== undefined ? { notes: data.notes } : {}),
         },
         select: this.publicSelect,
       });

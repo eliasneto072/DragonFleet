@@ -1,11 +1,12 @@
 // src/app/components/driver/vehicles-management.tsx
 //
 // FIXES:
-//  - Focus-loss bug: VehicleForm was defined INSIDE the component, so every
-//    keystroke re-created the component and React remounted the inputs (losing
-//    focus). It's now hoisted to module scope and receives form/onField as props.
-//  - Header used text-white on the (now light) background → illegible. Fixed.
-//  - Restyled to the light fintech shell (PageHeader, brand status colors).
+// - Focus-loss bug: VehicleForm was defined INSIDE the component, so every
+//   keystroke re-created the component and React remounted the inputs (losing
+//   focus). It's now hoisted to module scope and receives form/onField as props.
+// - Header used text-white on the (now light) background → illegible. Fixed.
+// - Restyled to the light fintech shell (PageHeader, brand status colors).
+// - Cada veículo mostra os documentos obrigatórios (enviar/reenviar/ver).
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,20 +22,23 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/app/components/ui/alert-dialog';
 import { PageHeader } from '@/app/components/ui/page-header';
-import { Car, Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle, WrenchIcon, XCircle } from 'lucide-react';
+import { Car, Plus, Pencil, Trash2, Loader2, AlertCircle, CheckCircle, WrenchIcon, XCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
+import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiVehicle, VehicleStatus } from '@/shared/types/api';
+import { VehicleDocuments } from './vehicle-documents';
 
 type FormState = { brand: string; model: string; plate: string; year: string };
 const EMPTY_FORM: FormState = { brand: '', model: '', plate: '', year: '' };
 
 const STATUS_STYLES: Record<VehicleStatus, { label: string; cls: string; icon: typeof CheckCircle }> = {
-  ACTIVE:      { label: 'Ativo',       cls: 'bg-brand-50 text-brand-700',          icon: CheckCircle },
-  INACTIVE:    { label: 'Inativo',     cls: 'bg-secondary text-muted-foreground',  icon: XCircle },
-  MAINTENANCE: { label: 'Manutenção',  cls: 'bg-warning/10 text-warning',          icon: WrenchIcon },
-  SOLD:        { label: 'Vendido',     cls: 'bg-destructive/10 text-destructive',  icon: XCircle },
+  ACTIVE: { label: 'Ativo', cls: 'bg-brand-50 text-brand-700', icon: CheckCircle },
+  PENDING: { label: 'Pendente', cls: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  INACTIVE: { label: 'Inativo', cls: 'bg-secondary text-muted-foreground', icon: XCircle },
+  MAINTENANCE: { label: 'Manutenção', cls: 'bg-warning/10 text-warning', icon: WrenchIcon },
+  SOLD: { label: 'Vendido', cls: 'bg-destructive/10 text-destructive', icon: XCircle },
 };
 
 function StatusBadge({ status }: { status: VehicleStatus }) {
@@ -113,6 +117,13 @@ export function VehiclesManagement() {
     queryFn: () => vehiclesService.list(),
   });
   const vehicles = data?.vehicles ?? [];
+
+  // Documentos (para os blocos de documentos de cada veículo).
+  const docsQuery = useQuery({
+    queryKey: queryKeys.documents.list,
+    queryFn: () => documentsService.list(),
+  });
+  const documents = docsQuery.data?.documents ?? [];
 
   const { mutate: createVehicle, isPending: isCreating } = useMutation({
     mutationFn: () => vehiclesService.create({
@@ -268,6 +279,9 @@ export function VehiclesManagement() {
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
+
+              {/* Documentos do veículo */}
+              <VehicleDocuments vehicleId={v.id} documents={documents} />
             </CardContent>
           </Card>
         ))}
