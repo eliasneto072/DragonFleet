@@ -1,5 +1,5 @@
 import { IDocumentPublic } from './documents.types';
-import { CreateDocumentData, UpdateDocumentData } from './documents.repository.types';
+import { CreateDocumentData, UpdateDocumentData, ReplaceDocumentData } from './documents.repository.types';
 import { DocumentType } from '../../shared/types/enums';
 
 export interface IDocumentRepository {
@@ -9,5 +9,6 @@ export interface IDocumentRepository {
   findByUserIdAndType(userId: string, type: DocumentType): Promise<IDocumentPublic | null>;
   create(data: CreateDocumentData): Promise<IDocumentPublic>;
   update(id: string, data: UpdateDocumentData): Promise<IDocumentPublic>;
+  replace(id: string, data: ReplaceDocumentData): Promise<IDocumentPublic>;
   delete(id: string): Promise<void>;
 }

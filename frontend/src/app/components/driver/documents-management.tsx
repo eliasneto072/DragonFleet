@@ -8,15 +8,18 @@ import { Badge } from '@/app/components/ui/badge';
 import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle, ExternalLink, Paperclip, X, CalendarClock } from 'lucide-react';
+import { FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle, ExternalLink, Paperclip, X, CalendarClock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
-import type { DocumentType, DocumentStatus } from '@/shared/types/api';
+import type { DocumentType, DocumentStatus, ApiDocument } from '@/shared/types/api';
 import { DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, requiresIssueDate, daysUntil } from '@/shared/lib/document-labels';
 
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_SIZE_MB = 10;
+
+// Estados em que o motorista pode reenviar (substituir) o documento.
+const REPLACEABLE: DocumentStatus[] = ['REJECTED', 'EXPIRED'];
 
 function getStatusBadge(status: DocumentStatus) {
   switch (status) {
@@ -69,6 +72,7 @@ export function DocumentsManagement() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
   const [issuedAt, setIssuedAt] = useState(''); // data de emissão (Registo Criminal)
+  const [isResubmit, setIsResubmit] = useState(false); // reenvio de documento rejeitado/expirado
 
   // ── Leitura ───────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
@@ -78,12 +82,18 @@ export function DocumentsManagement() {
 
   const documents = data?.documents ?? [];
 
-  // ── Criar documento ───────────────────────────────────────────────────────
+  // Tipos que o motorista já enviou e ainda estão válidos/em análise (não pode
+  // reenviar). Rejeitados/expirados NÃO entram aqui — esses podem ser reenviados.
+  const lockedTypes = new Set(
+    documents.filter((d) => !REPLACEABLE.includes(d.status)).map((d) => d.type),
+  );
+
+  // ── Criar / reenviar documento ────────────────────────────────────────────
   const { mutate: createDocument, isPending } = useMutation({
     mutationFn: () => documentsService.create(docType as DocumentType, file!, issuedAt || undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-      toast.success('Documento enviado! Aguardando aprovação.');
+      toast.success(isResubmit ? 'Documento reenviado! Aguardando nova análise.' : 'Documento enviado! Aguardando aprovação.');
       handleClose();
     },
     onError: (err: any) => {
@@ -97,7 +107,18 @@ export function DocumentsManagement() {
     setFile(null);
     setFileError('');
     setIssuedAt('');
+    setIsResubmit(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  // Abre o dialog já configurado para reenvio de um documento específico.
+  function openResubmit(doc: ApiDocument) {
+    setDocType(doc.type);
+    setIsResubmit(true);
+    setFile(null);
+    setFileError('');
+    setIssuedAt('');
+    setOpen(true);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -142,6 +163,9 @@ export function DocumentsManagement() {
     createDocument();
   }
 
+  // Tipos disponíveis no seletor de novo envio: os que ainda não estão bloqueados.
+  const availableTypes = DRIVER_DOCUMENT_TYPES.filter((key) => !lockedTypes.has(key));
+
   // ── Estados de carregamento / erro ────────────────────────────────────────
   if (isLoading) {
     return (
@@ -178,7 +202,7 @@ export function DocumentsManagement() {
 
         <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => { setIsResubmit(false); setDocType(''); }}>
               <Upload className="h-4 w-4 mr-2" />
               Enviar Documento
             </Button>
@@ -186,9 +210,11 @@ export function DocumentsManagement() {
 
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Enviar Novo Documento</DialogTitle>
+              <DialogTitle>{isResubmit ? 'Reenviar Documento' : 'Enviar Novo Documento'}</DialogTitle>
               <DialogDescription>
-                Selecione o tipo e anexe o arquivo (JPEG, PNG, WebP ou PDF — máx. {MAX_SIZE_MB} MB)
+                {isResubmit
+                  ? 'Substitua o documento anterior por uma nova versão. Voltará para análise.'
+                  : `Selecione o tipo e anexe o arquivo (JPEG, PNG, WebP ou PDF — máx. ${MAX_SIZE_MB} MB)`}
               </DialogDescription>
             </DialogHeader>
 
@@ -197,18 +223,29 @@ export function DocumentsManagement() {
               {/* Tipo do documento */}
               <div className="space-y-2">
                 <Label>Tipo de Documento</Label>
-                <Select value={docType} onValueChange={(v) => setDocType(v as DocumentType)}>
+                <Select
+                  value={docType}
+                  onValueChange={(v) => setDocType(v as DocumentType)}
+                  disabled={isResubmit}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DRIVER_DOCUMENT_TYPES.map((key) => (
+                    {/* Em reenvio, mostra apenas o tipo fixado. Em novo envio, os disponíveis. */}
+                    {(isResubmit ? [docType as DocumentType] : availableTypes).map((key) => (
                       <SelectItem key={key} value={key}>
                         {DOCUMENT_TYPE_LABELS[key]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {!isResubmit && availableTypes.length === 0 && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    Todos os tipos de documento já foram enviados.
+                  </p>
+                )}
               </div>
 
               {/* Data de emissão — só para o Registo Criminal (regra dos 90 dias) */}
@@ -296,7 +333,7 @@ export function DocumentsManagement() {
                 <Button type="submit" disabled={isPending || !file || !docType}>
                   {isPending
                     ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando…</>
-                    : <><Upload className="h-4 w-4 mr-2" />Enviar</>
+                    : <><Upload className="h-4 w-4 mr-2" />{isResubmit ? 'Reenviar' : 'Enviar'}</>
                   }
                 </Button>
               </div>
@@ -307,61 +344,82 @@ export function DocumentsManagement() {
 
       {/* Grid de documentos */}
       <div className="grid gap-4 md:grid-cols-2">
-        {documents.map((doc) => (
-          <Card key={doc.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                    <FileText className="h-5 w-5 text-blue-600" />
+        {documents.map((doc) => {
+          const canResubmit = REPLACEABLE.includes(doc.status);
+          return (
+            <Card key={doc.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">
+                        {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.type}
+                      </CardTitle>
+                      <CardDescription>
+                        {new Date(doc.createdAt).toLocaleDateString('pt-PT')}
+                      </CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base">
-                      {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.type}
-                    </CardTitle>
-                    <CardDescription>
-                      {new Date(doc.createdAt).toLocaleDateString('pt-PT')}
-                    </CardDescription>
-                  </div>
+                  {getStatusBadge(doc.status)}
                 </div>
-                {getStatusBadge(doc.status)}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Validade (Registo Criminal) */}
-              {doc.expiresAt && doc.status !== 'EXPIRED' && (() => {
-                const dias = daysUntil(doc.expiresAt);
-                const urgente = dias !== null && dias <= 7;
-                return (
-                  <p className={`text-xs mb-3 flex items-center gap-1 ${urgente ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>
-                    <CalendarClock className="h-3 w-3 shrink-0" />
-                    {dias !== null && dias >= 0
-                      ? `Válido até ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')} (${dias} dia${dias === 1 ? '' : 's'})`
-                      : `Expirou em ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')}`}
+              </CardHeader>
+              <CardContent>
+                {/* Validade (Registo Criminal) */}
+                {doc.expiresAt && doc.status !== 'EXPIRED' && (() => {
+                  const dias = daysUntil(doc.expiresAt);
+                  const urgente = dias !== null && dias <= 7;
+                  return (
+                    <p className={`text-xs mb-3 flex items-center gap-1 ${urgente ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>
+                      <CalendarClock className="h-3 w-3 shrink-0" />
+                      {dias !== null && dias >= 0
+                        ? `Válido até ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')} (${dias} dia${dias === 1 ? '' : 's'})`
+                        : `Expirou em ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')}`}
+                    </p>
+                  );
+                })()}
+                {doc.status === 'EXPIRED' && (
+                  <p className="text-xs mb-3 flex items-center gap-1 text-orange-600 font-medium">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    Documento expirado. Reenvie uma versão atualizada.
                   </p>
-                );
-              })()}
-              {doc.status === 'EXPIRED' && (
-                <p className="text-xs mb-3 flex items-center gap-1 text-orange-600 font-medium">
-                  <AlertCircle className="h-3 w-3 shrink-0" />
-                  Documento expirado. Envie um novo Registo Criminal atualizado.
-                </p>
-              )}
-              {doc.notes && doc.notes.replace('[avisado-7d]', '').trim() && (
-                <p className="text-sm text-muted-foreground mb-3">{doc.notes.replace('[avisado-7d]', '').trim()}</p>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => viewDocument(doc.id)}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Visualizar
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                )}
+                {doc.notes && doc.notes.replace('[avisado-7d]', '').trim() && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5 mb-3">
+                    <p className="font-medium text-xs mb-0.5 flex items-center gap-1">
+                      <XCircle className="h-3 w-3 shrink-0" />Motivo da rejeição
+                    </p>
+                    {doc.notes.replace('[avisado-7d]', '').trim()}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => viewDocument(doc.id)}
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Visualizar
+                  </Button>
+                  {canResubmit && (
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => openResubmit(doc)}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Reenviar
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Empty state */}
@@ -373,7 +431,7 @@ export function DocumentsManagement() {
             <p className="text-sm text-muted-foreground text-center mb-4">
               Envie seus documentos para começar a trabalhar na plataforma.
             </p>
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={() => { setIsResubmit(false); setDocType(''); setOpen(true); }}>
               <Upload className="h-4 w-4 mr-2" />
               Enviar Primeiro Documento
             </Button>

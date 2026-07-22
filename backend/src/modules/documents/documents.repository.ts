@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { IDocumentRepository } from './documents.repository.interfaces';
-import { CreateDocumentData, UpdateDocumentData } from './documents.repository.types';
+import { CreateDocumentData, UpdateDocumentData, ReplaceDocumentData } from './documents.repository.types';
 import { IDocumentPublic } from './documents.types';
 import { DocumentType } from '../../shared/types/enums';
 
@@ -107,6 +107,28 @@ export class DocumentsRepository implements IDocumentRepository {
       });
     } catch (err) {
       logger.error('Erro ao atualizar documento', err);
+      throw err;
+    }
+  }
+
+  // Substitui o ficheiro e reinicia o ciclo de validação (re-upload após
+  // rejeição/expiração): novo arquivo, nova validade, status PENDING, notas limpas.
+  async replace(id: string, data: ReplaceDocumentData): Promise<IDocumentPublic> {
+    try {
+      return await prisma.document.update({
+        where: { id },
+        data: {
+          fileUrl: data.fileUrl,
+          fileKey: data.fileKey,
+          status: data.status,
+          issuedAt: data.issuedAt ?? null,
+          expiresAt: data.expiresAt ?? null,
+          notes: data.notes ?? null,
+        },
+        select: this.publicSelect,
+      });
+    } catch (err) {
+      logger.error('Erro ao substituir documento', err);
       throw err;
     }
   }

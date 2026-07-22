@@ -16,3 +16,13 @@ export type UpdateDocumentData = {
   status?: DocumentStatus;
   notes?: string | null; // ← persistir o motivo de rejeição
 };
+
+// Substituição completa de um documento existente (re-upload após rejeição/expiração).
+export type ReplaceDocumentData = {
+  fileUrl: string;
+  fileKey: string;
+  status: DocumentStatus;
+  issuedAt?: Date | null;
+  expiresAt?: Date | null;
+  notes?: string | null;
+};

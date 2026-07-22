@@ -1,32 +1,35 @@
 // src/modules/documents/documents.service.ts
-import { AppError }           from '../../shared/errors/AppError';
+import { AppError } from '../../shared/errors/AppError';
 import { DocumentStatus, DocumentType, UserRole } from '../../shared/types/enums';
-import { usersRepository }    from '../users/users.repository';
+import { usersRepository } from '../users/users.repository';
 import { documentsRepository } from './documents.repository';
-import { CreateDocumentData, UpdateDocumentData } from './documents.repository.types';
+import { CreateDocumentData, UpdateDocumentData, ReplaceDocumentData } from './documents.repository.types';
 import { CreateDocumentInput, UpdateDocumentInput, UpdateDocumentStatusInput } from './documents.service.types';
-import { IDocumentPublic }    from './documents.types';
-import { emailService }       from '../../shared/services/email.service';
+import { IDocumentPublic } from './documents.types';
+import { emailService } from '../../shared/services/email.service';
 import { reevaluateVehicleStatus } from '../vehicles/activation.service';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   // Motorista
-  CARTAO_CIDADAO:             'Cartão de Cidadão',
-  REGISTO_CRIMINAL:           'Registo Criminal',
-  CARTA_CONDUCAO:             'Carta de Condução',
-  CERTIFICADO_TVDE:           'Certificado de Motorista TVDE',
-  FOTO_PERFIL:                'Fotografia de Perfil',
+  CARTAO_CIDADAO: 'Cartão de Cidadão',
+  REGISTO_CRIMINAL: 'Registo Criminal',
+  CARTA_CONDUCAO: 'Carta de Condução',
+  CERTIFICADO_TVDE: 'Certificado de Motorista TVDE',
+  FOTO_PERFIL: 'Fotografia de Perfil',
   // Veículo
-  DUA:                        'DUA — Documento Único Automóvel',
-  SEGURO_CARTA_VERDE:         'Seguro Automóvel (Carta Verde)',
+  DUA: 'DUA — Documento Único Automóvel',
+  SEGURO_CARTA_VERDE: 'Seguro Automóvel (Carta Verde)',
   SEGURO_CONDICOES_ESPECIAIS: 'Seguro Automóvel (Condições Especiais)',
-  INSPECAO_PERIODICA:         'Inspeção Técnica Periódica',
-  OTHER:                      'Outro',
+  INSPECAO_PERIODICA: 'Inspeção Técnica Periódica',
+  OTHER: 'Outro',
 };
+
+// Estados em que um documento pode ser reenviado (substituído) pelo motorista.
+const REPLACEABLE_STATUSES: DocumentStatus[] = [DocumentStatus.REJECTED, DocumentStatus.EXPIRED];
 
 type Actor = { id: string; role?: UserRole };
 
-function isAdmin(role?: UserRole)   { return role === UserRole.ADMIN; }
+function isAdmin(role?: UserRole) { return role === UserRole.ADMIN; }
 function isManager(role?: UserRole) { return role === UserRole.MANAGER; }
 function canManageDocuments(role?: UserRole) { return isAdmin(role) || isManager(role); }
 
@@ -48,6 +51,34 @@ export class DocumentsService {
     }
   }
 
+  // Calcula issuedAt/expiresAt conforme o tipo. O Registo Criminal exige data de
+  // emissão e expira 90 dias depois (prazo legal em Portugal). Os demais não têm
+  // expiração automática por agora.
+  private resolveValidity(type: DocumentType, issuedAtInput?: string): { issuedAt: Date | null; expiresAt: Date | null } {
+    let issuedAt: Date | null = null;
+    let expiresAt: Date | null = null;
+
+    if (type === DocumentType.REGISTO_CRIMINAL) {
+      if (!issuedAtInput) {
+        throw new AppError('A data de emissão é obrigatória para o Registo Criminal.', 400, 'ISSUE_DATE_REQUIRED');
+      }
+      issuedAt = new Date(issuedAtInput);
+      if (isNaN(issuedAt.getTime())) {
+        throw new AppError('Data de emissão inválida.', 400, 'INVALID_ISSUE_DATE');
+      }
+      if (issuedAt.getTime() > Date.now()) {
+        throw new AppError('A data de emissão não pode ser futura.', 400, 'ISSUE_DATE_IN_FUTURE');
+      }
+      expiresAt = new Date(issuedAt);
+      expiresAt.setDate(expiresAt.getDate() + 90);
+    } else if (issuedAtInput) {
+      const d = new Date(issuedAtInput);
+      if (!isNaN(d.getTime())) issuedAt = d;
+    }
+
+    return { issuedAt, expiresAt };
+  }
+
   async list(actor: Actor): Promise<IDocumentPublic[]> {
     if (canManageDocuments(actor.role)) return documentsRepository.findAll();
     return documentsRepository.findByUserId(actor.id);
@@ -62,47 +93,53 @@ export class DocumentsService {
   async create(actor: Actor, input: CreateDocumentInput): Promise<IDocumentPublic> {
     await this.ensureUserExists(actor.id);
 
+    const { issuedAt, expiresAt } = this.resolveValidity(input.type, input.issuedAt);
+
     const existing = await documentsRepository.findByUserIdAndType(actor.id, input.type);
+
     if (existing) {
-      throw new AppError('Document type already exists for this user', 409, 'DOCUMENT_TYPE_ALREADY_EXISTS');
+      // Se o documento anterior já foi aprovado ou ainda está em análise, não
+      // faz sentido reenviar — bloqueamos com mensagem clara.
+      if (!REPLACEABLE_STATUSES.includes(existing.status)) {
+        const label = DOC_TYPE_LABELS[input.type] ?? input.type;
+        const motivo =
+          existing.status === DocumentStatus.APPROVED
+            ? `O documento "${label}" já está aprovado.`
+            : `O documento "${label}" já foi enviado e aguarda análise.`;
+        throw new AppError(motivo, 409, 'DOCUMENT_TYPE_ALREADY_EXISTS');
+      }
+
+      // Documento rejeitado ou expirado → substitui o ficheiro e reinicia o ciclo.
+      const replaceData: ReplaceDocumentData = {
+        fileUrl: input.fileUrl,
+        fileKey: input.fileKey,
+        status: DocumentStatus.PENDING,
+        issuedAt,
+        expiresAt,
+        notes: null, // limpa o motivo de rejeição anterior
+      };
+
+      const replaced = await documentsRepository.replace(existing.id, replaceData);
+
+      // Se for documento de veículo, reavaliar ativação (voltou a PENDING).
+      if (replaced.vehicleId) {
+        try {
+          await reevaluateVehicleStatus(replaced.vehicleId);
+        } catch (actErr) {
+          console.error('[activation] Falha ao reavaliar status do veículo:', actErr);
+        }
+      }
+
+      return replaced;
     }
 
-    // Regra dos 90 dias: o Registo Criminal exige data de emissão e expira 90
-    // dias depois dessa data (prazo legal em Portugal). Os outros documentos não
-    // têm expiração automática por agora.
-    let issuedAt: Date | null = null;
-    let expiresAt: Date | null = null;
-
-    if (input.type === DocumentType.REGISTO_CRIMINAL) {
-      if (!input.issuedAt) {
-        throw new AppError(
-          'A data de emissão é obrigatória para o Registo Criminal.',
-          400,
-          'ISSUE_DATE_REQUIRED',
-        );
-      }
-      issuedAt = new Date(input.issuedAt);
-      if (isNaN(issuedAt.getTime())) {
-        throw new AppError('Data de emissão inválida.', 400, 'INVALID_ISSUE_DATE');
-      }
-      // Não aceitar data futura
-      if (issuedAt.getTime() > Date.now()) {
-        throw new AppError('A data de emissão não pode ser futura.', 400, 'ISSUE_DATE_IN_FUTURE');
-      }
-      expiresAt = new Date(issuedAt);
-      expiresAt.setDate(expiresAt.getDate() + 90);
-    } else if (input.issuedAt) {
-      // Se vier data de emissão para outros tipos, guardamos (sem expiração).
-      const d = new Date(input.issuedAt);
-      if (!isNaN(d.getTime())) issuedAt = d;
-    }
-
+    // Não existe documento deste tipo → cria normalmente.
     const data: CreateDocumentData = {
-      type:    input.type,
+      type: input.type,
       fileUrl: input.fileUrl,
       fileKey: input.fileKey,
-      status:  DocumentStatus.PENDING,
-      userId:  actor.id,
+      status: DocumentStatus.PENDING,
+      userId: actor.id,
       issuedAt,
       expiresAt,
     };
@@ -126,7 +163,7 @@ export class DocumentsService {
     }
 
     const data: UpdateDocumentData = {
-      ...(input.type    !== undefined ? { type:    input.type    } : {}),
+      ...(input.type !== undefined ? { type: input.type } : {}),
       ...(input.fileUrl !== undefined ? { fileUrl: input.fileUrl } : {}),
     };
 
@@ -158,7 +195,7 @@ export class DocumentsService {
 
     // ── Disparar email ao driver ──────────────────────────────────────────
     try {
-      const user    = await usersRepository.findById(doc.userId);
+      const user = await usersRepository.findById(doc.userId);
       const docLabel = DOC_TYPE_LABELS[doc.type] ?? doc.type;
 
       if (user?.email) {
