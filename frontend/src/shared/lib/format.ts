@@ -10,7 +10,7 @@
 // locale/currency in ONE place here if the client ever switches markets.
 
 const CURRENCY_LOCALE = 'pt-PT';
-const CURRENCY_CODE = 'EUR'; // €  — Portugal
+const CURRENCY_CODE = 'EUR'; // € — Portugal
 
 const currencyFmt = new Intl.NumberFormat(CURRENCY_LOCALE, {
   style: 'currency',
@@ -28,14 +28,14 @@ const compactCurrencyFmt = new Intl.NumberFormat(CURRENCY_LOCALE, {
 
 const numberFmt = new Intl.NumberFormat(CURRENCY_LOCALE);
 
-/** "R$ 2.847,50" — use for all money shown to users. */
+/** "2.847,50 €" — use for all money shown to users. */
 export function formatCurrency(value: number | string): string {
   const n = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(n)) return currencyFmt.format(0);
   return currencyFmt.format(n);
 }
 
-/** "R$ 2,8 mil" — use for chart axes / tight spaces. */
+/** "2,8 mil €" — use for chart axes / tight spaces. */
 export function formatCurrencyCompact(value: number | string): string {
   const n = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(n)) return compactCurrencyFmt.format(0);
@@ -56,10 +56,10 @@ export function formatPercent(value: number, decimals = 1): string {
   return `${sign}${value.toFixed(decimals).replace('.', ',')}%`;
 }
 
-/** "20 mar 2026" — short localized date. */
+/** "20 mar 2026" — short localized date (pt-PT). */
 export function formatDate(value: string | Date): string {
   const d = typeof value === 'string' ? new Date(value) : value;
-  return d.toLocaleDateString('pt-BR', {
+  return d.toLocaleDateString('pt-PT', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
