@@ -3,7 +3,8 @@
 // Página de detalhe do motorista (admin):
 // - Dados e status do motorista, com ações de ativar/desativar/bloquear
 // - Saldo: resumo + adicionar/retirar dinheiro (CREDIT/DEBIT) + extrato auditado
-// - Documentos separados em Pessoais e De veículo (agrupados por veículo)
+// - Documentos separados em Pessoais e De veículo (agrupados por veículo),
+//   cada seção com barra de progresso enviados/exigidos
 
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -18,7 +19,7 @@ import {
 } from '@/app/components/ui/dialog';
 import {
   ArrowLeft, Loader2, AlertCircle, UserCheck, UserX, Ban, Mail, Wallet,
-  Plus, Minus, TrendingUp, Clock, ArrowDownCircle, FileText,
+  Plus, Minus, TrendingUp, Clock, ArrowDownCircle,
   CheckCircle, XCircle, Eye, CalendarClock, History, User, Car,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,7 +30,10 @@ import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
-import { DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil } from '@/shared/lib/document-labels';
+import {
+  DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil,
+  DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES,
+} from '@/shared/lib/document-labels';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +60,29 @@ function docStatusBadge(status: DocumentStatus) {
     case 'EXPIRED': return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><CalendarClock className="h-3 w-3 mr-1" />Expirado</Badge>;
     default: return null;
   }
+}
+
+// Barra de progresso de documentos enviados vs. exigidos.
+function DocProgress({ sent, required }: { sent: number; required: number }) {
+  const pct = required > 0 ? Math.round((sent / required) * 100) : 0;
+  const complete = sent >= required;
+  const missing = Math.max(required - sent, 0);
+  return (
+    <div className="flex items-center gap-3 min-w-[180px]">
+      <div className="flex-1">
+        <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${complete ? 'bg-green-500' : 'bg-primary'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+      <span className={`text-xs font-medium whitespace-nowrap ${complete ? 'text-green-600' : 'text-muted-foreground'}`}>
+        {sent}/{required} enviados
+        {missing > 0 && <span className="text-amber-600"> · faltam {missing}</span>}
+      </span>
+    </div>
+  );
 }
 
 function viewDocument(id: string) {
@@ -98,12 +125,13 @@ export function DriverDetailPage() {
     [allDocs, id],
   );
 
-  // Veículos do motorista + os respetivos documentos, agrupados.
+  // Veículos do motorista.
   const driverVehicles = useMemo(
     () => vehicles.filter((v) => v.userId === id),
     [vehicles, id],
   );
 
+  // Documentos de veículo agrupados por veículo.
   const vehicleDocsById = useMemo(() => {
     const map: Record<string, ApiDocument[]> = {};
     for (const d of allDocs) {
@@ -113,6 +141,21 @@ export function DriverDetailPage() {
     }
     return map;
   }, [allDocs]);
+
+  // Progresso dos documentos pessoais (tipos distintos enviados vs. exigidos).
+  const personalProgress = useMemo(() => {
+    const sentTypes = new Set(personalDocs.map((d) => d.type));
+    const sent = DRIVER_DOCUMENT_TYPES.filter((t) => sentTypes.has(t)).length;
+    return { sent, required: DRIVER_DOCUMENT_TYPES.length };
+  }, [personalDocs]);
+
+  // Progresso dos documentos de um veículo específico.
+  function vehicleProgress(vId: string) {
+    const docs = vehicleDocsById[vId] ?? [];
+    const sentTypes = new Set(docs.map((d) => d.type));
+    const sent = VEHICLE_DOCUMENT_TYPES.filter((t) => sentTypes.has(t)).length;
+    return { sent, required: VEHICLE_DOCUMENT_TYPES.length };
+  }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
@@ -390,8 +433,13 @@ export function DriverDetailPage() {
       {/* Documentos pessoais */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" />Documentos pessoais</CardTitle>
-          <CardDescription>{personalDocs.length} documento(s) do motorista</CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" />Documentos pessoais</CardTitle>
+              <CardDescription>{personalDocs.length} documento(s) do motorista</CardDescription>
+            </div>
+            <DocProgress sent={personalProgress.sent} required={personalProgress.required} />
+          </div>
         </CardHeader>
         <CardContent>
           {docsQ.isLoading ? (
@@ -429,12 +477,16 @@ export function DriverDetailPage() {
             <div className="space-y-5">
               {driverVehicles.map((v) => {
                 const vDocs = vehicleDocsById[v.id] ?? [];
+                const p = vehicleProgress(v.id);
                 return (
                   <div key={v.id}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Car className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <p className="font-medium text-sm">{v.brand} {v.model}</p>
-                      <span className="text-xs text-muted-foreground font-mono">{v.plate}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <p className="font-medium text-sm">{v.brand} {v.model}</p>
+                        <span className="text-xs text-muted-foreground font-mono">{v.plate}</span>
+                      </div>
+                      <DocProgress sent={p.sent} required={p.required} />
                     </div>
                     {vDocs.length === 0 ? (
                       <p className="text-xs text-muted-foreground pl-6 py-2">Nenhum documento enviado para este veículo.</p>
