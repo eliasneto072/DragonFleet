@@ -3,9 +3,9 @@
 // Página de detalhe do motorista (admin):
 // - Dados e status do motorista, com ações de ativar/desativar/bloquear
 // - Saldo: resumo + adicionar/retirar dinheiro (CREDIT/DEBIT) + extrato auditado
-// - Documentos do motorista, com Ver e aprovar/rejeitar (rejeição com motivo em dialog)
+// - Documentos separados em Pessoais e De veículo (agrupados por veículo)
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -19,12 +19,13 @@ import {
 import {
   ArrowLeft, Loader2, AlertCircle, UserCheck, UserX, Ban, Mail, Wallet,
   Plus, Minus, TrendingUp, Clock, ArrowDownCircle, FileText,
-  CheckCircle, XCircle, Eye, CalendarClock, History,
+  CheckCircle, XCircle, Eye, CalendarClock, History, User, Car,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usersService } from '@/features/admin/services/users.service';
 import { balanceService, type AdjustmentType } from '@/features/admin/services/balance.service';
 import { documentsService } from '@/features/driver/services/documents.service';
+import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
@@ -83,11 +84,35 @@ export function DriverDetailPage() {
   const balanceQ = useQuery({ queryKey: queryKeys.balance.summary(id), queryFn: () => balanceService.getSummary(id) });
   const adjustmentsQ = useQuery({ queryKey: queryKeys.balance.adjustments(id), queryFn: () => balanceService.listAdjustments(id) });
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
+  const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
 
   const user = userQ.data?.user;
   const balance = balanceQ.data?.balance;
   const adjustments = adjustmentsQ.data?.adjustments ?? [];
-  const driverDocs = (docsQ.data?.documents ?? []).filter((d) => d.userId === id && !d.vehicleId);
+  const allDocs = docsQ.data?.documents ?? [];
+  const vehicles = vehiclesQ.data?.vehicles ?? [];
+
+  // Documentos deste motorista, separados por tipo (pessoal vs veículo).
+  const personalDocs = useMemo(
+    () => allDocs.filter((d) => d.userId === id && !d.vehicleId),
+    [allDocs, id],
+  );
+
+  // Veículos do motorista + os respetivos documentos, agrupados.
+  const driverVehicles = useMemo(
+    () => vehicles.filter((v) => v.userId === id),
+    [vehicles, id],
+  );
+
+  const vehicleDocsById = useMemo(() => {
+    const map: Record<string, ApiDocument[]> = {};
+    for (const d of allDocs) {
+      if (d.vehicleId) {
+        (map[d.vehicleId] ??= []).push(d);
+      }
+    }
+    return map;
+  }, [allDocs]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
@@ -122,6 +147,7 @@ export function DriverDetailPage() {
       documentsService.updateStatus(docId, { status, notes }),
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
       toast.success(status === 'APPROVED' ? 'Documento aprovado.' : 'Documento rejeitado.');
       setRejectDoc(null);
       setRejectReason('');
@@ -148,11 +174,8 @@ export function DriverDetailPage() {
 
   function handleRejectConfirm() {
     if (!rejectDoc) return;
-    if (!rejectReason.trim()) {
-      toast.error('Escreva o motivo da rejeição — ele será enviado ao motorista.');
-      return;
-    }
-    updateDocStatus({ docId: rejectDoc.id, status: 'REJECTED', notes: rejectReason.trim() });
+    // Motivo opcional
+    updateDocStatus({ docId: rejectDoc.id, status: 'REJECTED', notes: rejectReason.trim() || undefined });
   }
 
   // ── Loading / erro ───────────────────────────────────────────────────────────
@@ -172,6 +195,49 @@ export function DriverDetailPage() {
         <Button variant="outline" onClick={() => navigate('/app/admin/drivers')}>
           <ArrowLeft className="h-4 w-4 mr-2" />Voltar aos motoristas
         </Button>
+      </div>
+    );
+  }
+
+  // Linha de documento reutilizável (pessoal ou de veículo)
+  function DocRow({ doc }: { doc: ApiDocument }) {
+    const dias = doc.expiresAt ? daysUntil(doc.expiresAt) : null;
+    const urgente = dias !== null && dias >= 0 && dias <= 7;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 border rounded-lg p-3">
+        <div className="min-w-0">
+          <p className="font-medium">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</p>
+          <p className="text-xs text-muted-foreground">
+            Enviado {formatDate(doc.createdAt)}
+            {doc.expiresAt && (
+              <span className={urgente ? 'text-orange-600 font-medium' : ''}>
+                {' · '}Válido até {new Date(doc.expiresAt).toLocaleDateString('pt-PT')}
+                {dias !== null && dias >= 0 ? ` (${dias}d)` : ''}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {docStatusBadge(doc.status)}
+          <Button size="sm" variant="ghost" onClick={() => viewDocument(doc.id)} title="Ver ficheiro">
+            <Eye className="h-4 w-4" />
+          </Button>
+          {doc.status !== 'APPROVED' && (
+            <Button size="sm" disabled={updatingDoc} onClick={() => updateDocStatus({ docId: doc.id, status: 'APPROVED' })}>
+              <CheckCircle className="h-3.5 w-3.5 mr-1" />Aprovar
+            </Button>
+          )}
+          {doc.status !== 'REJECTED' && (
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={updatingDoc}
+              onClick={() => { setRejectDoc(doc); setRejectReason(''); }}
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1" />Rejeitar
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -321,59 +387,62 @@ export function DriverDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Documentos do motorista */}
+      {/* Documentos pessoais */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Documentos</CardTitle>
-          <CardDescription>{driverDocs.length} documento(s) pessoal(is)</CardDescription>
+          <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" />Documentos pessoais</CardTitle>
+          <CardDescription>{personalDocs.length} documento(s) do motorista</CardDescription>
         </CardHeader>
         <CardContent>
           {docsQ.isLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />Carregando documentos…
             </div>
-          ) : driverDocs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento enviado.</p>
+          ) : personalDocs.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento pessoal enviado.</p>
           ) : (
             <div className="space-y-2">
-              {driverDocs.map((doc: ApiDocument) => {
-                const dias = doc.expiresAt ? daysUntil(doc.expiresAt) : null;
-                const urgente = dias !== null && dias >= 0 && dias <= 7;
+              {personalDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Documentos de veículo — agrupados por veículo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Car className="h-5 w-5 text-primary" />Documentos de veículo</CardTitle>
+          <CardDescription>
+            {driverVehicles.length === 0
+              ? 'Nenhum veículo registado'
+              : `${driverVehicles.length} veículo(s)`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {docsQ.isLoading || vehiclesQ.isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />Carregando…
+            </div>
+          ) : driverVehicles.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Este motorista não tem veículos registados.</p>
+          ) : (
+            <div className="space-y-5">
+              {driverVehicles.map((v) => {
+                const vDocs = vehicleDocsById[v.id] ?? [];
                 return (
-                  <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 border rounded-lg p-3">
-                    <div className="min-w-0">
-                      <p className="font-medium">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Enviado {formatDate(doc.createdAt)}
-                        {doc.expiresAt && (
-                          <span className={urgente ? 'text-orange-600 font-medium' : ''}>
-                            {' · '}Válido até {new Date(doc.expiresAt).toLocaleDateString('pt-PT')}
-                            {dias !== null && dias >= 0 ? ` (${dias}d)` : ''}
-                          </span>
-                        )}
-                      </p>
+                  <div key={v.id}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <p className="font-medium text-sm">{v.brand} {v.model}</p>
+                      <span className="text-xs text-muted-foreground font-mono">{v.plate}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {docStatusBadge(doc.status)}
-                      <Button size="sm" variant="ghost" onClick={() => viewDocument(doc.id)} title="Ver ficheiro">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {doc.status !== 'APPROVED' && (
-                        <Button size="sm" disabled={updatingDoc} onClick={() => updateDocStatus({ docId: doc.id, status: 'APPROVED' })}>
-                          <CheckCircle className="h-3.5 w-3.5 mr-1" />Aprovar
-                        </Button>
-                      )}
-                      {doc.status !== 'REJECTED' && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={updatingDoc}
-                          onClick={() => { setRejectDoc(doc); setRejectReason(''); }}
-                        >
-                          <XCircle className="h-3.5 w-3.5 mr-1" />Rejeitar
-                        </Button>
-                      )}
-                    </div>
+                    {vDocs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground pl-6 py-2">Nenhum documento enviado para este veículo.</p>
+                    ) : (
+                      <div className="space-y-2 pl-6">
+                        {vDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -455,7 +524,7 @@ export function DriverDetailPage() {
               {rejectDoc && (
                 <>
                   <strong>{DOC_TYPE_LABELS[rejectDoc.type] ?? rejectDoc.type}</strong> de{' '}
-                  <strong>{user.name}</strong>. O motivo será enviado por email ao motorista.
+                  <strong>{user.name}</strong>. Se indicar um motivo, ele é enviado por email ao motorista.
                 </>
               )}
             </DialogDescription>
@@ -466,20 +535,16 @@ export function DriverDetailPage() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={4}
-              placeholder="Ex: Documento ilegível — reenvie uma foto nítida da frente e do verso."
+              placeholder="Motivo (opcional) — ex: documento ilegível, reenvie uma foto nítida da frente e do verso."
               className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none resize-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <AlertCircle className="h-3 w-3 shrink-0" />
-              Seja específico: o motorista verá exatamente este texto.
-            </p>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setRejectDoc(null); setRejectReason(''); }} disabled={updatingDoc}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleRejectConfirm} disabled={updatingDoc || !rejectReason.trim()}>
+            <Button variant="destructive" onClick={handleRejectConfirm} disabled={updatingDoc}>
               {updatingDoc ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rejeitando…</> : <><XCircle className="h-4 w-4 mr-2" />Rejeitar documento</>}
             </Button>
           </DialogFooter>
