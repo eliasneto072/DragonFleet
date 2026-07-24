@@ -1,15 +1,19 @@
 // src/features/auth/pages/LoginPage.tsx
 //
-// Redesign visual (split-screen fintech). Toda a lógica de autenticação é
-// idêntica à anterior — só mudou a apresentação.
+// Redesign visual (split-screen fintech).
 //
-// NOTA: esta tela é sempre clara por design (painel verde + form branco).
-// Os inputs fixam text-gray-900 + bg-white explicitamente para não herdarem
-// a cor de texto clara quando o tema do sistema/app está em dark mode
-// (senão ficava texto branco sobre fundo branco = invisível ao digitar).
+// CORREÇÃO DO "FLASH": o AuthContext seta loading=true durante o login. Antes
+// o `if (loading) return null` fazia a TELA INTEIRA sumir e voltar a cada
+// tentativa — por isso o erro "piscava". Agora só escondemos a tela no boot
+// inicial (verificação do token); durante o login a tela permanece visível e
+// o feedback vem do estado local `submitting` (botão "A entrar…").
+//
+// Esta tela é sempre clara por design; inputs fixam bg-white + text-gray-900
+// para não herdarem cor clara no dark mode.
 
-import { useState, type FormEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { ApiError } from '@/shared/lib/api-client';
 import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
@@ -23,42 +27,84 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [errorKey, setErrorKey] = useState(0);
 
-  if (loading) return null;
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Uma vez que o boot inicial termina (loading=false pela primeira vez),
+  // marcamos que a app já "acordou". A partir daí, o loading global do login
+  // NÃO deve mais esconder esta tela.
+  const bootedRef = useRef(false);
+  useEffect(() => {
+    if (!loading) bootedRef.current = true;
+  }, [loading]);
+
+  // Só escondemos a tela na verificação inicial do token (antes de acordar).
+  if (loading && !bootedRef.current) return null;
 
   if (isAuthenticated && user) {
     const dest = user.role === 'DRIVER' ? '/app/driver' : '/app/admin';
     return <Navigate to={dest} replace />;
   }
 
+  function showError(message: string) {
+    setError(message);
+    setErrorKey((k) => k + 1);
+    setTimeout(() => passwordRef.current?.focus(), 50);
+  }
+
+  function clearErrorOnEdit() {
+    if (error) setError(null);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
     setSubmitting(true);
 
     try {
       await login(email, password);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError('E-mail ou senha inválidos.');
+        showError('E-mail ou senha inválidos.');
       } else if (err instanceof ApiError && err.status === 403) {
-        setError('A sua conta está inativa ou bloqueada. Contacte o suporte.');
+        showError('A sua conta está inativa ou bloqueada. Contacte o suporte.');
       } else {
-        setError('Não foi possível conectar ao servidor. Tente novamente.');
+        showError('Não foi possível conectar ao servidor. Tente novamente.');
       }
       setSubmitting(false);
     }
   }
 
+  const inputBase =
+    'w-full rounded-lg border bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 text-sm outline-none transition';
+  const inputNormal = 'border-gray-300 focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20';
+  const inputError = 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20';
+
   return (
     <div className="min-h-screen flex bg-white">
+      {/* Animações locais (não dependem do tailwind.config) */}
+      <style>{`
+        @keyframes df-shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+        @keyframes df-slide-in {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .df-error-enter {
+          animation: df-slide-in 0.2s ease-out, df-shake 0.4s ease-in-out 0.15s;
+        }
+      `}</style>
 
       {/* ── Painel de marca (esquerda, escondido no mobile) ── */}
       <div
         className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #108865 55%, #0a5440 100%)' }}
       >
-        {/* Formas decorativas */}
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#fff' }} />
         <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full opacity-10" style={{ background: '#fff' }} />
 
@@ -91,7 +137,6 @@ export function LoginPage() {
       <div className="flex-1 flex items-center justify-center px-4 py-12 bg-white">
         <div className="w-full max-w-sm space-y-8">
 
-          {/* Logo (aparece com destaque no mobile, discreto no desktop) */}
           <div className="flex flex-col items-center gap-3 lg:items-start">
             <div className="lg:hidden">
               <DragonFleetLogo size={56} />
@@ -102,14 +147,18 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Erro */}
+          {/* Erro — estável, com ícone e animação de entrada + shake */}
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-center">
-              {error}
-            </p>
+            <div
+              key={errorKey}
+              role="alert"
+              className="df-error-enter flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
           )}
 
-          {/* Formulário */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700" htmlFor="email">E-mail</label>
@@ -119,8 +168,8 @@ export function LoginPage() {
                 required
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                onChange={(e) => { setEmail(e.target.value); clearErrorOnEdit(); }}
+                className={`${inputBase} ${error ? inputError : inputNormal}`}
                 placeholder="seu@email.com"
               />
             </div>
@@ -129,13 +178,14 @@ export function LoginPage() {
               <label className="text-sm font-medium text-gray-700" htmlFor="password">Senha</label>
               <div className="relative">
                 <input
+                  ref={passwordRef}
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 pr-12 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                  onChange={(e) => { setPassword(e.target.value); clearErrorOnEdit(); }}
+                  className={`${inputBase} pr-12 ${error ? inputError : inputNormal}`}
                   placeholder="••••••••"
                 />
                 <button
@@ -158,7 +208,6 @@ export function LoginPage() {
             </button>
           </form>
 
-          {/* Link para cadastro */}
           <p className="text-center text-sm text-gray-500">
             Não tem uma conta?{' '}
             <a href="/register" className="text-[#108865] font-semibold hover:underline">
