@@ -2,6 +2,11 @@
 //
 // Redesign visual (split-screen fintech). Toda a lógica de autenticação é
 // idêntica à anterior — só mudou a apresentação.
+//
+// NOTA: esta tela é sempre clara por design (painel verde + form branco).
+// Os inputs fixam text-gray-900 + bg-white explicitamente para não herdarem
+// a cor de texto clara quando o tema do sistema/app está em dark mode
+// (senão ficava texto branco sobre fundo branco = invisível ao digitar).
 
 import { useState, type FormEvent } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
@@ -13,10 +18,10 @@ export function LoginPage() {
   const { login, isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail]           = useState('');
-  const [password, setPassword]     = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return null;
@@ -83,7 +88,7 @@ export function LoginPage() {
       </div>
 
       {/* ── Formulário (direita) ── */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="flex-1 flex items-center justify-center px-4 py-12 bg-white">
         <div className="w-full max-w-sm space-y-8">
 
           {/* Logo (aparece com destaque no mobile, discreto no desktop) */}
@@ -115,7 +120,7 @@ export function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
                 placeholder="seu@email.com"
               />
             </div>
@@ -130,7 +135,7 @@ export function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-12 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                  className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 pr-12 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
                   placeholder="••••••••"
                 />
                 <button
