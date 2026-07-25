@@ -1,10 +1,16 @@
 // src/features/auth/pages/RegisterPage.tsx
 //
-// Redesign visual (split-screen fintech, a condizer com o login). Toda a lógica
-// de cadastro é idêntica à anterior — só mudou a apresentação. Sem o dragão.
+// Redesign visual (split-screen fintech, a condizer com o login).
+//
+// Mesmas correções aplicadas ao login:
+// - Inputs fixam bg-white + text-gray-900 (senão texto invisível no dark mode).
+// - if (loading) só esconde a tela no boot inicial, não durante o cadastro
+//   (o login() no fim seta loading e fazia a tela sumir / o erro piscar).
+// - Erro estável, com ícone + animação (slide + shake), limpo só ao digitar.
 
-import { useState, type FormEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { usersService } from '@/features/admin/services/users.service';
 import { ApiError } from '@/shared/lib/api-client';
@@ -14,29 +20,45 @@ export function RegisterPage() {
   const { isAuthenticated, user, loading, login } = useAuth();
   const navigate = useNavigate();
 
-  const [name, setName]               = useState('');
-  const [email, setEmail]             = useState('');
-  const [password, setPassword]       = useState('');
-  const [confirm, setConfirm]         = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]             = useState<string | null>(null);
-  const [submitting, setSubmitting]   = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorKey, setErrorKey] = useState(0);
 
-  if (loading) return null;
+  // Só esconde a tela no boot inicial (verificação do token), não durante o cadastro.
+  const bootedRef = useRef(false);
+  useEffect(() => {
+    if (!loading) bootedRef.current = true;
+  }, [loading]);
+
+  if (loading && !bootedRef.current) return null;
+
   if (isAuthenticated && user) {
     return <Navigate to={user.role === 'DRIVER' ? '/app/driver' : '/app/admin'} replace />;
   }
 
+  function showError(message: string) {
+    setError(message);
+    setErrorKey((k) => k + 1);
+  }
+
+  function clearErrorOnEdit() {
+    if (error) setError(null);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
 
     if (password !== confirm) {
-      setError('As senhas não coincidem.');
+      showError('As senhas não coincidem.');
       return;
     }
     if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.');
+      showError('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -47,18 +69,39 @@ export function RegisterPage() {
       await login(email, password);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setError('Este e-mail já está registado.');
+        showError('Este e-mail já está registado.');
       } else if (err instanceof ApiError) {
-        setError(err.message);
+        showError(err.message);
       } else {
-        setError('Não foi possível criar a conta. Tente novamente.');
+        showError('Não foi possível criar a conta. Tente novamente.');
       }
       setSubmitting(false);
     }
   }
 
+  const inputBase =
+    'w-full rounded-lg border bg-white text-gray-900 placeholder:text-gray-400 px-4 py-2.5 text-sm outline-none transition';
+  const inputNormal = 'border-gray-300 focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20';
+
   return (
     <div className="min-h-screen flex bg-white">
+      {/* Animações locais (não dependem do tailwind.config) */}
+      <style>{`
+        @keyframes df-shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+        @keyframes df-slide-in {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .df-error-enter {
+          animation: df-slide-in 0.2s ease-out, df-shake 0.4s ease-in-out 0.15s;
+        }
+      `}</style>
 
       {/* ── Painel de marca (esquerda, escondido no mobile) ── */}
       <div
@@ -94,7 +137,7 @@ export function RegisterPage() {
       </div>
 
       {/* ── Formulário (direita) ── */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="flex-1 flex items-center justify-center px-4 py-12 bg-white">
         <div className="w-full max-w-sm space-y-8">
 
           {/* Logo (destaque no mobile) */}
@@ -108,11 +151,16 @@ export function RegisterPage() {
             </div>
           </div>
 
-          {/* Erro */}
+          {/* Erro — estável, com ícone e animação de entrada + shake */}
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-center">
-              {error}
-            </p>
+            <div
+              key={errorKey}
+              role="alert"
+              className="df-error-enter flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
           )}
 
           {/* Formulário */}
@@ -126,8 +174,8 @@ export function RegisterPage() {
                 autoComplete="name"
                 minLength={2}
                 value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                onChange={e => { setName(e.target.value); clearErrorOnEdit(); }}
+                className={`${inputBase} ${inputNormal}`}
                 placeholder="João Silva"
               />
             </div>
@@ -140,8 +188,8 @@ export function RegisterPage() {
                 required
                 autoComplete="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                onChange={e => { setEmail(e.target.value); clearErrorOnEdit(); }}
+                className={`${inputBase} ${inputNormal}`}
                 placeholder="seu@email.com"
               />
             </div>
@@ -156,8 +204,8 @@ export function RegisterPage() {
                   autoComplete="new-password"
                   minLength={6}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-12 text-sm outline-none focus:border-[#108865] focus:ring-2 focus:ring-[#108865]/20 transition"
+                  onChange={e => { setPassword(e.target.value); clearErrorOnEdit(); }}
+                  className={`${inputBase} pr-12 ${inputNormal}`}
                   placeholder="Mínimo 6 caracteres"
                 />
                 <button
@@ -179,11 +227,11 @@ export function RegisterPage() {
                 required
                 autoComplete="new-password"
                 value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                className={`w-full rounded-lg border px-4 py-2.5 text-sm outline-none transition focus:ring-2 ${
+                onChange={e => { setConfirm(e.target.value); clearErrorOnEdit(); }}
+                className={`${inputBase} ${
                   confirm && confirm !== password
-                    ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20'
-                    : 'border-gray-300 focus:border-[#108865] focus:ring-[#108865]/20'
+                    ? 'border-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-400/20'
+                    : inputNormal
                 }`}
                 placeholder="Repita a senha"
               />
