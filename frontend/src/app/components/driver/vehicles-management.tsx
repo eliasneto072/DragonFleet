@@ -4,6 +4,16 @@
 // - Cada card exibe a ilustração SVG do carro (cor por status)
 // - Hover: card levanta, carro desliza e rodas giram (classe "group")
 // - Documentos obrigatórios por veículo (enviar/reenviar/ver)
+//
+// MODO ESCURO: os badges de status usavam bg-brand-50 com text-brand-700 e
+// bg-yellow-100 com text-yellow-700. No escuro a rampa da marca inverte e os
+// dois tons ficam escuros — o badge "Ativo" desaparecia contra o cartão. As
+// escalas do Tailwind, por sua vez, não invertem de todo, dando fundo claro
+// com texto escuro sobre um cartão escuro. Cada estado passa a ter variante
+// dark: explícita.
+//
+// A cor de cada estado acompanha agora a da ilustração do carro: manutenção
+// era âmbar no badge e azul no desenho.
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -32,11 +42,31 @@ type FormState = { brand: string; model: string; plate: string; year: string };
 const EMPTY_FORM: FormState = { brand: '', model: '', plate: '', year: '' };
 
 const STATUS_STYLES: Record<VehicleStatus, { label: string; cls: string; icon: typeof CheckCircle }> = {
-  ACTIVE: { label: 'Ativo', cls: 'bg-brand-50 text-brand-700', icon: CheckCircle },
-  PENDING: { label: 'Pendente', cls: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  INACTIVE: { label: 'Inativo', cls: 'bg-secondary text-muted-foreground', icon: XCircle },
-  MAINTENANCE: { label: 'Manutenção', cls: 'bg-warning/10 text-warning', icon: WrenchIcon },
-  SOLD: { label: 'Vendido', cls: 'bg-destructive/10 text-destructive', icon: XCircle },
+  ACTIVE: {
+    label: 'Ativo',
+    cls: 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300',
+    icon: CheckCircle,
+  },
+  PENDING: {
+    label: 'Pendente',
+    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+    icon: Clock,
+  },
+  INACTIVE: {
+    label: 'Inativo',
+    cls: 'bg-secondary text-muted-foreground',
+    icon: XCircle,
+  },
+  MAINTENANCE: {
+    label: 'Manutenção',
+    cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
+    icon: WrenchIcon,
+  },
+  SOLD: {
+    label: 'Vendido',
+    cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+    icon: XCircle,
+  },
 };
 
 function StatusBadge({ status }: { status: VehicleStatus }) {
@@ -44,7 +74,7 @@ function StatusBadge({ status }: { status: VehicleStatus }) {
   const Icon = s.icon;
   return (
     <span className={`inline-flex shrink-0 items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
-      <Icon className="h-3 w-3 mr-1" />{s.label}
+      <Icon className="h-3 w-3 mr-1" aria-hidden="true" />{s.label}
     </span>
   );
 }
@@ -93,9 +123,11 @@ function VehicleForm({ form, onField, onSubmit, isPending, onCancel, submitLabel
             value={form.year} onChange={onField} min={1950} max={new Date().getFullYear() + 1} required />
         </div>
       </div>
-      <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>Cancelar</Button>
-        <Button type="submit" disabled={isPending || !isFormValid(form)}>
+      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isPending} className="w-full sm:w-auto">
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={isPending || !isFormValid(form)} className="w-full sm:w-auto">
           {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando…</> : submitLabel}
         </Button>
       </div>
@@ -187,7 +219,7 @@ export function VehiclesManagement() {
   }
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Erro ao carregar veículos.</p>
         <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all })}>
@@ -198,7 +230,7 @@ export function VehiclesManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title="Meus veículos"
         subtitle="Gerencie seus veículos cadastrados"
@@ -206,7 +238,7 @@ export function VehiclesManagement() {
         actions={
           <Dialog open={createOpen} onOpenChange={(v) => { if (!v) { setCreateOpen(false); setForm(EMPTY_FORM); } else setCreateOpen(true); }}>
             <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Novo veículo</Button>
+              <Button className="w-full sm:w-auto"><Plus className="h-4 w-4 mr-2" />Novo veículo</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -256,12 +288,19 @@ export function VehiclesManagement() {
 
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(v)}>
-                  <Pencil className="h-3 w-3 mr-1" />Editar
+                  <Pencil className="h-3 w-3 mr-1" aria-hidden="true" />Editar
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive hover:border-destructive/40">
-                      <Trash2 className="h-3 w-3" />
+                    {/* Ghost, não outline: o outline preenche de verde no hover, e a
+                        cor vermelha do texto ficaria ilegível por cima. */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={`Remover ${v.brand} ${v.model}`}
+                    >
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
@@ -290,14 +329,14 @@ export function VehiclesManagement() {
 
       {vehicles.length === 0 && (
         <Card className="shadow-card">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Car className="h-12 w-12 text-muted-foreground mb-4" />
+          <CardContent className="flex flex-col items-center justify-center px-4 py-12">
+            <Car className="h-12 w-12 text-muted-foreground mb-4" aria-hidden="true" />
             <h3 className="font-semibold mb-2">Nenhum veículo cadastrado</h3>
             <p className="text-sm text-muted-foreground text-center mb-4">
               Cadastre seu veículo para começar a trabalhar na plataforma.
             </p>
             <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />Cadastrar veículo
+              <Plus className="h-4 w-4 mr-2" aria-hidden="true" />Cadastrar veículo
             </Button>
           </CardContent>
         </Card>
