@@ -6,15 +6,33 @@
 //  - Brand header, nav items, user footer with logout / role switch
 //
 // Both DriverLayout and AdminLayout render <AppShell> with their own nav items.
+//
+// FOTOGRAFIA NO RODAPÉ: vem do documento FOTO_PERFIL, a mesma fonte usada na
+// tela de Perfil — o motorista já enviou a imagem e não faz sentido pedi-la
+// outra vez. As iniciais ficam como recurso quando não há foto, quando ela foi
+// rejeitada ou enquanto o pedido não termina.
+//
+// O carregamento vive aqui, e não dentro de userFooter, porque esse bloco é
+// renderizado duas vezes (barra lateral e gaveta): colocá-lo lá dentro faria
+// dois pedidos do mesmo ficheiro.
+//
+// A consulta só corre para motoristas. Este shell também serve o portal de
+// administração, onde FOTO_PERFIL não existe — sem a guarda seria um pedido
+// desperdiçado em cada página. A chave de consulta é a mesma das telas de
+// Documentos e Veículos, por isso o React Query reaproveita a cache em vez de
+// repetir a chamada.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { LogOut, Menu, X, ArrowLeftRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Toaster } from '@/app/components/ui/sonner';
 import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 import { ThemeToggle } from '@/app/components/ui/theme-toggle';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { documentsService } from '@/features/driver/services/documents.service';
+import { queryKeys } from '@/shared/lib/query-keys';
 
 export interface NavItem {
   to: string;
@@ -35,6 +53,54 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  const isDriver = user?.role === 'DRIVER';
+
+  const { data: docsData } = useQuery({
+    queryKey: queryKeys.documents.list,
+    queryFn: () => documentsService.list(),
+    enabled: isDriver,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const photoDoc = docsData?.documents.find(
+    (d) => d.type === 'FOTO_PERFIL' && !d.vehicleId,
+  );
+  // Visível assim que enviada, tal como no Perfil. Rejeitada ou expirada
+  // volta às iniciais.
+  const photoVisible =
+    !!photoDoc && (photoDoc.status === 'APPROVED' || photoDoc.status === 'PENDING');
+
+  useEffect(() => {
+    if (!photoVisible || !photoDoc) {
+      setPhotoUrl(null);
+      return;
+    }
+
+    // `revoked` cobre o caso de o pedido terminar depois de o componente sair:
+    // sem isso o object URL ficaria retido em memória sem ninguém para o
+    // libertar.
+    let revoked = false;
+    let url: string | null = null;
+
+    documentsService
+      .getFileObjectUrl(photoDoc.id)
+      .then((objectUrl) => {
+        if (revoked) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        url = objectUrl;
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => setPhotoUrl(null));
+
+    return () => {
+      revoked = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photoDoc?.id, photoVisible]);
 
   async function handleLogout() {
     await logout();
@@ -80,9 +146,19 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
         </button>
       )}
       <div className="flex items-center gap-3 px-2 py-1.5">
-        <div className="h-9 w-9 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-          {initials}
-        </div>
+        {photoUrl ? (
+          // alt vazio: o nome está ao lado, um rótulo aqui seria redundante
+          // para quem usa leitor de ecrã.
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-9 w-9 rounded-full object-cover shrink-0"
+          />
+        ) : (
+          <div className="h-9 w-9 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+            {initials}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
           <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
