@@ -15,6 +15,22 @@ interface UpdateStatusInput {
   notes?: string;
 }
 
+/** Busca o ficheiro autenticado e devolve-o como Blob. */
+async function fetchFileBlob(id: string): Promise<Blob> {
+  const token = localStorage.getItem('dragonfleet:token');
+
+  const res = await fetch(`${BASE_URL}/documents/${id}/file`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.message ?? 'Erro ao abrir o documento.');
+  }
+
+  return res.blob();
+}
+
 export const documentsService = {
   /** GET /documents */
   list(): Promise<{ documents: ApiDocument[] }> {
@@ -32,20 +48,10 @@ export const documentsService = {
    * Abrimos a janela ANTES do fetch para não ser bloqueada pelo popup blocker.
    */
   async openFile(id: string): Promise<void> {
-    const token = localStorage.getItem('dragonfleet:token');
     const win = window.open('', '_blank');
 
     try {
-      const res = await fetch(`${BASE_URL}/documents/${id}/file`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.message ?? 'Erro ao abrir o documento.');
-      }
-
-      const blob = await res.blob();
+      const blob = await fetchFileBlob(id);
       const url = URL.createObjectURL(blob);
 
       if (win) {
@@ -65,6 +71,18 @@ export const documentsService = {
       win?.close();
       throw err;
     }
+  },
+
+  /**
+   * GET /documents/:id/file — devolve um object URL para usar em <img src>.
+   *
+   * IMPORTANTE: quem chama fica dono do URL e tem de o libertar com
+   * URL.revokeObjectURL() ao desmontar. Sem isso cada visita à tela deixa um
+   * blob retido em memória, e a fotografia de perfil é carregada a cada visita.
+   */
+  async getFileObjectUrl(id: string): Promise<string> {
+    const blob = await fetchFileBlob(id);
+    return URL.createObjectURL(blob);
   },
 
   /**

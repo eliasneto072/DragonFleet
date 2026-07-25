@@ -4,6 +4,8 @@ import { CreateUserData, UpdateUserData } from './users.repository.types';
 export interface IUserRepository {
   findAll(): Promise<IUserPublic[]>;
   findById(id: string): Promise<IUserPublic | null>;
+  /** Inclui o hash da palavra-passe. Só para login e reautenticação. */
+  findByIdWithPassword(id: string): Promise<IUser | null>;
   findByEmail(email: string): Promise<IUser | null>;
   create(data: CreateUserData): Promise<IUserPublic>;
   update(id: string, data: UpdateUserData): Promise<IUserPublic>;

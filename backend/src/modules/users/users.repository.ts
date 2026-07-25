@@ -48,6 +48,21 @@ export class UsersRepository  implements IUserRepository{
         }
     }
 
+    // Devolve o registo COM o hash da palavra-passe. Usado apenas para
+    // reautenticação (confirmar a palavra-passe atual antes de alterações
+    // sensíveis). Nunca devolver isto numa resposta HTTP.
+    async findByIdWithPassword(id: string): Promise<IUser | null> {
+        try {
+
+            return await prisma.user.findUnique({ where: { id } })
+
+        } catch(err){
+
+            logger.error('Erro ao buscar usuário por id', err)
+            throw err
+        }
+    }
+
     // esse retorna com password (usado apenas no auth/login)
     async findByEmail(email: string): Promise<IUser | null> {
         try{
@@ -108,4 +123,3 @@ export class UsersRepository  implements IUserRepository{
 }
 
 export const usersRepository =  new UsersRepository()
-
