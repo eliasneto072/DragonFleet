@@ -17,6 +17,22 @@ export class ReportsController {
     await reportsService.streamFinancialReport(getActor(req), res, { from, to });
     // service handles headers + stream; nothing else to return
   };
+
+  // GET /reports/earnings.pdf?from=2026-07-01&to=2026-07-31[&userId=...]
+  //
+  // Sem userId, o extrato é do próprio requisitante. Passar userId só funciona
+  // para admin/manager — o service rejeita qualquer outro caso.
+  earningsPdf = async (req: AuthRequest, res: Response) => {
+    const actor = getActor(req);
+    const { from, to, userId } = req.query as {
+      from?: string; to?: string; userId?: string;
+    };
+    await reportsService.streamDriverEarningsReport(actor, res, {
+      userId: userId || actor.id,
+      from,
+      to,
+    });
+  };
 }
 
 export const reportsController = new ReportsController();

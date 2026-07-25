@@ -6,16 +6,14 @@
 //
 // Inclui os ajustes de saldo lançados pela administração, porque para o
 // motorista um crédito é uma corrida que entrou por fora — a mesma regra
-// aplicada aos cartões de KPI do dashboard. O rótulo mostrado é "Corrida
-// adicionada" / "Desconto aplicado", não "crédito" e "débito".
+// aplicada aos cartões de KPI do dashboard. O rótulo mostrado é "Adicionado
+// pela gestão" / "Desconto", não "crédito" e "débito".
 //
 // Nota sobre datas: Earning tem `date` (o dia da corrida), enquanto
 // BalanceAdjustment só tem `createdAt` (quando a administração lançou). Os
-// ajustes são datados pela criação — é a única data disponível hoje.
-//
-// A exportação é CSV. O PDF exige uma rota nova no backend: /reports
-// já usa pdfkit, mas a rota existente é requireAdmin e agrega a empresa
-// inteira. Gerar PDF no cliente custaria ~300KB de bundle por um botão.
+// ajustes são datados pela criação — é a única data disponível hoje, e o
+// backend aplica exatamente o mesmo critério ao montar o PDF, para que o
+// documento não divirja desta lista.
 
 import { useMemo, useState } from 'react';
 import {
@@ -27,9 +25,11 @@ import { Label } from '@/app/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
-import { Download, Inbox } from 'lucide-react';
+import { FileDown, Inbox, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency } from '@/shared/lib/format';
 import { platformColor, platformLabel, ADJUSTMENT_COLOR } from '@/shared/lib/platform-labels';
+import { driverReportsService } from '@/features/driver/services/reports.service';
 import type { Adjustment } from '@/features/admin/services/balance.service';
 import type { ApiEarning } from '@/shared/types/api';
 
@@ -80,12 +80,6 @@ function presetRange(preset: Preset): { from: Date; to: Date } {
   return { from, to };
 }
 
-/** Escapa um campo para CSV: aspas duplicadas e envolvidas quando necessário. */
-function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -97,6 +91,7 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
   const [preset, setPreset] = useState<Preset>('30d');
   const [customFrom, setCustomFrom] = useState(() => toInputValue(presetRange('30d').from));
   const [customTo, setCustomTo] = useState(() => toInputValue(new Date()));
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const range = useMemo(() => {
     if (preset !== 'custom') return presetRange(preset);
@@ -119,7 +114,7 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
     const adjustmentRows: HistoryRow[] = adjustments.map((a) => ({
       id: `a-${a.id}`,
       date: new Date(a.createdAt),
-      label: a.type === 'CREDIT' ? 'Corrida adicionada' : 'Desconto aplicado',
+      label: a.type === 'CREDIT' ? 'Adicionado pela gestão' : 'Desconto',
       sublabel: a.reason?.trim() || 'Lançado pela administração',
       amount: a.type === 'CREDIT' ? Number(a.amount) : -Number(a.amount),
       color: ADJUSTMENT_COLOR,
@@ -132,28 +127,18 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
 
   const total = rows.reduce((sum, r) => sum + r.amount, 0);
 
-  function handleExportCsv() {
-    const header = ['Data', 'Origem', 'Detalhe', 'Valor (EUR)'];
-    const body = rows.map((r) => [
-      csvCell(r.date.toLocaleDateString('pt-PT')),
-      csvCell(r.label),
-      csvCell(r.sublabel),
-      csvCell(r.amount.toFixed(2).replace('.', ',')),
-    ].join(';'));
-
-    // Separador ";" e BOM UTF-8: é o que o Excel em português abre sem
-    // pedir assistente de importação nem quebrar os acentos.
-    const csv = '\uFEFF' + [header.join(';'), ...body].join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `dragonfleet-ganhos-${toInputValue(range.from)}_${toInputValue(range.to)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  async function handleDownloadPdf() {
+    setIsDownloading(true);
+    try {
+      await driverReportsService.downloadEarningsPdf({
+        from: toInputValue(range.from),
+        to: toInputValue(range.to),
+      });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Não foi possível gerar o PDF.');
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   return (
@@ -251,8 +236,10 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={onClose}>Fechar</Button>
-          <Button onClick={handleExportCsv} disabled={rows.length === 0}>
-            <Download className="mr-2 h-4 w-4" />Exportar CSV
+          <Button onClick={handleDownloadPdf} disabled={rows.length === 0 || isDownloading}>
+            {isDownloading
+              ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A gerar…</>)
+              : (<><FileDown className="mr-2 h-4 w-4" />Baixar PDF</>)}
           </Button>
         </div>
       </DialogContent>
