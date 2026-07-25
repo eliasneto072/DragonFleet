@@ -1,10 +1,14 @@
 // src/app/components/ui/wallet-illustration.tsx
 //
 // Ilustração da carteira — hero "Saldo disponível para retirada".
-// Vetor plano, mesma linguagem de vehicle-illustration.tsx: sem gradiente,
-// sem sombra difusa, três tons por objeto.
 //
-// Animação de entrada: as notas sobem de trás da carteira e a moeda cai e
+// Mesma gramática visual de vehicle-illustration.tsx: silhueta construída com
+// paths curvos (não retângulos empilhados), sem gradiente, sem sombra difusa,
+// três tons por objeto mais um acento quente. A aresta superior do bolso é
+// curva e acompanhada de uma linha de costura pontilhada — é esse tipo de
+// detalhe que dá à peça o mesmo acabamento do carro.
+//
+// Animação de entrada: os cartões sobem de trás da carteira e a moeda cai e
 // assenta. Depois a moeda mantém uma flutuação lenta de 3px, o suficiente
 // para a tela não parecer congelada sem competir com a leitura do saldo.
 //
@@ -13,13 +17,17 @@
 //   autocontido e não depende de configuração externa.
 // - Não é possível empilhar duas animações de transform no mesmo elemento
 //   (a segunda sobrescreve a primeira), então queda e flutuação da moeda
-//   ficam em grupos aninhados. Mesma razão para as notas: a rotação estática
-//   fica num <g> interno, abaixo do <g> animado.
+//   ficam em grupos aninhados. Mesma razão para os cartões: a rotação
+//   estática fica num <g> interno, abaixo do <g> animado.
 // - prefers-reduced-motion desliga tudo e mantém o estado final.
 // - A ilustração é decorativa: o valor em euros ao lado já comunica o
 //   significado, então ela é aria-hidden em vez de ter um rótulo redundante.
 
-import { ILLUSTRATION_PALETTE, type IllustrationSurface } from './illustration-palette';
+import {
+  ILLUSTRATION_PALETTE,
+  type IllustrationSurface,
+  type IllustrationTone,
+} from './illustration-palette';
 
 const CSS = `
 @keyframes df-wal-rise {
@@ -35,70 +43,98 @@ const CSS = `
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-3px); }
 }
-.df-wal-bill  { animation: df-wal-rise .70s cubic-bezier(.22,1,.36,1) both; }
-.df-wal-bill2 { animation-delay: .12s; }
+.df-wal-card  { animation: df-wal-rise .70s cubic-bezier(.22,1,.36,1) both; }
+.df-wal-card2 { animation-delay: .12s; }
 .df-wal-drop  { animation: df-wal-drop .80s cubic-bezier(.34,1.28,.64,1) .34s both; }
 .df-wal-float { animation: df-wal-float 4.5s ease-in-out 1.3s infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .df-wal-bill, .df-wal-drop, .df-wal-float { animation: none; opacity: 1; }
+  .df-wal-card, .df-wal-drop, .df-wal-float { animation: none; opacity: 1; }
 }
 `;
 
 interface Props {
+  /** Família de cor. 'brand' = verde da marca, 'info' = azul. */
+  tone?: IllustrationTone;
   /** Contraste do fundo onde a ilustração será colocada. */
   surface?: IllustrationSurface;
   className?: string;
 }
 
-export function WalletIllustration({ surface = 'dark', className = '' }: Props) {
-  const c = ILLUSTRATION_PALETTE[surface];
+export function WalletIllustration({
+  tone = 'brand',
+  surface = 'dark',
+  className = '',
+}: Props) {
+  const c = ILLUSTRATION_PALETTE[tone][surface];
 
   return (
     <svg
-      viewBox="20 4 168 144"
+      viewBox="24 4 152 142"
       className={className}
       aria-hidden="true"
       focusable="false"
     >
       <style>{CSS}</style>
 
-      <ellipse cx="100" cy="138" rx="76" ry="5" fill={c.shadow} />
+      <ellipse cx="100" cy="134" rx="76" ry="5" fill={c.shadow} />
 
-      {/* notas — sobem de trás da carteira */}
-      <g className="df-wal-bill">
-        <g transform="rotate(-9 102 40)">
-          <rect x="62" y="14" width="80" height="52" rx="5" fill={c.paper} />
-          <circle cx="102" cy="40" r="9" fill={c.paperAlt} />
+      {/* cartões em leque, saindo por trás da carteira */}
+      <g className="df-wal-card">
+        <g transform="rotate(-13 102 42)">
+          <rect x="64" y="18" width="76" height="48" rx="6" fill={c.paper} />
+          <circle cx="102" cy="42" r="8" fill={c.paperAlt} />
         </g>
       </g>
-      <g className="df-wal-bill df-wal-bill2">
-        <g transform="rotate(6 112 48)">
-          <rect x="72" y="22" width="80" height="52" rx="5" fill={c.paperAlt} />
-          <rect x="86" y="40" width="38" height="3" rx="1.5" fill={c.detail} opacity="0.45" />
-          <rect x="86" y="49" width="26" height="3" rx="1.5" fill={c.detail} opacity="0.45" />
+      <g className="df-wal-card df-wal-card2">
+        <g transform="rotate(-3 112 50)">
+          <rect x="74" y="26" width="76" height="48" rx="6" fill={c.paperAlt} />
+          <rect x="86" y="42" width="34" height="3.5" rx="1.75" fill={c.detail} opacity="0.4" />
+          <rect x="86" y="51" width="22" height="3.5" rx="1.75" fill={c.detail} opacity="0.4" />
         </g>
       </g>
 
       {/* corpo da carteira */}
-      <rect x="26" y="52" width="148" height="80" rx="12" fill={c.body} />
-      <path d="M26 78 L174 78 L174 120 Q174 132 162 132 L38 132 Q26 132 26 120 Z" fill={c.bodyDark} />
-      <rect x="112" y="88" width="48" height="26" rx="8" fill={c.detail} />
-      <circle cx="136" cy="101" r="6" fill={c.paper} />
+      <path
+        d="M30 60 Q30 52 39 52 L161 52 Q170 52 170 60 L170 116
+           Q170 126 159 126 L41 126 Q30 126 30 116 Z"
+        fill={c.body}
+      />
+
+      {/* bolso da frente — aresta superior curva, não reta */}
+      <path
+        d="M30 84 Q100 74 170 84 L170 116 Q170 126 159 126 L41 126 Q30 126 30 116 Z"
+        fill={c.bodyDark}
+      />
+
+      {/* costura acompanhando a curva do bolso */}
+      <path
+        d="M35 84.6 Q100 74.8 165 84.6"
+        fill="none"
+        stroke={c.paper}
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeDasharray="3 4"
+        opacity="0.5"
+      />
+
+      {/* fecho elástico */}
+      <rect x="118" y="92" width="44" height="20" rx="10" fill={c.detail} />
+      <circle cx="140" cy="102" r="5.5" fill={c.paper} />
 
       {/* moeda — cai na entrada, depois flutua */}
       <g className="df-wal-drop">
         <g className="df-wal-float">
-          <circle cx="164" cy="112" r="19" fill={c.coin} />
-          <circle cx="164" cy="112" r="14.5" fill={c.coinFace} />
+          <circle cx="56" cy="116" r="18" fill={c.coin} />
+          <circle cx="56" cy="116" r="13.5" fill={c.coinFace} />
           <path
-            d="M170 105 A 7 7 0 0 0 170 119"
+            d="M61.5 110 A 6.2 6.2 0 0 0 61.5 122"
             fill="none"
             stroke={c.coinInk}
-            strokeWidth="3"
+            strokeWidth="2.7"
             strokeLinecap="round"
           />
-          <rect x="155" y="110" width="14" height="2.6" rx="1.3" fill={c.coinInk} />
-          <rect x="155" y="114.5" width="14" height="2.6" rx="1.3" fill={c.coinInk} />
+          <rect x="49" y="113.4" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
+          <rect x="49" y="117.4" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
         </g>
       </g>
     </svg>

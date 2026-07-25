@@ -3,13 +3,15 @@
 // Tela de retiradas do motorista. Layout empilhado, funciona no mobile.
 //
 // Notas de manutenção:
-// - O hero usa o verde de marca, não azul. Azul já é a cor do status
-//   "Aprovado" nesta mesma tela; usá-lo também no hero faria a cor significar
-//   duas coisas diferentes lado a lado. A distinção entre esta tela e o
-//   dashboard vem da ilustração, não da cor.
-// - O gradiente do hero é fixo e NÃO acompanha o modo escuro (em dark a escala
-//   de marca clareia). Por isso todo texto dentro dele usa branco com
-//   opacidade, nunca text-brand-*.
+// - O hero é azul, distinto do verde do dashboard, para separar as duas telas
+//   à primeira vista. A ilustração acompanha via tone="info".
+// - O hero é um flex de duas colunas: conteúdo à esquerda, ilustração à
+//   direita como item próprio. A ilustração NÃO é posicionada em absolute —
+//   assim ela nunca sangra para fora do card.
+// - O gradiente é fixo e não acompanha o modo escuro, então todo texto dentro
+//   dele usa branco com opacidade em vez de tokens de tema.
+// - shadow-brand tem tinta verde (rgba(16,136,101,…)); num hero azul isso
+//   produziria um halo esverdeado. Este hero usa shadow-md.
 // - Todo valor monetário passa por formatCurrency(). Ver o comentário no topo
 //   de shared/lib/format.ts: o prefixo do input de valor ainda estava em "R$".
 
@@ -20,6 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -75,6 +78,49 @@ function StatusBadge({ status }: { status: WithdrawalStatus }) {
       <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
       {meta.label}
     </span>
+  );
+}
+
+// Espelha a estrutura real da tela para não haver salto quando os dados chegam.
+function WithdrawalsSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar as retiradas…</span>
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-36" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+        </div>
+        <Skeleton className="h-9 w-36 shrink-0" />
+      </div>
+
+      <Skeleton className="h-40 w-full rounded-xl" />
+
+      <Card className="shadow-card">
+        <CardHeader className="space-y-2">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start justify-between gap-3 border-b pb-3 last:border-0">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-5 w-24 rounded-full" />
+              </div>
+              <div className="space-y-1.5 text-right">
+                <Skeleton className="ml-auto h-4 w-24" />
+                <Skeleton className="ml-auto h-3 w-14" />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -136,13 +182,7 @@ export function Withdrawals() {
     createWithdrawal(value);
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando saques…</span>
-      </div>
-    );
-  }
+  if (isLoading) return <WithdrawalsSkeleton />;
 
   if (isError) {
     return (
@@ -218,23 +258,26 @@ export function Withdrawals() {
 
       {/* Hero: total sacado */}
       <div
-        className="relative overflow-hidden rounded-xl p-6 shadow-brand"
-        style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
+        className="overflow-hidden rounded-xl p-6 shadow-md"
+        style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
       >
-        <PayoutIllustration
-          surface="dark"
-          className="pointer-events-none absolute -right-2 top-1/2 hidden h-36 w-auto -translate-y-1/2 sm:block"
-        />
+        <div className="flex items-center justify-between gap-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-white/70">Total sacado</p>
+            <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
+              {formatCurrency(totalWithdrawn)}
+            </p>
+            <p className="mt-2 text-sm text-white/70">
+              {settled.length} saque{settled.length !== 1 ? 's' : ''} aprovado
+              {settled.length !== 1 ? 's' : ''} ou pago{settled.length !== 1 ? 's' : ''}
+            </p>
+          </div>
 
-        <div className="relative sm:max-w-[62%]">
-          <p className="text-sm text-white/70">Total sacado</p>
-          <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
-            {formatCurrency(totalWithdrawn)}
-          </p>
-          <p className="mt-2 text-sm text-white/70">
-            {settled.length} saque{settled.length !== 1 ? 's' : ''} aprovado
-            {settled.length !== 1 ? 's' : ''} ou pago{settled.length !== 1 ? 's' : ''}
-          </p>
+          <PayoutIllustration
+            tone="info"
+            surface="dark"
+            className="hidden h-36 w-auto shrink-0 sm:block lg:h-40"
+          />
         </div>
       </div>
 

@@ -1,12 +1,11 @@
 // src/app/components/ui/payout-illustration.tsx
 //
 // Ilustração do cofre — hero "Total sacado" da tela de Retiradas.
-// Mesma linguagem de vehicle-illustration.tsx e wallet-illustration.tsx.
 //
-// O objeto é deliberadamente diferente da carteira: como os dois heros usam
-// o mesmo verde de marca, a distinção entre as telas vem da forma, não da cor.
-// (Usar azul num hero e verde no outro faria o azul significar "retiradas" e
-// "em análise" ao mesmo tempo, já que o badge de status também é azul.)
+// Mesma gramática visual de vehicle-illustration.tsx e wallet-illustration.tsx.
+// O acabamento vem da densidade de detalhe: rebites nos cantos da porta e
+// entalhes no aro do mostrador. Os entalhes giram junto com o mostrador, o que
+// torna a rotação legível — um círculo liso girando é invisível.
 //
 // Animação de entrada: o mostrador destrava girando até a posição final, a
 // nota sobe por trás e a moeda cai. Depois só a moeda mantém uma flutuação
@@ -22,7 +21,11 @@
 // - prefers-reduced-motion desliga tudo e mantém o estado final.
 // - Decorativa: aria-hidden, já que o valor ao lado carrega o significado.
 
-import { ILLUSTRATION_PALETTE, type IllustrationSurface } from './illustration-palette';
+import {
+  ILLUSTRATION_PALETTE,
+  type IllustrationSurface,
+  type IllustrationTone,
+} from './illustration-palette';
 
 const CSS = `
 @keyframes df-pay-unlock {
@@ -56,65 +59,89 @@ const CSS = `
 `;
 
 interface Props {
+  /** Família de cor. 'brand' = verde da marca, 'info' = azul. */
+  tone?: IllustrationTone;
   /** Contraste do fundo onde a ilustração será colocada. */
   surface?: IllustrationSurface;
   className?: string;
 }
 
-export function PayoutIllustration({ surface = 'dark', className = '' }: Props) {
-  const c = ILLUSTRATION_PALETTE[surface];
+export function PayoutIllustration({
+  tone = 'info',
+  surface = 'dark',
+  className = '',
+}: Props) {
+  const c = ILLUSTRATION_PALETTE[tone][surface];
 
   return (
     <svg
-      viewBox="28 2 146 150"
+      viewBox="28 0 148 152"
       className={className}
       aria-hidden="true"
       focusable="false"
     >
       <style>{CSS}</style>
 
-      <ellipse cx="100" cy="142" rx="68" ry="5" fill={c.shadow} />
+      <ellipse cx="100" cy="146" rx="70" ry="5" fill={c.shadow} />
 
       {/* nota saindo por trás do cofre */}
       <g className="df-pay-bill">
-        <g transform="rotate(-7 102 26)">
-          <rect x="68" y="10" width="68" height="32" rx="4" fill={c.paper} />
-          <rect x="80" y="21" width="32" height="3" rx="1.5" fill={c.detail} opacity="0.4" />
-          <rect x="80" y="29" width="22" height="3" rx="1.5" fill={c.detail} opacity="0.4" />
+        <g transform="rotate(-7 100 22)">
+          <rect x="68" y="6" width="64" height="30" rx="4" fill={c.paper} />
+          <rect x="80" y="16" width="30" height="3" rx="1.5" fill={c.detail} opacity="0.4" />
+          <rect x="80" y="24" width="20" height="3" rx="1.5" fill={c.detail} opacity="0.4" />
         </g>
       </g>
 
       {/* corpo do cofre */}
-      <rect x="34" y="30" width="132" height="104" rx="14" fill={c.body} />
-      <rect x="48" y="42" width="104" height="80" rx="10" fill={c.bodyDark} />
-      <rect x="38" y="48" width="6" height="12" rx="2" fill={c.detail} />
-      <rect x="38" y="104" width="6" height="12" rx="2" fill={c.detail} />
-      <rect x="132" y="72" width="9" height="20" rx="4.5" fill={c.detail} />
-      <rect x="46" y="134" width="16" height="8" rx="2" fill={c.bodyDark} />
-      <rect x="138" y="134" width="16" height="8" rx="2" fill={c.bodyDark} />
+      <path
+        d="M34 44 Q34 32 46 32 L154 32 Q166 32 166 44 L166 124
+           Q166 136 154 136 L46 136 Q34 136 34 124 Z"
+        fill={c.body}
+      />
 
-      {/* mostrador — destrava na entrada */}
+      {/* porta */}
+      <rect x="48" y="46" width="104" height="76" rx="9" fill={c.bodyDark} />
+
+      {/* rebites da porta */}
+      <circle cx="57" cy="55" r="2.2" fill={c.detail} />
+      <circle cx="143" cy="55" r="2.2" fill={c.detail} />
+      <circle cx="57" cy="113" r="2.2" fill={c.detail} />
+      <circle cx="143" cy="113" r="2.2" fill={c.detail} />
+
+      {/* puxador */}
+      <rect x="130" y="74" width="9" height="20" rx="4.5" fill={c.detail} />
+
+      {/* pés */}
+      <rect x="46" y="136" width="16" height="7" rx="2" fill={c.bodyDark} />
+      <rect x="138" y="136" width="16" height="7" rx="2" fill={c.bodyDark} />
+
+      {/* mostrador — destrava na entrada; os entalhes tornam o giro legível */}
       <g className="df-pay-dial">
-        <circle cx="94" cy="82" r="19" fill={c.detail} />
-        <circle cx="94" cy="82" r="12" fill={c.paper} />
-        <rect x="80" y="80.25" width="28" height="3.5" rx="1.75" fill={c.detail} />
-        <rect x="92.25" y="68" width="3.5" height="28" rx="1.75" fill={c.detail} />
+        <circle cx="92" cy="84" r="20" fill={c.detail} />
+        <rect x="90.5" y="66" width="3" height="5" rx="1.5" fill={c.paper} opacity="0.6" />
+        <rect x="90.5" y="97" width="3" height="5" rx="1.5" fill={c.paper} opacity="0.6" />
+        <rect x="74" y="82.5" width="5" height="3" rx="1.5" fill={c.paper} opacity="0.6" />
+        <rect x="105" y="82.5" width="5" height="3" rx="1.5" fill={c.paper} opacity="0.6" />
+        <circle cx="92" cy="84" r="13" fill={c.paper} />
+        <rect x="79" y="82.25" width="26" height="3.5" rx="1.75" fill={c.detail} />
+        <rect x="90.25" y="71" width="3.5" height="26" rx="1.75" fill={c.detail} />
       </g>
 
       {/* moeda — cai na entrada, depois flutua */}
       <g className="df-pay-drop">
         <g className="df-pay-float">
-          <circle cx="150" cy="120" r="17" fill={c.coin} />
-          <circle cx="150" cy="120" r="13" fill={c.coinFace} />
+          <circle cx="152" cy="124" r="17" fill={c.coin} />
+          <circle cx="152" cy="124" r="13" fill={c.coinFace} />
           <path
-            d="M155.5 114 A 6.2 6.2 0 0 0 155.5 126"
+            d="M157.5 118 A 6.2 6.2 0 0 0 157.5 130"
             fill="none"
             stroke={c.coinInk}
             strokeWidth="2.7"
             strokeLinecap="round"
           />
-          <rect x="142" y="118.2" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
-          <rect x="142" y="122.2" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
+          <rect x="144" y="121.4" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
+          <rect x="144" y="125.4" width="12.5" height="2.4" rx="1.2" fill={c.coinInk} />
         </g>
       </g>
     </svg>

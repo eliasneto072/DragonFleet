@@ -11,6 +11,9 @@
 // a composição do saldo sem nenhuma chamada extra.
 //
 // Notas de manutenção:
+// - O hero é um flex de duas colunas: conteúdo à esquerda, ilustração à
+//   direita como item próprio. A ilustração NÃO é posicionada em absolute —
+//   assim ela nunca sangra para fora do card nem cobre os botões.
 // - O gradiente do hero é fixo e NÃO acompanha o modo escuro (em dark a escala
 //   de marca clareia, e um hero mais claro no escuro fica errado). Por isso
 //   todo texto dentro do hero usa branco com opacidade, nunca text-brand-*,
@@ -24,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/app/components/ui/dialog';
@@ -180,6 +184,65 @@ function calcBalance(earnings: ApiEarning[], withdrawals: ApiWithdrawal[]) {
   return Math.max(totalEarned - totalWithdrawn, 0);
 }
 
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+// Espelha a estrutura real da tela: mesmo número de cards, mesmas alturas de
+// gráfico. Um skeleton que não bate com o layout final causa um salto visível
+// quando os dados chegam.
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar o painel…</span>
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="h-4 w-60" />
+        </div>
+        <Skeleton className="h-9 w-36 shrink-0" />
+      </div>
+
+      <Skeleton className="h-48 w-full rounded-xl" />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardContent className="space-y-2 pt-5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="shadow-card">
+        <CardHeader><Skeleton className="h-5 w-44" /></CardHeader>
+        <CardContent className="space-y-3">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-1.5 w-full" />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {[0, 1].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent><Skeleton className="h-[300px] w-full" /></CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Modal de registo de ganho ─────────────────────────────────────────────────
 
 interface AddEarningModalProps {
@@ -302,14 +365,7 @@ export function DriverDashboard() {
   const isLoading = earningsQuery.isLoading || withdrawalsQuery.isLoading;
   const isError = earningsQuery.isError || withdrawalsQuery.isError;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Carregando dashboard…</span>
-      </div>
-    );
-  }
+  if (isLoading) return <DashboardSkeleton />;
 
   if (isError) {
     return (
@@ -397,69 +453,72 @@ export function DriverDashboard() {
 
       {/* Hero: saldo + composição + ações */}
       <div
-        className="relative overflow-hidden rounded-xl p-6 shadow-brand"
+        className="overflow-hidden rounded-xl p-6 shadow-brand"
         style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
       >
-        <WalletIllustration
-          surface="dark"
-          className="pointer-events-none absolute -right-3 top-1/2 hidden h-36 w-auto -translate-y-1/2 sm:block"
-        />
+        <div className="flex items-center justify-between gap-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-white/70">Saldo disponível para retirada</p>
 
-        <div className="relative sm:max-w-[62%]">
-          <p className="text-sm text-white/70">Saldo disponível para retirada</p>
+            <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
+              {formatCurrency(balance)}
+            </p>
 
-          <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
-            {formatCurrency(balance)}
-          </p>
+            {breakdownRows.length > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setBreakdownOpen((v) => !v)}
+                  aria-expanded={breakdownOpen}
+                  className="flex items-center gap-1 rounded text-xs text-white/70 transition-colors hover:text-white"
+                >
+                  Como chegámos a este valor
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${breakdownOpen ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
 
-          {breakdownRows.length > 0 && (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => setBreakdownOpen((v) => !v)}
-                aria-expanded={breakdownOpen}
-                className="flex items-center gap-1 rounded text-xs text-white/70 transition-colors hover:text-white"
-              >
-                Como chegámos a este valor
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${breakdownOpen ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
-
-              {breakdownOpen && (
-                <dl className="mt-2 max-w-xs space-y-1 border-t border-white/15 pt-2 text-xs">
-                  {breakdownRows.map((row) => (
-                    <div key={row.label} className="flex justify-between gap-4">
-                      <dt className="text-white/70">{row.label}</dt>
-                      <dd className="tabular-nums text-white/90">
-                        {row.sign} {formatCurrency(row.value)}
-                      </dd>
+                {breakdownOpen && (
+                  <dl className="mt-2 max-w-xs space-y-1 border-t border-white/15 pt-2 text-xs">
+                    {breakdownRows.map((row) => (
+                      <div key={row.label} className="flex justify-between gap-4">
+                        <dt className="text-white/70">{row.label}</dt>
+                        <dd className="tabular-nums text-white/90">
+                          {row.sign} {formatCurrency(row.value)}
+                        </dd>
+                      </div>
+                    ))}
+                    <div className="flex justify-between gap-4 border-t border-white/15 pt-1 font-medium">
+                      <dt className="text-white">Disponível</dt>
+                      <dd className="tabular-nums text-white">{formatCurrency(balance)}</dd>
                     </div>
-                  ))}
-                  <div className="flex justify-between gap-4 border-t border-white/15 pt-1 font-medium">
-                    <dt className="text-white">Disponível</dt>
-                    <dd className="tabular-nums text-white">{formatCurrency(balance)}</dd>
-                  </div>
-                </dl>
-              )}
-            </div>
-          )}
+                  </dl>
+                )}
+              </div>
+            )}
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
-              onClick={() => navigate('/app/driver/withdrawals', { state: { openNew: true } })}
-            >
-              <ArrowDownToLine className="h-4 w-4" /> Retirar
-            </button>
-            <button
-              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
-              onClick={() => navigate('/app/driver/withdrawals')}
-            >
-              <History className="h-4 w-4" /> Histórico
-            </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
+                onClick={() => navigate('/app/driver/withdrawals', { state: { openNew: true } })}
+              >
+                <ArrowDownToLine className="h-4 w-4" /> Retirar
+              </button>
+              <button
+                className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
+                onClick={() => navigate('/app/driver/withdrawals')}
+              >
+                <History className="h-4 w-4" /> Histórico
+              </button>
+            </div>
           </div>
+
+          <WalletIllustration
+            tone="brand"
+            surface="dark"
+            className="hidden h-40 w-auto shrink-0 sm:block lg:h-44"
+          />
         </div>
       </div>
 
