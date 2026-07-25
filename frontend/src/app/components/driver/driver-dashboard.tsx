@@ -1,28 +1,31 @@
 // src/app/components/driver/driver-dashboard.tsx
 //
-// Design System v2 ("Variation A"):
-// - Hero de saldo em verde profundo com ilustração vetorial e ações rápidas
-// - Cards de KPI neutros com profundidade
-// - Breakdown de ganhos por plataforma (linhas com % de participação)
-// - Moeda unificada em formatCurrency() — resolve a antiga mistura €/R$
+// Painel do motorista.
 //
-// Saldo: usa GET /balance/:userId (mesma fonte do admin, inclui ajustes).
-// O endpoint devolve o BalanceSummary completo, então o hero consegue abrir
-// a composição do saldo sem nenhuma chamada extra.
+// REGRA DE NEGÓCIO — ajustes de saldo entram nos ganhos:
+// Um crédito lançado pela administração é, na prática, uma corrida que entrou
+// por fora do registo. Por isso os cartões "Ganhos líquidos", "Esta semana" e
+// "Semana anterior" somam créditos e subtraem débitos. A palavra "ajuste" não
+// aparece na interface do motorista.
+// O cartão chama-se "Ganhos líquidos", e não "Ganhos totais", porque com
+// débitos incluídos o número pode descer de uma semana para a outra — um
+// número chamado "ganhos" que diminui confunde.
 //
-// Notas de manutenção:
-// - O hero é um flex de duas colunas: conteúdo à esquerda, ilustração à
-//   direita como item próprio. A ilustração NÃO é posicionada em absolute —
-//   assim ela nunca sangra para fora do card nem cobre os botões.
-// - O gradiente do hero é fixo e NÃO acompanha o modo escuro (em dark a escala
-//   de marca clareia, e um hero mais claro no escuro fica errado). Por isso
-//   todo texto dentro do hero usa branco com opacidade, nunca text-brand-*,
-//   que inverteria enquanto o fundo permanece igual.
-// - Todas as leituras de data passam por parseLocalDate. Ver o comentário do
-//   helper: new Date("2026-06-21") parseia como meia-noite UTC e pode deslocar
-//   um ganho para o dia/semana errados perto da virada.
+// LIMITAÇÃO CONHECIDA — datação dos ajustes:
+// Earning tem `date` (o dia da corrida) e `createdAt` (quando foi lançada).
+// BalanceAdjustment só tem `createdAt`. Os ajustes são portanto datados pela
+// criação: um crédito lançado hoje referente a uma corrida de duas semanas
+// atrás conta na semana corrente. Resolver isto exige um campo de data de
+// referência no modelo, decidido para depois.
+//
+// GRÁFICOS — adaptam-se ao volume de dados:
+// Um gráfico de seis meses com um único mês preenchido desenha cinco zeros, e
+// uma linha ligando zeros afirma que o motorista ganhou nada nesses meses,
+// quando na verdade não estava na plataforma. Por isso: barras em vez de linha
+// (barra não interpola), e quando o período seleccionado tem menos de dois
+// intervalos com movimento, mostra-se um estado explicativo em vez do gráfico.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -38,11 +41,10 @@ import {
 } from '@/app/components/ui/select';
 import {
   TrendingUp, TrendingDown, Loader2, AlertCircle, Plus,
-  ArrowDownToLine, History, ChevronDown,
+  ArrowDownToLine, History, ChevronDown, BarChart3, Lightbulb,
 } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { toast } from 'sonner';
 import { earningsService } from '@/features/driver/services/earnings.service';
@@ -50,145 +52,181 @@ import { withdrawalsService } from '@/features/driver/services/withdrawals.servi
 import { balanceService } from '@/features/admin/services/balance.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { formatCurrency, formatCurrencyCompact, formatPercent, formatDate } from '@/shared/lib/format';
+import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/lib/format';
+import {
+  PLATFORM_OPTIONS, platformColor, platformLabel, ADJUSTMENT_COLOR,
+} from '@/shared/lib/platform-labels';
 import { WalletIllustration } from '@/app/components/ui/wallet-illustration';
+import { EarningsHistoryModal } from './earnings-history-modal';
+import type { Adjustment } from '@/features/admin/services/balance.service';
 import type { ApiEarning, ApiWithdrawal, EarningPlatform } from '@/shared/types/api';
 
-// ── Constantes ────────────────────────────────────────────────────────────────
+type Period = '14d' | '30d' | '12m';
 
-const PLATFORM_LABELS: Record<string, string> = {
-  UBER: 'Uber', BOLT: 'Bolt', FREE_NOW: 'Free Now', OTHER: 'Outro',
+const PERIOD_LABELS: Record<Period, string> = {
+  '14d': 'Últimos 14 dias',
+  '30d': 'Últimos 30 dias',
+  '12m': 'Últimos 12 meses',
 };
 
-const PLATFORM_BADGE: Record<string, { letter: string; bg: string; fg: string }> = {
-  UBER: { letter: 'U', bg: '#1D1D1D', fg: '#ffffff' },
-  BOLT: { letter: 'B', bg: '#108865', fg: '#ffffff' },
-  FREE_NOW: { letter: 'F', bg: '#5dbf9c', fg: '#073d2f' },
-  OTHER: { letter: 'O', bg: '#8fd4ba', fg: '#073d2f' },
-};
+// ── Helpers de data ───────────────────────────────────────────────────────────
 
-const PLATFORMS: { value: EarningPlatform; label: string }[] = [
-  { value: 'UBER', label: 'Uber' },
-  { value: 'BOLT', label: 'Bolt' },
-  { value: 'FREE_NOW', label: 'Free Now' },
-  { value: 'OTHER', label: 'Outro' },
-];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Earnings dates are stored as @db.Date (date-only). `new Date("2026-06-21")`
-// parses as UTC midnight, but our week boundaries are in LOCAL time — that
-// mismatch could push a day's earnings into the wrong week near midnight.
-// Parsing the Y/M/D into a LOCAL date keeps comparisons consistent.
-//
-// IMPORTANTE: todo lugar que lê e.date precisa usar isto. Os builders de
-// gráfico usavam new Date() direto e reintroduziam o bug que este helper
-// existe para corrigir.
+// Earnings vêm como @db.Date. `new Date("2026-06-21")` parseia como meia-noite
+// UTC, mas os limites de semana são locais — a diferença pode empurrar um ganho
+// para o dia ou a semana errados. Parsear Y/M/D para data local resolve.
 function parseLocalDate(value: string | Date): Date {
   if (value instanceof Date) return value;
-  const datePart = String(value).slice(0, 10); // "YYYY-MM-DD"
+  const datePart = String(value).slice(0, 10);
   const [y, m, d] = datePart.split('-').map(Number);
-  if (y && m && d) return new Date(y, m - 1, d); // local midnight
+  if (y && m && d) return new Date(y, m - 1, d);
   return new Date(value);
 }
 
+function startOfDay(d: Date): Date {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+}
+
 function startOfWeek(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
+  const d = startOfDay(new Date());
   d.setDate(d.getDate() - d.getDay());
   return d;
 }
 
-function startOfLastWeek(): Date {
-  const d = startOfWeek();
-  d.setDate(d.getDate() - 7);
-  return d;
+function dayKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function buildMonthlyData(earnings: ApiEarning[], months = 6) {
-  const map: Record<string, number> = {};
-  earnings.forEach((e) => {
-    const d = parseLocalDate(e.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    map[key] = (map[key] ?? 0) + Number(e.amount);
-  });
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
-  const result: { month: string; earnings: number }[] = [];
+// ── Movimentos ────────────────────────────────────────────────────────────────
+
+/** Ganho registado ou ajuste, reduzidos a data + valor com sinal. */
+interface Movement {
+  date: Date;
+  amount: number;
+  platform: EarningPlatform | null; // null = ajuste de saldo
+}
+
+function toMovements(earnings: ApiEarning[], adjustments: Adjustment[]): Movement[] {
+  return [
+    ...earnings.map((e) => ({
+      date: parseLocalDate(e.date),
+      amount: Number(e.amount),
+      platform: e.platform,
+    })),
+    ...adjustments.map((a) => ({
+      date: startOfDay(new Date(a.createdAt)),
+      amount: a.type === 'CREDIT' ? Number(a.amount) : -Number(a.amount),
+      platform: null,
+    })),
+  ];
+}
+
+function sumBetween(movements: Movement[], from: Date, to: Date): number {
+  return movements
+    .filter((m) => m.date >= from && m.date < to)
+    .reduce((s, m) => s + m.amount, 0);
+}
+
+// ── Séries dos gráficos ───────────────────────────────────────────────────────
+
+interface Bucket { label: string; total: number }
+
+function buildSeries(movements: Movement[], period: Period): Bucket[] {
   const now = new Date();
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    result.push({
-      month: d.toLocaleDateString('pt-PT', { month: 'short' }),
-      earnings: Math.round(map[key] ?? 0),
+
+  if (period === '12m') {
+    const map: Record<string, number> = {};
+    movements.forEach((m) => {
+      const k = monthKey(m.date);
+      map[k] = (map[k] ?? 0) + m.amount;
+    });
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return {
+        label: d.toLocaleDateString('pt-PT', { month: 'short' }),
+        total: Math.round((map[monthKey(d)] ?? 0) * 100) / 100,
+      };
     });
   }
-  return result;
+
+  const days = period === '14d' ? 14 : 30;
+  const map: Record<string, number> = {};
+  movements.forEach((m) => {
+    const k = dayKey(m.date);
+    map[k] = (map[k] ?? 0) + m.amount;
+  });
+
+  return Array.from({ length: days }, (_, i) => {
+    const d = startOfDay(new Date());
+    d.setDate(d.getDate() - (days - 1 - i));
+    return {
+      label: d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' }),
+      total: Math.round((map[dayKey(d)] ?? 0) * 100) / 100,
+    };
+  });
 }
 
-// Conta REGISTOS de ganho por dia da semana, não corridas: o modal de registo
-// pede valor + plataforma + data, então um registo costuma ser o total do dia
-// numa plataforma. Os rótulos falam em "lançamentos" por esse motivo.
-function buildWeeklyData(earnings: ApiEarning[]) {
-  const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const map = Object.fromEntries(DAYS.map((d) => [d, 0]));
-  const cutoff = new Date();
-  cutoff.setHours(0, 0, 0, 0);
-  cutoff.setDate(cutoff.getDate() - 30);
+/** Origem dos ganhos nos últimos `days`, por plataforma + ajustes líquidos. */
+function buildOrigin(movements: Movement[], days = 30) {
+  const cutoff = startOfDay(new Date());
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const inRange = movements.filter((m) => m.date >= cutoff);
 
-  earnings
-    .filter((e) => parseLocalDate(e.date) >= cutoff)
-    .forEach((e) => {
-      const day = DAYS[parseLocalDate(e.date).getDay()];
-      map[day] += 1;
-    });
+  const byPlatform: Record<string, { amount: number; count: number }> = {};
+  let adjustmentsNet = 0;
 
-  return DAYS.map((day) => ({ day, lancamentos: map[day] }));
-}
+  inRange.forEach((m) => {
+    if (m.platform === null) {
+      adjustmentsNet += m.amount;
+      return;
+    }
+    byPlatform[m.platform] = byPlatform[m.platform] ?? { amount: 0, count: 0 };
+    byPlatform[m.platform].amount += m.amount;
+    byPlatform[m.platform].count += 1;
+  });
 
-/** Ganhos agrupados por plataforma nos últimos `days`, com % de participação. */
-function buildPlatformBreakdown(earnings: ApiEarning[], days = 30) {
-  const cutoff = new Date();
-  cutoff.setHours(0, 0, 0, 0);
-  cutoff.setDate(cutoff.getDate() - days);
-
-  const totals: Record<string, { amount: number; count: number }> = {};
-  let grand = 0;
-
-  earnings
-    .filter((e) => parseLocalDate(e.date) >= cutoff)
-    .forEach((e) => {
-      const p = e.platform;
-      totals[p] = totals[p] ?? { amount: 0, count: 0 };
-      totals[p].amount += Number(e.amount);
-      totals[p].count += 1;
-      grand += Number(e.amount);
-    });
-
-  return Object.entries(totals)
-    .map(([platform, v]) => ({
-      platform,
+  const segments = Object.entries(byPlatform)
+    .map(([key, v]) => ({
+      key,
+      label: platformLabel(key),
+      color: platformColor(key),
       amount: v.amount,
       count: v.count,
-      share: grand > 0 ? (v.amount / grand) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
-}
 
-// Fallback local enquanto o endpoint de saldo carrega.
-function calcBalance(earnings: ApiEarning[], withdrawals: ApiWithdrawal[]) {
-  const totalEarned = earnings.reduce((s, e) => s + Number(e.amount), 0);
-  const totalWithdrawn = withdrawals
-    .filter((w) => w.status === 'PAID' || w.status === 'APPROVED')
-    .reduce((s, w) => s + Number(w.amount), 0);
-  return Math.max(totalEarned - totalWithdrawn, 0);
+  // Créditos líquidos entram como um segmento próprio para que a soma da barra
+  // bata com o cartão "Ganhos líquidos". Descontos líquidos não viram segmento
+  // (não há barra negativa); aparecem como nota abaixo da legenda.
+  if (adjustmentsNet > 0) {
+    segments.push({
+      key: 'ADJUSTMENT',
+      label: 'Adicionado pela gestão',
+      color: ADJUSTMENT_COLOR,
+      amount: adjustmentsNet,
+      count: 0,
+    });
+  }
+
+  const total = segments.reduce((s, x) => s + x.amount, 0);
+  return {
+    segments: segments.map((s) => ({
+      ...s,
+      share: total > 0 ? (s.amount / total) * 100 : 0,
+    })),
+    total,
+    deductions: adjustmentsNet < 0 ? Math.abs(adjustmentsNet) : 0,
+  };
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-// Espelha a estrutura real da tela: mesmo número de cards, mesmas alturas de
-// gráfico. Um skeleton que não bate com o layout final causa um salto visível
-// quando os dados chegam.
 function DashboardSkeleton() {
   return (
     <div className="space-y-6" role="status" aria-busy="true">
@@ -217,40 +255,43 @@ function DashboardSkeleton() {
       </div>
 
       <Card className="shadow-card">
-        <CardHeader><Skeleton className="h-5 w-44" /></CardHeader>
-        <CardContent className="space-y-3">
-          {[0, 1].map((i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-1.5 w-full" />
-              </div>
-            </div>
-          ))}
-        </CardContent>
+        <CardHeader><Skeleton className="h-5 w-52" /></CardHeader>
+        <CardContent><Skeleton className="h-[260px] w-full" /></CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {[0, 1].map((i) => (
-          <Card key={i} className="shadow-card">
-            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
-            <CardContent><Skeleton className="h-[300px] w-full" /></CardContent>
-          </Card>
-        ))}
+      <Card className="shadow-card">
+        <CardHeader><Skeleton className="h-5 w-52" /></CardHeader>
+        <CardContent className="space-y-3">
+          <Skeleton className="h-3.5 w-full rounded-full" />
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-4 w-full" />)}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Estado de dados insuficientes ─────────────────────────────────────────────
+
+function NotEnoughData({ onRegister }: { onRegister: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-12 text-center">
+      <BarChart3 className="h-9 w-9 text-muted-foreground" aria-hidden="true" />
+      <div>
+        <p className="text-sm font-medium">Ainda não dá para desenhar a evolução</p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          Registe ganhos em pelo menos dois dias diferentes e o gráfico aparece aqui.
+        </p>
       </div>
+      <Button variant="outline" size="sm" onClick={onRegister}>
+        <Plus className="mr-1.5 h-3.5 w-3.5" />Registar ganho
+      </Button>
     </div>
   );
 }
 
 // ── Modal de registo de ganho ─────────────────────────────────────────────────
 
-interface AddEarningModalProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-function AddEarningModal({ open, onClose }: AddEarningModalProps) {
+function AddEarningModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
 
   const [amount, setAmount] = useState('');
@@ -306,7 +347,7 @@ function AddEarningModal({ open, onClose }: AddEarningModalProps) {
             <Select value={platform} onValueChange={(v) => setPlatform(v as EarningPlatform)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PLATFORMS.map((p) => (
+                {PLATFORM_OPTIONS.map((p) => (
                   <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -343,8 +384,11 @@ function AddEarningModal({ open, onClose }: AddEarningModalProps) {
 export function DriverDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [modalOpen, setModalOpen] = useState(false);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [period, setPeriod] = useState<Period>('14d');
 
   const earningsQuery = useQuery({
     queryKey: queryKeys.earnings.list,
@@ -362,6 +406,27 @@ export function DriverDashboard() {
     enabled: !!user?.id,
   });
 
+  // GET /balance/:userId/adjustments é libertado ao próprio dono
+  // (ensureOwnerOrManager no balance.service do backend), não só a admins.
+  const adjustmentsQuery = useQuery({
+    queryKey: queryKeys.balance.adjustments(user?.id ?? ''),
+    queryFn: () => balanceService.listAdjustments(user!.id),
+    enabled: !!user?.id,
+  });
+
+  const earnings = earningsQuery.data?.earnings ?? [];
+  const withdrawals: ApiWithdrawal[] = withdrawalsQuery.data?.withdrawals ?? [];
+  const adjustments = adjustmentsQuery.data?.adjustments ?? [];
+  const summary = balanceQuery.data?.balance;
+
+  const movements = useMemo(
+    () => toMovements(earnings, adjustments),
+    [earnings, adjustments],
+  );
+
+  const series = useMemo(() => buildSeries(movements, period), [movements, period]);
+  const origin = useMemo(() => buildOrigin(movements), [movements]);
+
   const isLoading = earningsQuery.isLoading || withdrawalsQuery.isLoading;
   const isError = earningsQuery.isError || withdrawalsQuery.isError;
 
@@ -376,26 +441,24 @@ export function DriverDashboard() {
     );
   }
 
-  const earnings = earningsQuery.data?.earnings ?? [];
-  const withdrawals = withdrawalsQuery.data?.withdrawals ?? [];
-  const summary = balanceQuery.data?.balance;
+  // ── Saldo ───────────────────────────────────────────────────────────────────
+  const localBalance = Math.max(
+    movements.reduce((s, m) => s + m.amount, 0)
+      - withdrawals
+        .filter((w) => w.status === 'PAID' || w.status === 'APPROVED')
+        .reduce((s, w) => s + Number(w.amount), 0),
+    0,
+  );
+  const balance = summary?.available ?? localBalance;
 
-  // Cálculos
-  const totalEarnings = earnings.reduce((s, e) => s + Number(e.amount), 0);
-  // Fonte única de verdade: mesmo endpoint que o admin usa (inclui ajustes).
-  // Fallback para o cálculo local enquanto a query de saldo carrega.
-  const balance = summary?.available ?? calcBalance(earnings, withdrawals);
-
-  // Composição do saldo. Serve para o motorista conferir a conta sem abrir
-  // chamado — todos os campos já vêm do mesmo GET /balance/:userId.
   const breakdownRows: { label: string; value: number; sign: '+' | '−' }[] = summary
     ? [
         { label: 'Ganhos registados', value: summary.totalEarnings, sign: '+' },
         ...(summary.totalCredits > 0
-          ? [{ label: 'Ajustes a crédito', value: summary.totalCredits, sign: '+' as const }]
+          ? [{ label: 'Adicionado pela gestão', value: summary.totalCredits, sign: '+' as const }]
           : []),
         ...(summary.totalDebits > 0
-          ? [{ label: 'Ajustes a débito', value: summary.totalDebits, sign: '−' as const }]
+          ? [{ label: 'Descontos', value: summary.totalDebits, sign: '−' as const }]
           : []),
         ...(summary.totalWithdrawn > 0
           ? [{ label: 'Já retirado', value: summary.totalWithdrawn, sign: '−' as const }]
@@ -406,33 +469,33 @@ export function DriverDashboard() {
       ]
     : [];
 
+  // ── KPIs (líquidos de ajustes) ──────────────────────────────────────────────
+  const netTotal = movements.reduce((s, m) => s + m.amount, 0);
+
   const thisWeekStart = startOfWeek();
-  const lastWeekStart = startOfLastWeek();
-  // End of this week (start + 7 days) so "this week" can't leak future dates.
   const thisWeekEnd = new Date(thisWeekStart);
   thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
-  const thisWeekEarnings = earnings
-    .filter((e) => { const d = parseLocalDate(e.date); return d >= thisWeekStart && d < thisWeekEnd; })
-    .reduce((s, e) => s + Number(e.amount), 0);
+  const thisWeek = sumBetween(movements, thisWeekStart, thisWeekEnd);
+  const lastWeek = sumBetween(movements, lastWeekStart, thisWeekStart);
+  const weekTrend = lastWeek > 0 ? ((thisWeek - lastWeek) / lastWeek) * 100 : null;
 
-  const lastWeekEarnings = earnings
-    .filter((e) => { const d = parseLocalDate(e.date); return d >= lastWeekStart && d < thisWeekStart; })
-    .reduce((s, e) => s + Number(e.amount), 0);
+  // ── Frases de conclusão ─────────────────────────────────────────────────────
+  const activeBuckets = series.filter((b) => b.total > 0);
+  const hasSeries = activeBuckets.length >= 2;
 
-  // Variação DESTA semana em relação à ANTERIOR. Positivo = esta semana maior.
-  // Fica no card "Esta semana", não no hero: é variação de ganhos, não de saldo.
-  const weekTrend =
-    lastWeekEarnings > 0
-      ? ((thisWeekEarnings - lastWeekEarnings) / lastWeekEarnings) * 100
-      : null;
+  const best = activeBuckets.reduce<Bucket | null>(
+    (acc, b) => (!acc || b.total > acc.total ? b : acc), null,
+  );
+  const average = activeBuckets.length
+    ? activeBuckets.reduce((s, b) => s + b.total, 0) / activeBuckets.length
+    : 0;
+  const unit = period === '12m' ? 'mês' : 'dia';
+  const unitPlural = period === '12m' ? 'meses' : 'dias';
 
-  const monthlyData = buildMonthlyData(earnings);
-  const weeklyData = buildWeeklyData(earnings);
-  const platformBreakdown = buildPlatformBreakdown(earnings);
-  const recentFive = [...earnings]
-    .sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime())
-    .slice(0, 5);
+  const topSegment = origin.segments[0];
 
   return (
     <div className="space-y-6">
@@ -445,13 +508,13 @@ export function DriverDashboard() {
           </h2>
           <p className="text-muted-foreground">Aqui está o resumo da sua atividade.</p>
         </div>
-        <Button onClick={() => setModalOpen(true)} className="shrink-0">
+        <Button onClick={() => setAddOpen(true)} className="shrink-0">
           <Plus className="h-4 w-4 mr-2" />
           Registar Ganho
         </Button>
       </div>
 
-      {/* Hero: saldo + composição + ações */}
+      {/* Hero */}
       <div
         className="overflow-hidden rounded-xl p-6 shadow-brand"
         style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
@@ -507,7 +570,7 @@ export function DriverDashboard() {
               </button>
               <button
                 className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
-                onClick={() => navigate('/app/driver/withdrawals')}
+                onClick={() => setHistoryOpen(true)}
               >
                 <History className="h-4 w-4" /> Histórico
               </button>
@@ -522,12 +585,12 @@ export function DriverDashboard() {
         </div>
       </div>
 
-      {/* KPIs neutros */}
+      {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="shadow-card">
           <CardContent className="pt-5">
-            <p className="text-sm text-muted-foreground mb-1">Ganhos totais</p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(totalEarnings)}</p>
+            <p className="text-sm text-muted-foreground mb-1">Ganhos líquidos</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(netTotal)}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {earnings.length} lançamento{earnings.length !== 1 ? 's' : ''}
             </p>
@@ -536,162 +599,163 @@ export function DriverDashboard() {
         <Card className="shadow-card">
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Esta semana</p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(thisWeekEarnings)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(thisWeek)}</p>
             {weekTrend !== null ? (
               <p className={`text-xs mt-1 flex items-center gap-1 ${weekTrend >= 0 ? 'text-success' : 'text-destructive'}`}>
                 {weekTrend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                 {formatPercent(weekTrend)} vs. semana anterior
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground mt-1">Últimos 7 dias</p>
+              <p className="text-xs text-muted-foreground mt-1">Desde domingo</p>
             )}
           </CardContent>
         </Card>
         <Card className="shadow-card">
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Semana anterior</p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(lastWeekEarnings)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(lastWeek)}</p>
             <p className="text-xs text-muted-foreground mt-1">7 dias antes</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Breakdown por plataforma */}
-      {platformBreakdown.length > 0 && (
-        <Card className="shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Ganhos por plataforma</CardTitle>
-            <span className="text-xs text-muted-foreground">Últimos 30 dias</span>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {platformBreakdown.map((row) => {
-                const badge = PLATFORM_BADGE[row.platform] ?? PLATFORM_BADGE.OTHER;
-                return (
-                  <div key={row.platform} className="flex items-center gap-3">
-                    <div
-                      className="h-9 w-9 rounded-lg flex items-center justify-center text-sm font-semibold shrink-0"
-                      style={{ background: badge.bg, color: badge.fg }}
-                    >
-                      {badge.letter}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium">
-                          {PLATFORM_LABELS[row.platform] ?? row.platform}
-                          <span className="text-muted-foreground font-normal ml-2">
-                            {row.count} lançamento{row.count !== 1 ? 's' : ''}
-                          </span>
-                        </span>
-                        <span className="text-muted-foreground tabular-nums">{formatCurrency(row.amount)}</span>
-                      </div>
-                      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${row.share}%`, background: badge.bg }}
-                        />
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground w-10 text-right shrink-0 tabular-nums">
-                      {Math.round(row.share)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Gráficos */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="shadow-card">
-          <CardHeader><CardTitle>Ganhos mensais</CardTitle></CardHeader>
-          <CardContent>
-            {monthlyData.every((d) => d.earnings === 0) ? (
-              <p className="text-sm text-muted-foreground text-center py-10">
-                Nenhum ganho registado ainda.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+      {/* Quanto ganhou por dia */}
+      <Card className="shadow-card">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Quanto ganhou por {unit}</CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">{PERIOD_LABELS[period]}</p>
+          </div>
+          <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
+            <SelectTrigger className="w-[168px] shrink-0"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
+                <SelectItem key={p} value={p}>{PERIOD_LABELS[p]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          {!hasSeries ? (
+            <NotEnoughData onRegister={() => setAddOpen(true)} />
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={series} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis
+                    dataKey="label" stroke="var(--muted-foreground)" fontSize={11}
+                    tickLine={false} axisLine={false} interval="preserveStartEnd"
+                  />
                   <YAxis
-                    stroke="var(--muted-foreground)" fontSize={12}
+                    stroke="var(--muted-foreground)" fontSize={11}
+                    tickLine={false} axisLine={false}
                     tickFormatter={(v) => (v === 0 ? '€0' : formatCurrencyCompact(v))}
                   />
-                  <Tooltip formatter={(v: number) => [formatCurrency(v), 'Ganhos']} />
-                  <Line type="monotone" dataKey="earnings" stroke="#108865" strokeWidth={2.5} dot={{ fill: '#108865', r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-card">
-          <CardHeader><CardTitle>Lançamentos por dia da semana</CardTitle></CardHeader>
-          <CardContent>
-            {weeklyData.every((d) => d.lancamentos === 0) ? (
-              <p className="text-sm text-muted-foreground text-center py-10">
-                Nenhum lançamento nos últimos 30 dias.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={weeklyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="day" stroke="var(--muted-foreground)" fontSize={12} />
-                  <YAxis allowDecimals={false} stroke="var(--muted-foreground)" fontSize={12} />
-                  <Tooltip formatter={(v: number) => [v, 'Lançamentos']} />
-                  <Bar dataKey="lancamentos" fill="#108865" radius={[6, 6, 0, 0]} />
+                  <Tooltip
+                    cursor={{ fill: 'var(--secondary)' }}
+                    formatter={(v: number) => [formatCurrency(v), 'Ganhos']}
+                  />
+                  <Bar dataKey="total" fill="#108865" radius={[4, 4, 0, 0]} maxBarSize={26} />
                 </BarChart>
               </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Ganhos recentes */}
-      <Card className="shadow-card">
-        <CardHeader><CardTitle>Ganhos recentes</CardTitle></CardHeader>
-        <CardContent>
-          {recentFive.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Nenhum ganho registado ainda. Clica em "Registar Ganho" para começar.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {recentFive.map((earning) => {
-                const badge = PLATFORM_BADGE[earning.platform] ?? PLATFORM_BADGE.OTHER;
-                return (
-                  <div
-                    key={earning.id}
-                    className="flex items-center gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
-                  >
-                    <div
-                      className="h-9 w-9 rounded-lg flex items-center justify-center text-sm font-semibold shrink-0"
-                      style={{ background: badge.bg, color: badge.fg }}
-                    >
-                      {badge.letter}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {PLATFORM_LABELS[earning.platform] ?? earning.platform}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{formatDate(earning.date)}</p>
-                    </div>
-                    <p className="font-semibold text-success tabular-nums">
-                      + {formatCurrency(earning.amount)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+              {best && (
+                <p className="mt-3 flex items-start gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
+                  <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    Melhor {unit}: <strong className="font-medium text-foreground">{formatCurrency(best.total)}</strong> em {best.label}.
+                    Média de {formatCurrency(average)} nos {unitPlural} com movimento.
+                  </span>
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
-      <AddEarningModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      {/* De onde vem o seu dinheiro */}
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>De onde vem o seu dinheiro</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Últimos 30 dias · {formatCurrency(origin.total)} no total
+          </p>
+        </CardHeader>
+        <CardContent>
+          {origin.segments.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum ganho nos últimos 30 dias.
+            </p>
+          ) : (
+            <>
+              <div className="mb-4 flex h-3.5 gap-0.5 overflow-hidden">
+                {origin.segments.map((s, i) => (
+                  <div
+                    key={s.key}
+                    style={{
+                      width: `${s.share}%`,
+                      background: s.color,
+                      borderTopLeftRadius: i === 0 ? 7 : 0,
+                      borderBottomLeftRadius: i === 0 ? 7 : 0,
+                      borderTopRightRadius: i === origin.segments.length - 1 ? 7 : 0,
+                      borderBottomRightRadius: i === origin.segments.length - 1 ? 7 : 0,
+                    }}
+                  />
+                ))}
+              </div>
+
+              <ul className="space-y-2">
+                {origin.segments.map((s) => (
+                  <li key={s.key} className="flex items-center gap-2.5 text-sm">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                      style={{ background: s.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                    {s.count > 0 && (
+                      <span className="hidden shrink-0 text-muted-foreground sm:inline">
+                        {s.count} lançamento{s.count !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span className="w-20 shrink-0 text-right tabular-nums">
+                      {formatCurrency(s.amount)}
+                    </span>
+                    <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">
+                      {Math.round(s.share)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {origin.deductions > 0 && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Descontos aplicados no período: −{formatCurrency(origin.deductions)}
+                </p>
+              )}
+
+              {topSegment && (
+                <p className="mt-3 flex items-start gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
+                  <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    <strong className="font-medium text-foreground">{topSegment.label}</strong> responde
+                    por {Math.round(topSegment.share)}% do que entrou nos últimos 30 dias.
+                  </span>
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <AddEarningModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <EarningsHistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        earnings={earnings}
+        adjustments={adjustments}
+      />
     </div>
   );
 }
