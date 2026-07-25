@@ -67,6 +67,17 @@ export const queryKeys = {
     adjustments: (userId: string) => ['balance', 'adjustments', userId] as const,
   },
 
+  // Analytics (admin)
+  //
+  // O período entra na chave: trocar o selector muda a chave e o React Query
+  // busca de novo, mantendo em cache o resultado de cada período. Sem isso os
+  // dados de 30 dias continuariam a aparecer depois de escolher 12 meses.
+  analytics: {
+    all: ['analytics'] as const,
+    stats: (from?: string, to?: string) =>
+      ['analytics', 'stats', from ?? 'default', to ?? 'default'] as const,
+  },
+
   // Settings (admin)
   settings: {
     all: ['settings'] as const,

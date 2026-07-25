@@ -10,8 +10,11 @@ function getActor(req: AuthRequest) {
 }
 
 export class AnalyticsController {
+  // GET /analytics/stats?from=2026-06-01&to=2026-06-30
+  // Sem datas, o service assume os últimos 30 dias.
   getStats = async (req: AuthRequest, res: Response) => {
-    const stats = await analyticsService.getStats(getActor(req));
+    const { from, to } = req.query as { from?: string; to?: string };
+    const stats = await analyticsService.getStats(getActor(req), { from, to });
     return ok(res, { stats });
   };
 }
