@@ -1,12 +1,9 @@
 // src/app/components/driver/vehicles-management.tsx
 //
-// FIXES:
-// - Focus-loss bug: VehicleForm was defined INSIDE the component, so every
-//   keystroke re-created the component and React remounted the inputs (losing
-//   focus). It's now hoisted to module scope and receives form/onField as props.
-// - Header used text-white on the (now light) background → illegible. Fixed.
-// - Restyled to the light fintech shell (PageHeader, brand status colors).
-// - Cada veículo mostra os documentos obrigatórios (enviar/reenviar/ver).
+// Tela "Meus veículos" do motorista.
+// - Cada card exibe a ilustração SVG do carro (cor por status)
+// - Hover: card levanta, carro desliza e rodas giram (classe "group")
+// - Documentos obrigatórios por veículo (enviar/reenviar/ver)
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -29,6 +26,7 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiVehicle, VehicleStatus } from '@/shared/types/api';
 import { VehicleDocuments } from './vehicle-documents';
+import { VehicleIllustration } from '@/app/components/ui/vehicle-illustration';
 
 type FormState = { brand: string; model: string; plate: string; year: string };
 const EMPTY_FORM: FormState = { brand: '', model: '', plate: '', year: '' };
@@ -61,7 +59,7 @@ function isFormValid(form: FormState) {
   );
 }
 
-// ── Hoisted form (module scope) — this is the fix for the focus bug ──────────
+// ── Hoisted form (module scope) — fix do bug de perda de foco ────────────────
 interface VehicleFormProps {
   form: FormState;
   onField: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -237,22 +235,23 @@ export function VehiclesManagement() {
       {/* Grid */}
       <div className="grid gap-4 md:grid-cols-2">
         {vehicles.map((v) => (
-          <Card key={v.id} className="shadow-card">
-            <CardHeader>
+          <Card
+            key={v.id}
+            className="group shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+          >
+            <CardHeader className="pb-2">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-                    <Car className="h-5 w-5 text-accent" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">{v.brand} {v.model}</CardTitle>
-                    <CardDescription>{v.plate} · {v.year}</CardDescription>
-                  </div>
+                <div>
+                  <CardTitle className="text-base">{v.brand} {v.model}</CardTitle>
+                  <CardDescription>{v.plate} · {v.year}</CardDescription>
                 </div>
                 <StatusBadge status={v.status} />
               </div>
             </CardHeader>
             <CardContent>
+              {/* Ilustração — cor segue o status; anima no hover do card */}
+              <VehicleIllustration status={v.status} className="mb-3 -mt-1" />
+
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(v)}>
                   <Pencil className="h-3 w-3 mr-1" />Editar
