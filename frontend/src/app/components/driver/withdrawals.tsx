@@ -1,53 +1,123 @@
 // src/app/components/driver/withdrawals.tsx
-// Responsivo: layout empilhado no mobile
+//
+// Tela de retiradas do motorista. Layout empilhado, funciona no mobile.
+//
+// Notas de manutenção:
+// - O hero usa o verde de marca, não azul. Azul já é a cor do status
+//   "Aprovado" nesta mesma tela; usá-lo também no hero faria a cor significar
+//   duas coisas diferentes lado a lado. A distinção entre esta tela e o
+//   dashboard vem da ilustração, não da cor.
+// - O gradiente do hero é fixo e NÃO acompanha o modo escuro (em dark a escala
+//   de marca clareia). Por isso todo texto dentro dele usa branco com
+//   opacidade, nunca text-brand-*.
+// - Todo valor monetário passa por formatCurrency(). Ver o comentário no topo
+//   de shared/lib/format.ts: o prefixo do input de valor ainda estava em "R$".
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { DollarSign, CheckCircle, Clock, XCircle, ArrowDownToLine, Loader2, AlertCircle } from 'lucide-react';
+import { PageHeader } from '@/app/components/ui/page-header';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/app/components/ui/dialog';
+import {
+  CheckCircle, Clock, XCircle, ArrowDownToLine, Loader2, AlertCircle, Info,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { FINANCIAL } from '@/shared/constants';
-import type { WithdrawalStatus } from '@/shared/types/api';
+import { PayoutIllustration } from '@/app/components/ui/payout-illustration';
+import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 
-function getStatusBadge(status: WithdrawalStatus) {
-  switch (status) {
-    case 'PAID':     return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Pago</Badge>;
-    case 'APPROVED': return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
-    case 'PENDING':  return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-    case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-    default: return null;
-  }
+// Ponto único de verdade para o status de uma retirada. As variantes dark:
+// são necessárias porque bg-*-100 / text-*-800 do Tailwind não invertem
+// sozinhas — no modo escuro o badge ficaria texto escuro sobre fundo claro.
+const STATUS_META: Record<
+  WithdrawalStatus,
+  { label: string; icon: typeof CheckCircle; cls: string }
+> = {
+  PAID: {
+    label: 'Pago',
+    icon: CheckCircle,
+    cls: 'bg-brand-50 text-brand-700 dark:text-brand-400',
+  },
+  APPROVED: {
+    label: 'Aprovado',
+    icon: CheckCircle,
+    cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
+  },
+  PENDING: {
+    label: 'Em análise',
+    icon: Clock,
+    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  },
+  REJECTED: {
+    label: 'Rejeitado',
+    icon: XCircle,
+    cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+  },
+};
+
+function StatusBadge({ status }: { status: WithdrawalStatus }) {
+  const meta = STATUS_META[status];
+  if (!meta) return null;
+  const Icon = meta.icon;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.cls}`}
+    >
+      <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
 }
 
 export function Withdrawals() {
   const queryClient = useQueryClient();
-  const [open, setOpen]     = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // O botão "Retirar" do hero do dashboard navega para cá com
+  // state.openNew = true, já abrindo o diálogo. Sem isso os dois botões do
+  // hero levariam exatamente ao mesmo lugar.
+  const [open, setOpen] = useState(
+    () => Boolean((location.state as { openNew?: boolean } | null)?.openNew),
+  );
   const [amount, setAmount] = useState('');
+
+  // Limpa o state para que um refresh (ou voltar no histórico) não reabra
+  // o diálogo sozinho.
+  useEffect(() => {
+    if ((location.state as { openNew?: boolean } | null)?.openNew) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.withdrawals.list,
-    queryFn:  () => withdrawalsService.list(),
+    queryFn: () => withdrawalsService.list(),
   });
 
-  const withdrawals    = data?.withdrawals ?? [];
-  const totalWithdrawn = withdrawals
-    .filter(w => w.status === 'PAID' || w.status === 'APPROVED')
-    .reduce((sum, w) => sum + Number(w.amount), 0);
+  const withdrawals: ApiWithdrawal[] = data?.withdrawals ?? [];
+
+  const settled = withdrawals.filter((w) => w.status === 'PAID' || w.status === 'APPROVED');
+  const totalWithdrawn = settled.reduce((sum, w) => sum + Number(w.amount), 0);
 
   const { mutate: createWithdrawal, isPending } = useMutation({
     mutationFn: (value: number) => withdrawalsService.create(value),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
       toast.success('Solicitação de saque enviada!');
-      setOpen(false); setAmount('');
+      setOpen(false);
+      setAmount('');
     },
     onError: (err: any) => toast.error(err?.message ?? 'Erro ao solicitar saque.'),
   });
@@ -56,17 +126,19 @@ export function Withdrawals() {
     e.preventDefault();
     const value = parseFloat(amount);
     if (isNaN(value) || value < FINANCIAL.minWithdrawal) {
-      toast.error(`Valor mínimo: € ${FINANCIAL.minWithdrawal},00`); return;
+      toast.error(`Valor mínimo: ${formatCurrency(FINANCIAL.minWithdrawal)}`);
+      return;
     }
     if (value > FINANCIAL.maxWithdrawal) {
-      toast.error(`Valor máximo: € ${FINANCIAL.maxWithdrawal.toLocaleString('pt-PT')},00`); return;
+      toast.error(`Valor máximo: ${formatCurrency(FINANCIAL.maxWithdrawal)}`);
+      return;
     }
     createWithdrawal(value);
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+      <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando saques…</span>
       </div>
     );
@@ -74,109 +146,151 @@ export function Withdrawals() {
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <AlertCircle className="h-10 w-10 text-red-400" />
+      <div className="flex flex-col items-center justify-center gap-3 py-20">
+        <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Erro ao carregar saques.</p>
-        <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })}>Tentar novamente</Button>
+        <Button
+          variant="outline"
+          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })}
+        >
+          Tentar novamente
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Retiradas</h2>
-          <p className="text-muted-foreground">Solicite saques e acompanhe seu histórico</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <ArrowDownToLine className="h-4 w-4 mr-2" />Nova Retirada
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Solicitar Retirada</DialogTitle>
-              <DialogDescription>
-                Mínimo € {FINANCIAL.minWithdrawal},00 · Máximo € {FINANCIAL.maxWithdrawal.toLocaleString('pt-PT')},00
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Valor da Retirada</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
-                  <Input id="amount" type="number" step="0.01" min={FINANCIAL.minWithdrawal}
-                    max={FINANCIAL.maxWithdrawal} placeholder="0,00" className="pl-10"
-                    value={amount} onChange={e => setAmount(e.target.value)} required />
+      <PageHeader
+        title="Retiradas"
+        subtitle="Solicite saques e acompanhe seu histórico"
+        icon={<ArrowDownToLine className="h-5 w-5" />}
+        actions={
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <ArrowDownToLine className="mr-2 h-4 w-4" />Nova Retirada
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Solicitar Retirada</DialogTitle>
+                <DialogDescription>
+                  Mínimo {formatCurrency(FINANCIAL.minWithdrawal)} · Máximo{' '}
+                  {formatCurrency(FINANCIAL.maxWithdrawal)}
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Valor da retirada</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-muted-foreground">€</span>
+                    <Input
+                      id="amount" type="number" step="0.01"
+                      min={FINANCIAL.minWithdrawal} max={FINANCIAL.maxWithdrawal}
+                      placeholder="0,00" className="pl-8"
+                      value={amount} onChange={(e) => setAmount(e.target.value)} required
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-800">
-                  <strong>Importante:</strong> Saques são processados em até {FINANCIAL.processingDays} dias úteis.
-                </p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Solicitar
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+
+                <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">
+                    Saques são processados em até {FINANCIAL.processingDays} dias úteis.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isPending}>
+                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      {/* Hero: total sacado */}
+      <div
+        className="relative overflow-hidden rounded-xl p-6 shadow-brand"
+        style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
+      >
+        <PayoutIllustration
+          surface="dark"
+          className="pointer-events-none absolute -right-2 top-1/2 hidden h-36 w-auto -translate-y-1/2 sm:block"
+        />
+
+        <div className="relative sm:max-w-[62%]">
+          <p className="text-sm text-white/70">Total sacado</p>
+          <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
+            {formatCurrency(totalWithdrawn)}
+          </p>
+          <p className="mt-2 text-sm text-white/70">
+            {settled.length} saque{settled.length !== 1 ? 's' : ''} aprovado
+            {settled.length !== 1 ? 's' : ''} ou pago{settled.length !== 1 ? 's' : ''}
+          </p>
+        </div>
       </div>
 
-      {/* Saldo */}
-      <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-        <CardHeader>
-          <CardTitle className="text-white">Total Sacado</CardTitle>
-          <CardDescription className="text-blue-100">Soma de saques aprovados e pagos</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-3xl sm:text-4xl font-bold">{formatCurrency(totalWithdrawn)}</p>
-              <p className="text-sm text-blue-100 mt-2">
-                {withdrawals.filter(w => w.status === 'PENDING').length} saque(s) pendente(s)
-              </p>
-            </div>
-            <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 opacity-50" />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Histórico */}
-      <Card>
+      <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>Histórico de Retiradas</CardTitle>
+          <CardTitle>Histórico de retiradas</CardTitle>
           <CardDescription>Acompanhe todas as suas solicitações</CardDescription>
         </CardHeader>
         <CardContent>
           {withdrawals.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Nenhum saque solicitado ainda.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum saque solicitado ainda.
+            </p>
           ) : (
-            <div className="space-y-3">
-              {withdrawals.map(w => (
-                <div key={w.id} className="flex items-start justify-between border-b pb-3 last:border-0 gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{formatCurrency(Number(w.amount))}</p>
-                      {getStatusBadge(w.status)}
+            <ul className="space-y-3">
+              {withdrawals.map((w) => {
+                const note = w.notes?.trim();
+                return (
+                  <li key={w.id} className="border-b pb-3 last:border-0 last:pb-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium tabular-nums">
+                            {formatCurrency(Number(w.amount))}
+                          </p>
+                          <StatusBadge status={w.status} />
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-medium tabular-nums">
+                          {new Date(w.requestedAt).toLocaleDateString('pt-PT')}
+                        </p>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {new Date(w.requestedAt).toLocaleTimeString('pt-PT', {
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
                     </div>
-                    {w.notes && <p className="text-xs text-muted-foreground mt-1 truncate">{w.notes}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-medium">{new Date(w.requestedAt).toLocaleDateString('pt-PT')}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(w.requestedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+
+                    {/* Motivo da recusa em destaque — mesmo padrão dos documentos.
+                        Para os demais status a nota é informativa. */}
+                    {note && (
+                      w.status === 'REJECTED' ? (
+                        <p className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                          <span className="font-medium">Motivo:</span> {note}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">{note}</p>
+                      )
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </CardContent>
       </Card>

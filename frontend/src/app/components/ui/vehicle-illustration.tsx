@@ -16,15 +16,19 @@
 //   da bounding box do próprio grupo — imune a alterações no viewBox.
 // - As animações ficam sob a variante motion-safe, respeitando
 //   prefers-reduced-motion.
+//
+// Cores: o verde do status ACTIVE usa a escala de marca do theme.css
+// (--brand-500/-100/-700). Os demais status usam as cores semânticas
+// equivalentes às de STATUS_STYLES em vehicles-management.tsx.
 
 import type { VehicleStatus } from '@/shared/types/api';
 
 const STATUS_COLORS: Record<VehicleStatus, { body: string; window: string; dark: string }> = {
-  ACTIVE: { body: '#1D9E75', window: '#9FE1CB', dark: '#0F6E56' },
-  PENDING: { body: '#EF9F27', window: '#FAC775', dark: '#854F0B' },
-  MAINTENANCE: { body: '#378ADD', window: '#B5D4F4', dark: '#185FA5' },
-  INACTIVE: { body: '#888780', window: '#D3D1C7', dark: '#5F5E5A' },
-  SOLD: { body: '#B4B2A9', window: '#D3D1C7', dark: '#5F5E5A' },
+  ACTIVE: { body: '#108865', window: '#c2e8d8', dark: '#0a5440' },
+  PENDING: { body: '#f59e0b', window: '#fde68a', dark: '#78350f' },
+  MAINTENANCE: { body: '#3b82f6', window: '#bfdbfe', dark: '#1e40af' },
+  INACTIVE: { body: '#6b7280', window: '#d1d5db', dark: '#374151' },
+  SOLD: { body: '#9ca3af', window: '#e5e7eb', dark: '#4b5563' },
 };
 
 // Eixo de rotação das rodas. Mantenha em sincronia com os arcos do path da
@@ -70,16 +74,16 @@ export function VehicleIllustration({ status, className = '' }: Props) {
         <rect x="108" y="46" width="12" height="2.6" rx="1.3" fill={c.dark} />
 
         {/* farol */}
-        <path d="M176 50 L182 51 L182 55 L176 54 Z" fill="#FAC775" />
+        <path d="M176 50 L182 51 L182 55 L176 54 Z" fill="#fcd34d" />
 
         {/* roda traseira — gira no hover do card (.group) */}
         <g
           className="motion-safe:group-hover:animate-spin [animation-duration:1.4s]"
           style={WHEEL_STYLE}
         >
-          <circle cx="52" cy="63" r="12" fill="#2C2C2A" />
-          <circle cx="52" cy="63" r="5.5" fill="#B4B2A9" />
-          <rect x="50.8" y="53" width="2.4" height="8" fill="#5F5E5A" />
+          <circle cx="52" cy="63" r="12" fill="#1D1D1D" />
+          <circle cx="52" cy="63" r="5.5" fill="#d1d5db" />
+          <rect x="50.8" y="53" width="2.4" height="8" fill="#6b7280" />
         </g>
 
         {/* roda dianteira */}
@@ -87,9 +91,9 @@ export function VehicleIllustration({ status, className = '' }: Props) {
           className="motion-safe:group-hover:animate-spin [animation-duration:1.4s]"
           style={WHEEL_STYLE}
         >
-          <circle cx="152" cy="63" r="12" fill="#2C2C2A" />
-          <circle cx="152" cy="63" r="5.5" fill="#B4B2A9" />
-          <rect x="150.8" y="53" width="2.4" height="8" fill="#5F5E5A" />
+          <circle cx="152" cy="63" r="12" fill="#1D1D1D" />
+          <circle cx="152" cy="63" r="5.5" fill="#d1d5db" />
+          <rect x="150.8" y="53" width="2.4" height="8" fill="#6b7280" />
         </g>
       </svg>
     </div>

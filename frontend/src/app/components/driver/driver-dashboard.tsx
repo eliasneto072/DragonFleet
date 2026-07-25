@@ -1,15 +1,26 @@
 // src/app/components/driver/driver-dashboard.tsx
 //
-// Redesigned (Design System v2 / "Variation A"):
-// - Deep-green balance hero card with quick actions
-// - Neutral KPI cards with depth
-// - Per-platform earnings breakdown (rows w/ share %)
-// - Currency unified to formatCurrency() — fixes the old €/R$ mix
-// - Same data layer, services and modal logic as before
+// Design System v2 ("Variation A"):
+// - Hero de saldo em verde profundo com ilustração vetorial e ações rápidas
+// - Cards de KPI neutros com profundidade
+// - Breakdown de ganhos por plataforma (linhas com % de participação)
+// - Moeda unificada em formatCurrency() — resolve a antiga mistura €/R$
 //
 // Saldo: usa GET /balance/:userId (mesma fonte do admin, inclui ajustes).
+// O endpoint devolve o BalanceSummary completo, então o hero consegue abrir
+// a composição do saldo sem nenhuma chamada extra.
+//
+// Notas de manutenção:
+// - O gradiente do hero é fixo e NÃO acompanha o modo escuro (em dark a escala
+//   de marca clareia, e um hero mais claro no escuro fica errado). Por isso
+//   todo texto dentro do hero usa branco com opacidade, nunca text-brand-*,
+//   que inverteria enquanto o fundo permanece igual.
+// - Todas as leituras de data passam por parseLocalDate. Ver o comentário do
+//   helper: new Date("2026-06-21") parseia como meia-noite UTC e pode deslocar
+//   um ganho para o dia/semana errados perto da virada.
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -23,7 +34,7 @@ import {
 } from '@/app/components/ui/select';
 import {
   TrendingUp, TrendingDown, Loader2, AlertCircle, Plus,
-  ArrowDownToLine, History, Wallet,
+  ArrowDownToLine, History, ChevronDown,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -36,6 +47,7 @@ import { balanceService } from '@/features/admin/services/balance.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { formatCurrency, formatCurrencyCompact, formatPercent, formatDate } from '@/shared/lib/format';
+import { WalletIllustration } from '@/app/components/ui/wallet-illustration';
 import type { ApiEarning, ApiWithdrawal, EarningPlatform } from '@/shared/types/api';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -64,6 +76,10 @@ const PLATFORMS: { value: EarningPlatform; label: string }[] = [
 // parses as UTC midnight, but our week boundaries are in LOCAL time — that
 // mismatch could push a day's earnings into the wrong week near midnight.
 // Parsing the Y/M/D into a LOCAL date keeps comparisons consistent.
+//
+// IMPORTANTE: todo lugar que lê e.date precisa usar isto. Os builders de
+// gráfico usavam new Date() direto e reintroduziam o bug que este helper
+// existe para corrigir.
 function parseLocalDate(value: string | Date): Date {
   if (value instanceof Date) return value;
   const datePart = String(value).slice(0, 10); // "YYYY-MM-DD"
@@ -88,7 +104,7 @@ function startOfLastWeek(): Date {
 function buildMonthlyData(earnings: ApiEarning[], months = 6) {
   const map: Record<string, number> = {};
   earnings.forEach((e) => {
-    const d = new Date(e.date);
+    const d = parseLocalDate(e.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     map[key] = (map[key] ?? 0) + Number(e.amount);
   });
@@ -106,32 +122,37 @@ function buildMonthlyData(earnings: ApiEarning[], months = 6) {
   return result;
 }
 
+// Conta REGISTOS de ganho por dia da semana, não corridas: o modal de registo
+// pede valor + plataforma + data, então um registo costuma ser o total do dia
+// numa plataforma. Os rótulos falam em "lançamentos" por esse motivo.
 function buildWeeklyData(earnings: ApiEarning[]) {
   const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const map = Object.fromEntries(DAYS.map((d) => [d, 0]));
   const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - 30);
 
   earnings
-    .filter((e) => new Date(e.date) >= cutoff)
+    .filter((e) => parseLocalDate(e.date) >= cutoff)
     .forEach((e) => {
-      const day = DAYS[new Date(e.date).getDay()];
+      const day = DAYS[parseLocalDate(e.date).getDay()];
       map[day] += 1;
     });
 
-  return DAYS.map((day) => ({ day, corridas: map[day] }));
+  return DAYS.map((day) => ({ day, lancamentos: map[day] }));
 }
 
-/** Earnings grouped by platform over the last `days`, with share %. */
+/** Ganhos agrupados por plataforma nos últimos `days`, com % de participação. */
 function buildPlatformBreakdown(earnings: ApiEarning[], days = 30) {
   const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - days);
 
   const totals: Record<string, { amount: number; count: number }> = {};
   let grand = 0;
 
   earnings
-    .filter((e) => new Date(e.date) >= cutoff)
+    .filter((e) => parseLocalDate(e.date) >= cutoff)
     .forEach((e) => {
       const p = e.platform;
       totals[p] = totals[p] ?? { amount: 0, count: 0 };
@@ -258,7 +279,9 @@ function AddEarningModal({ open, onClose }: AddEarningModalProps) {
 
 export function DriverDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const earningsQuery = useQuery({
     queryKey: queryKeys.earnings.list,
@@ -299,12 +322,34 @@ export function DriverDashboard() {
 
   const earnings = earningsQuery.data?.earnings ?? [];
   const withdrawals = withdrawalsQuery.data?.withdrawals ?? [];
+  const summary = balanceQuery.data?.balance;
 
   // Cálculos
   const totalEarnings = earnings.reduce((s, e) => s + Number(e.amount), 0);
   // Fonte única de verdade: mesmo endpoint que o admin usa (inclui ajustes).
   // Fallback para o cálculo local enquanto a query de saldo carrega.
-  const balance = balanceQuery.data?.balance.available ?? calcBalance(earnings, withdrawals);
+  const balance = summary?.available ?? calcBalance(earnings, withdrawals);
+
+  // Composição do saldo. Serve para o motorista conferir a conta sem abrir
+  // chamado — todos os campos já vêm do mesmo GET /balance/:userId.
+  const breakdownRows: { label: string; value: number; sign: '+' | '−' }[] = summary
+    ? [
+        { label: 'Ganhos registados', value: summary.totalEarnings, sign: '+' },
+        ...(summary.totalCredits > 0
+          ? [{ label: 'Ajustes a crédito', value: summary.totalCredits, sign: '+' as const }]
+          : []),
+        ...(summary.totalDebits > 0
+          ? [{ label: 'Ajustes a débito', value: summary.totalDebits, sign: '−' as const }]
+          : []),
+        ...(summary.totalWithdrawn > 0
+          ? [{ label: 'Já retirado', value: summary.totalWithdrawn, sign: '−' as const }]
+          : []),
+        ...(summary.pendingWithdrawals > 0
+          ? [{ label: 'Retiradas em análise', value: summary.pendingWithdrawals, sign: '−' as const }]
+          : []),
+      ]
+    : [];
+
   const thisWeekStart = startOfWeek();
   const lastWeekStart = startOfLastWeek();
   // End of this week (start + 7 days) so "this week" can't leak future dates.
@@ -319,7 +364,8 @@ export function DriverDashboard() {
     .filter((e) => { const d = parseLocalDate(e.date); return d >= lastWeekStart && d < thisWeekStart; })
     .reduce((s, e) => s + Number(e.amount), 0);
 
-  // Trend of THIS week relative to LAST week. Positive = this week is higher.
+  // Variação DESTA semana em relação à ANTERIOR. Positivo = esta semana maior.
+  // Fica no card "Esta semana", não no hero: é variação de ganhos, não de saldo.
   const weekTrend =
     lastWeekEarnings > 0
       ? ((thisWeekEarnings - lastWeekEarnings) / lastWeekEarnings) * 100
@@ -329,7 +375,7 @@ export function DriverDashboard() {
   const weeklyData = buildWeeklyData(earnings);
   const platformBreakdown = buildPlatformBreakdown(earnings);
   const recentFive = [...earnings]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime())
     .slice(0, 5);
 
   return (
@@ -349,37 +395,67 @@ export function DriverDashboard() {
         </Button>
       </div>
 
-      {/* Hero: saldo + ações (Variation A) */}
+      {/* Hero: saldo + composição + ações */}
       <div
-        className="rounded-xl p-6 shadow-brand"
+        className="relative overflow-hidden rounded-xl p-6 shadow-brand"
         style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
       >
-        <div className="flex items-center gap-2 text-[#9FE1CB] text-sm mb-1.5">
-          <Wallet className="h-4 w-4" />
-          <span>Saldo disponível para retirada</span>
-        </div>
-        <div className="flex items-end justify-between flex-wrap gap-4">
-          <div className="flex items-baseline gap-3">
-            <span className="text-white text-4xl font-bold tracking-tight">
-              {formatCurrency(balance)}
-            </span>
-            {weekTrend !== null && (
-              <span className={`text-sm flex items-center gap-1 ${weekTrend >= 0 ? 'text-[#5DCAA5]' : 'text-red-300'}`}>
-                {weekTrend >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                {formatPercent(weekTrend)}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-2">
+        <WalletIllustration
+          surface="dark"
+          className="pointer-events-none absolute -right-3 top-1/2 hidden h-36 w-auto -translate-y-1/2 sm:block"
+        />
+
+        <div className="relative sm:max-w-[62%]">
+          <p className="text-sm text-white/70">Saldo disponível para retirada</p>
+
+          <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
+            {formatCurrency(balance)}
+          </p>
+
+          {breakdownRows.length > 0 && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setBreakdownOpen((v) => !v)}
+                aria-expanded={breakdownOpen}
+                className="flex items-center gap-1 rounded text-xs text-white/70 transition-colors hover:text-white"
+              >
+                Como chegámos a este valor
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${breakdownOpen ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {breakdownOpen && (
+                <dl className="mt-2 max-w-xs space-y-1 border-t border-white/15 pt-2 text-xs">
+                  {breakdownRows.map((row) => (
+                    <div key={row.label} className="flex justify-between gap-4">
+                      <dt className="text-white/70">{row.label}</dt>
+                      <dd className="tabular-nums text-white/90">
+                        {row.sign} {formatCurrency(row.value)}
+                      </dd>
+                    </div>
+                  ))}
+                  <div className="flex justify-between gap-4 border-t border-white/15 pt-1 font-medium">
+                    <dt className="text-white">Disponível</dt>
+                    <dd className="tabular-nums text-white">{formatCurrency(balance)}</dd>
+                  </div>
+                </dl>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
-              className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 transition-colors text-white text-sm font-medium rounded-lg px-4 py-2"
-              onClick={() => { window.location.href = '/app/driver/withdrawals'; }}
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
+              onClick={() => navigate('/app/driver/withdrawals', { state: { openNew: true } })}
             >
               <ArrowDownToLine className="h-4 w-4" /> Retirar
             </button>
             <button
-              className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 transition-colors text-white text-sm font-medium rounded-lg px-4 py-2"
-              onClick={() => { window.location.href = '/app/driver/withdrawals'; }}
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25"
+              onClick={() => navigate('/app/driver/withdrawals')}
             >
               <History className="h-4 w-4" /> Histórico
             </button>
@@ -392,7 +468,7 @@ export function DriverDashboard() {
         <Card className="shadow-card">
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Ganhos totais</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalEarnings)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(totalEarnings)}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {earnings.length} lançamento{earnings.length !== 1 ? 's' : ''}
             </p>
@@ -401,7 +477,7 @@ export function DriverDashboard() {
         <Card className="shadow-card">
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Esta semana</p>
-            <p className="text-2xl font-bold">{formatCurrency(thisWeekEarnings)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(thisWeekEarnings)}</p>
             {weekTrend !== null ? (
               <p className={`text-xs mt-1 flex items-center gap-1 ${weekTrend >= 0 ? 'text-success' : 'text-destructive'}`}>
                 {weekTrend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -415,7 +491,7 @@ export function DriverDashboard() {
         <Card className="shadow-card">
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Semana anterior</p>
-            <p className="text-2xl font-bold">{formatCurrency(lastWeekEarnings)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatCurrency(lastWeekEarnings)}</p>
             <p className="text-xs text-muted-foreground mt-1">7 dias antes</p>
           </CardContent>
         </Card>
@@ -445,10 +521,10 @@ export function DriverDashboard() {
                         <span className="font-medium">
                           {PLATFORM_LABELS[row.platform] ?? row.platform}
                           <span className="text-muted-foreground font-normal ml-2">
-                            {row.count} corrida{row.count !== 1 ? 's' : ''}
+                            {row.count} lançamento{row.count !== 1 ? 's' : ''}
                           </span>
                         </span>
-                        <span className="text-muted-foreground">{formatCurrency(row.amount)}</span>
+                        <span className="text-muted-foreground tabular-nums">{formatCurrency(row.amount)}</span>
                       </div>
                       <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                         <div
@@ -457,7 +533,7 @@ export function DriverDashboard() {
                         />
                       </div>
                     </div>
-                    <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+                    <span className="text-xs text-muted-foreground w-10 text-right shrink-0 tabular-nums">
                       {Math.round(row.share)}%
                     </span>
                   </div>
@@ -495,11 +571,11 @@ export function DriverDashboard() {
         </Card>
 
         <Card className="shadow-card">
-          <CardHeader><CardTitle>Corridas por dia da semana</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Lançamentos por dia da semana</CardTitle></CardHeader>
           <CardContent>
-            {weeklyData.every((d) => d.corridas === 0) ? (
+            {weeklyData.every((d) => d.lancamentos === 0) ? (
               <p className="text-sm text-muted-foreground text-center py-10">
-                Nenhuma corrida nos últimos 30 dias.
+                Nenhum lançamento nos últimos 30 dias.
               </p>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
@@ -507,8 +583,8 @@ export function DriverDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="day" stroke="var(--muted-foreground)" fontSize={12} />
                   <YAxis allowDecimals={false} stroke="var(--muted-foreground)" fontSize={12} />
-                  <Tooltip formatter={(v: number) => [v, 'Corridas']} />
-                  <Bar dataKey="corridas" fill="#108865" radius={[6, 6, 0, 0]} />
+                  <Tooltip formatter={(v: number) => [v, 'Lançamentos']} />
+                  <Bar dataKey="lancamentos" fill="#108865" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -545,7 +621,7 @@ export function DriverDashboard() {
                       </p>
                       <p className="text-sm text-muted-foreground">{formatDate(earning.date)}</p>
                     </div>
-                    <p className="font-semibold text-success">
+                    <p className="font-semibold text-success tabular-nums">
                       + {formatCurrency(earning.amount)}
                     </p>
                   </div>
