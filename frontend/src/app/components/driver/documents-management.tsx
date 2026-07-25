@@ -1,443 +1,427 @@
 // src/app/components/driver/documents-management.tsx
+//
+// Painel de conformidade do motorista.
+//
+// MUDANÇA DE FUNDO: a tela iterava sobre `documents` — o que existe no banco —
+// e por isso só mostrava o que já tinha sido enviado. Um motorista com dois
+// dos cinco documentos via dois cartões e nenhuma pista de que faltavam três.
+// Agora itera sobre DRIVER_DOCUMENT_TYPES e rende um slot por documento
+// exigido, enviado ou não. É o que vehicle-documents.tsx já fazia.
+//
+// ORDEM: as linhas são ordenadas por urgência (rejeitado, expirado, em falta,
+// em análise, aprovado). Antes seguiam a ordem devolvida pela API, e um
+// documento rejeitado podia aparecer abaixo de dois aprovados.
+//
+// VEÍCULOS: esta tela RESUME os documentos do veículo, com uma linha de
+// progresso por veículo e um atalho para a tela de Veículos. Não duplica o
+// fluxo de envio: quem age sobre o carro age em Veículos. Assim existe um
+// único sítio que responde "estou em ordem?", sem esticar a tela quando há
+// mais de um veículo nem replicar a interface de upload.
+//
+// ESTADO "PRONTO PARA TRABALHAR": conta os documentos pessoais aprovados. Mas
+// UserStatus também tem BLOCKED e INACTIVE, que um administrador pode aplicar
+// por outro motivo — nesse caso a contagem diria "pronto" a quem não pode
+// trabalhar. O estado da conta tem precedência sobre a contagem.
 
-import { useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
-import { Label } from '@/app/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle, ExternalLink, Paperclip, X, CalendarClock, RefreshCw } from 'lucide-react';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import { PageHeader } from '@/app/components/ui/page-header';
+import {
+  AlertCircle, Car, ChevronRight, ExternalLink, FileText, Loader2,
+  RefreshCw, Upload,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
+import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
-import type { DocumentType, DocumentStatus, ApiDocument } from '@/shared/types/api';
-import { DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, requiresIssueDate, daysUntil } from '@/shared/lib/document-labels';
+import { useAuth } from '@/features/auth/context/AuthContext';
+import {
+  DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES, daysUntil,
+} from '@/shared/lib/document-labels';
+import {
+  DocumentStatusIcon, documentStateMeta, type DocumentSlotState,
+} from '@/app/components/ui/document-status';
+import { DocumentUploadDialog } from '@/app/components/ui/document-upload-dialog';
+import { DocumentsIllustration } from '@/app/components/ui/documents-illustration';
+import type { ApiDocument, DocumentType } from '@/shared/types/api';
 
-const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-const MAX_SIZE_MB = 10;
+/** Dias de antecedência a partir dos quais a validade vira aviso. */
+const EXPIRY_WARNING_DAYS = 7;
 
-// Estados em que o motorista pode reenviar (substituir) o documento.
-const REPLACEABLE: DocumentStatus[] = ['REJECTED', 'EXPIRED'];
-
-function getStatusBadge(status: DocumentStatus) {
-  switch (status) {
-    case 'APPROVED':
-      return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-          <CheckCircle className="h-3 w-3 mr-1" />Aprovado
-        </Badge>
-      );
-    case 'PENDING':
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-          <Clock className="h-3 w-3 mr-1" />Pendente
-        </Badge>
-      );
-    case 'REJECTED':
-      return (
-        <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
-          <XCircle className="h-3 w-3 mr-1" />Rejeitado
-        </Badge>
-      );
-    case 'EXPIRED':
-      return (
-        <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">
-          <CalendarClock className="h-3 w-3 mr-1" />Expirado
-        </Badge>
-      );
-    default:
-      return null;
-  }
-}
-
-function formatBytes(bytes: number) {
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
-
-// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
-function viewDocument(id: string) {
+function openDocument(id: string) {
   documentsService.openFile(id).catch((err: any) =>
     toast.error(err?.message ?? 'Erro ao abrir o documento.'),
   );
 }
 
+function cleanNote(notes?: string | null) {
+  return notes?.replace('[avisado-7d]', '').trim() ?? '';
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function DocumentsSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar os documentos…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+      </div>
+
+      <Skeleton className="h-36 w-full rounded-xl" />
+
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-48" /></CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-8 w-20 shrink-0" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Linha de documento ────────────────────────────────────────────────────────
+
+interface SlotRow {
+  type: DocumentType;
+  doc?: ApiDocument;
+  state: DocumentSlotState;
+  priority: number;
+}
+
+function DocumentRow({
+  row,
+  onUpload,
+}: {
+  row: SlotRow;
+  onUpload: (type: DocumentType, isResubmit: boolean) => void;
+}) {
+  const meta = documentStateMeta(row.state);
+  const name = DOCUMENT_TYPE_LABELS[row.type] ?? row.type;
+  const note = cleanNote(row.doc?.notes);
+  const showNote = row.state === 'REJECTED' && !!note;
+
+  // Linha secundária: estado, mais validade quando existe.
+  let subline = meta.label;
+  if (row.doc?.expiresAt && row.state === 'APPROVED') {
+    const dias = daysUntil(row.doc.expiresAt);
+    const data = new Date(row.doc.expiresAt).toLocaleDateString('pt-PT');
+    if (dias !== null && dias >= 0) {
+      subline = dias <= EXPIRY_WARNING_DAYS
+        ? `Aprovado · expira em ${dias} dia${dias === 1 ? '' : 's'} (${data})`
+        : `Aprovado · válido até ${data}`;
+    }
+  } else if (row.state === 'PENDING' && row.doc) {
+    subline = `Em análise desde ${new Date(row.doc.createdAt).toLocaleDateString('pt-PT')}`;
+  }
+
+  const expiringSoon =
+    row.state === 'APPROVED' &&
+    row.doc?.expiresAt &&
+    (daysUntil(row.doc.expiresAt) ?? 99) <= EXPIRY_WARNING_DAYS;
+
+  return (
+    <li className="border-b border-border py-3 last:border-0">
+      <div className="flex items-center gap-3">
+        <DocumentStatusIcon state={row.state} className="h-[18px] w-[18px]" />
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{name}</p>
+          <p
+            className={`truncate text-xs ${
+              expiringSoon ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+            }`}
+          >
+            {subline}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {row.doc && (
+            <Button
+              variant="ghost" size="sm" className="h-8 w-8 p-0"
+              onClick={() => openDocument(row.doc!.id)}
+              aria-label={`Ver ${name}`}
+            >
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+          {row.state === 'MISSING' && (
+            <Button size="sm" className="h-8" onClick={() => onUpload(row.type, false)}>
+              <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Enviar
+            </Button>
+          )}
+          {(row.state === 'REJECTED' || row.state === 'EXPIRED') && (
+            <Button size="sm" className="h-8" onClick={() => onUpload(row.type, true)}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Reenviar
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {showNote && (
+        <p className="ml-[30px] mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          <span className="font-medium">Motivo da rejeição:</span> {note}
+        </p>
+      )}
+    </li>
+  );
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
+
 export function DocumentsManagement() {
-  const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const [open, setOpen] = useState(false);
-  const [docType, setDocType] = useState<DocumentType | ''>('');
-  const [file, setFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState('');
-  const [issuedAt, setIssuedAt] = useState(''); // data de emissão (Registo Criminal)
-  const [isResubmit, setIsResubmit] = useState(false); // reenvio de documento rejeitado/expirado
+  const [uploadType, setUploadType] = useState<DocumentType | null>(null);
+  const [isResubmit, setIsResubmit] = useState(false);
 
-  // ── Leitura ───────────────────────────────────────────────────────────────
-  const { data, isLoading, isError } = useQuery({
+  const documentsQuery = useQuery({
     queryKey: queryKeys.documents.list,
     queryFn: () => documentsService.list(),
   });
 
-  const documents = data?.documents ?? [];
-
-  // Tipos que o motorista já enviou e ainda estão válidos/em análise (não pode
-  // reenviar). Rejeitados/expirados NÃO entram aqui — esses podem ser reenviados.
-  const lockedTypes = new Set(
-    documents.filter((d) => !REPLACEABLE.includes(d.status)).map((d) => d.type),
-  );
-
-  // ── Criar / reenviar documento ────────────────────────────────────────────
-  const { mutate: createDocument, isPending } = useMutation({
-    mutationFn: () => documentsService.create(docType as DocumentType, file!, issuedAt || undefined),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-      toast.success(isResubmit ? 'Documento reenviado! Aguardando nova análise.' : 'Documento enviado! Aguardando aprovação.');
-      handleClose();
-    },
-    onError: (err: any) => {
-      toast.error(err?.message ?? 'Erro ao enviar documento.');
-    },
+  const vehiclesQuery = useQuery({
+    queryKey: queryKeys.vehicles.list,
+    queryFn: () => vehiclesService.list(),
   });
 
-  function handleClose() {
-    setOpen(false);
-    setDocType('');
-    setFile(null);
-    setFileError('');
-    setIssuedAt('');
-    setIsResubmit(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }
+  const documents = documentsQuery.data?.documents ?? [];
+  const vehicles = vehiclesQuery.data?.vehicles ?? [];
 
-  // Abre o dialog já configurado para reenvio de um documento específico.
-  function openResubmit(doc: ApiDocument) {
-    setDocType(doc.type);
-    setIsResubmit(true);
-    setFile(null);
-    setFileError('');
-    setIssuedAt('');
-    setOpen(true);
-  }
+  // Um slot por documento exigido, ordenado por urgência.
+  const slots = useMemo<SlotRow[]>(() => {
+    const personal = documents.filter((d) => !d.vehicleId);
+    return DRIVER_DOCUMENT_TYPES
+      .map((type) => {
+        const doc = personal.find((d) => d.type === type);
+        const state: DocumentSlotState = doc ? doc.status : 'MISSING';
+        return { type, doc, state, priority: documentStateMeta(state).priority };
+      })
+      .sort((a, b) => a.priority - b.priority);
+  }, [documents]);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0] ?? null;
-    setFileError('');
-    setFile(null);
+  // Progresso por veículo — resumo apenas, a gestão acontece em Veículos.
+  const vehicleRows = useMemo(() => {
+    return vehicles.map((v) => {
+      const own = documents.filter((d) => d.vehicleId === v.id);
+      const approved = VEHICLE_DOCUMENT_TYPES.filter(
+        (t) => own.find((d) => d.type === t)?.status === 'APPROVED',
+      ).length;
+      return { vehicle: v, approved, total: VEHICLE_DOCUMENT_TYPES.length };
+    });
+  }, [vehicles, documents]);
 
-    if (!selected) return;
+  if (documentsQuery.isLoading) return <DocumentsSkeleton />;
 
-    if (!ACCEPTED_MIME_TYPES.includes(selected.type)) {
-      setFileError('Formato inválido. Use JPEG, PNG, WebP ou PDF.');
-      return;
-    }
-
-    if (selected.size > MAX_SIZE_MB * 1024 * 1024) {
-      setFileError(`Arquivo muito grande. Máximo ${MAX_SIZE_MB} MB.`);
-      return;
-    }
-
-    setFile(selected);
-  }
-
-  function handleDropZoneClick() {
-    fileInputRef.current?.click();
-  }
-
-  function handleRemoveFile(e: React.MouseEvent) {
-    e.stopPropagation();
-    setFile(null);
-    setFileError('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!docType) { toast.error('Selecione o tipo do documento.'); return; }
-    if (!file) { toast.error('Selecione um arquivo.'); return; }
-    if (requiresIssueDate(docType) && !issuedAt) {
-      toast.error('Informe a data de emissão do Registo Criminal.');
-      return;
-    }
-    createDocument();
-  }
-
-  // Tipos disponíveis no seletor de novo envio: os que ainda não estão bloqueados.
-  const availableTypes = DRIVER_DOCUMENT_TYPES.filter((key) => !lockedTypes.has(key));
-
-  // ── Estados de carregamento / erro ────────────────────────────────────────
-  if (isLoading) {
+  if (documentsQuery.isError) {
     return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Carregando documentos…</span>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <AlertCircle className="h-10 w-10 text-red-400" />
-        <p className="text-muted-foreground">Erro ao carregar documentos.</p>
-        <Button
-          variant="outline"
-          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.documents.all })}
-        >
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
+        <p className="text-muted-foreground">Erro ao carregar os documentos.</p>
+        <Button variant="outline" onClick={() => documentsQuery.refetch()}>
           Tentar novamente
         </Button>
       </div>
     );
   }
 
+  const approvedCount = slots.filter((s) => s.state === 'APPROVED').length;
+  const missingCount = slots.length - approvedCount;
+  const accountBlocked = user?.status === 'BLOCKED' || user?.status === 'INACTIVE';
+
+  const heroState = accountBlocked
+    ? 'blocked'
+    : missingCount === 0
+      ? 'complete'
+      : 'incomplete';
+
+  const HERO_COPY = {
+    blocked: {
+      eyebrow: 'Conta indisponível',
+      title: user?.status === 'BLOCKED' ? 'A sua conta está bloqueada' : 'A sua conta está inativa',
+      hint: 'Fale com o suporte para regularizar a situação.',
+      tint: 'bg-destructive/10',
+      bar: 'bg-destructive',
+    },
+    complete: {
+      eyebrow: 'Documentação em ordem',
+      title: 'Está pronto para trabalhar',
+      hint: 'Avisamos aqui se algum documento precisar de renovação.',
+      tint: 'bg-success/10',
+      bar: 'bg-success',
+    },
+    incomplete: {
+      eyebrow: 'Ainda não pode começar a trabalhar',
+      title: `Falta${missingCount === 1 ? '' : 'm'} ${missingCount} documento${missingCount === 1 ? '' : 's'}`,
+      hint: 'Envie tudo para a sua conta ser libertada.',
+      tint: 'bg-warning/10',
+      bar: 'bg-warning',
+    },
+  }[heroState];
+
+  const vehiclesMissing = vehicleRows.reduce((s, r) => s + (r.total - r.approved), 0);
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Meus Documentos</h2>
-          <p className="text-muted-foreground">Gerencie seus documentos e certificações</p>
-        </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Documentos"
+        subtitle="Envie e acompanhe a sua documentação"
+        icon={<FileText className="h-5 w-5" />}
+      />
 
-        <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setIsResubmit(false); setDocType(''); }}>
-              <Upload className="h-4 w-4 mr-2" />
-              Enviar Documento
-            </Button>
-          </DialogTrigger>
-
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{isResubmit ? 'Reenviar Documento' : 'Enviar Novo Documento'}</DialogTitle>
-              <DialogDescription>
-                {isResubmit
-                  ? 'Substitua o documento anterior por uma nova versão. Voltará para análise.'
-                  : `Selecione o tipo e anexe o arquivo (JPEG, PNG, WebP ou PDF — máx. ${MAX_SIZE_MB} MB)`}
-              </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-
-              {/* Tipo do documento */}
-              <div className="space-y-2">
-                <Label>Tipo de Documento</Label>
-                <Select
-                  value={docType}
-                  onValueChange={(v) => setDocType(v as DocumentType)}
-                  disabled={isResubmit}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Em reenvio, mostra apenas o tipo fixado. Em novo envio, os disponíveis. */}
-                    {(isResubmit ? [docType as DocumentType] : availableTypes).map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {DOCUMENT_TYPE_LABELS[key]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!isResubmit && availableTypes.length === 0 && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    Todos os tipos de documento já foram enviados.
-                  </p>
-                )}
-              </div>
-
-              {/* Data de emissão — só para o Registo Criminal (regra dos 90 dias) */}
-              {docType && requiresIssueDate(docType) && (
-                <div className="space-y-2">
-                  <Label htmlFor="issuedAt">Data de emissão</Label>
-                  <input
-                    id="issuedAt"
-                    type="date"
-                    value={issuedAt}
-                    max={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => setIssuedAt(e.target.value)}
-                    className="w-full rounded-lg border border-input px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    O Registo Criminal é válido por 90 dias a partir da data de emissão.
-                  </p>
-                </div>
-              )}
-
-              {/* Área de upload */}
-              <div className="space-y-2">
-                <Label>Arquivo</Label>
-
-                <div
-                  onClick={handleDropZoneClick}
-                  className={`
-                    relative flex flex-col items-center justify-center
-                    border-2 border-dashed rounded-lg p-6 cursor-pointer
-                    transition-colors select-none
-                    ${file
-                      ? 'border-primary/50 bg-primary/5'
-                      : 'border-muted-foreground/30 hover:border-primary/40 hover:bg-muted/30'
-                    }
-                  `}
-                >
-                  {file ? (
-                    <div className="flex items-center gap-3 w-full">
-                      <Paperclip className="h-5 w-5 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{file.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRemoveFile}
-                        className="shrink-0 rounded-full p-1 hover:bg-muted transition-colors"
-                      >
-                        <X className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm font-medium">Clique para selecionar o arquivo</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        JPEG, PNG, WebP ou PDF — máx. {MAX_SIZE_MB} MB
-                      </p>
-                    </>
-                  )}
-                </div>
-
-                {/* Input real escondido */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp,.pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-
-                {fileError && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    {fileError}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isPending || !file || !docType}>
-                  {isPending
-                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando…</>
-                    : <><Upload className="h-4 w-4 mr-2" />{isResubmit ? 'Reenviar' : 'Enviar'}</>
-                  }
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Grid de documentos */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {documents.map((doc) => {
-          const canResubmit = REPLACEABLE.includes(doc.status);
-          return (
-            <Card key={doc.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                      <FileText className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">
-                        {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.type}
-                      </CardTitle>
-                      <CardDescription>
-                        {new Date(doc.createdAt).toLocaleDateString('pt-PT')}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  {getStatusBadge(doc.status)}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {/* Validade (Registo Criminal) */}
-                {doc.expiresAt && doc.status !== 'EXPIRED' && (() => {
-                  const dias = daysUntil(doc.expiresAt);
-                  const urgente = dias !== null && dias <= 7;
-                  return (
-                    <p className={`text-xs mb-3 flex items-center gap-1 ${urgente ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>
-                      <CalendarClock className="h-3 w-3 shrink-0" />
-                      {dias !== null && dias >= 0
-                        ? `Válido até ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')} (${dias} dia${dias === 1 ? '' : 's'})`
-                        : `Expirou em ${new Date(doc.expiresAt).toLocaleDateString('pt-PT')}`}
-                    </p>
-                  );
-                })()}
-                {doc.status === 'EXPIRED' && (
-                  <p className="text-xs mb-3 flex items-center gap-1 text-orange-600 font-medium">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    Documento expirado. Reenvie uma versão atualizada.
-                  </p>
-                )}
-                {doc.notes && doc.notes.replace('[avisado-7d]', '').trim() && (
-                  <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5 mb-3">
-                    <p className="font-medium text-xs mb-0.5 flex items-center gap-1">
-                      <XCircle className="h-3 w-3 shrink-0" />Motivo da rejeição
-                    </p>
-                    {doc.notes.replace('[avisado-7d]', '').trim()}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => viewDocument(doc.id)}
-                  >
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Visualizar
-                  </Button>
-                  {canResubmit && (
-                    <Button
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => openResubmit(doc)}
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Reenviar
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Empty state */}
-      {documents.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="font-semibold mb-2">Nenhum documento enviado</h3>
-            <p className="text-sm text-muted-foreground text-center mb-4">
-              Envie seus documentos para começar a trabalhar na plataforma.
+      {/* Estado de conformidade */}
+      <div className={`overflow-hidden rounded-xl p-5 sm:p-6 ${HERO_COPY.tint}`}>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-muted-foreground">{HERO_COPY.eyebrow}</p>
+            <p className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              {HERO_COPY.title}
             </p>
-            <Button onClick={() => { setIsResubmit(false); setDocType(''); setOpen(true); }}>
-              <Upload className="h-4 w-4 mr-2" />
-              Enviar Primeiro Documento
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+
+            {!accountBlocked && (
+              <>
+                <div className="mt-4 h-1.5 max-w-xs overflow-hidden rounded-full bg-background/60">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${HERO_COPY.bar}`}
+                    style={{ width: `${(approvedCount / slots.length) * 100}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {approvedCount} de {slots.length} aprovados
+                </p>
+              </>
+            )}
+
+            <p className="mt-2 text-sm text-muted-foreground">{HERO_COPY.hint}</p>
+
+            {!accountBlocked && vehiclesMissing > 0 && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                O seu veículo tem mais {vehiclesMissing} documento
+                {vehiclesMissing === 1 ? '' : 's'} por regularizar.
+              </p>
+            )}
+          </div>
+
+          <DocumentsIllustration
+            state={heroState}
+            className="h-24 w-auto shrink-0 sm:h-32"
+          />
+        </div>
+      </div>
+
+      {/* Documentos pessoais */}
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Os seus documentos</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Os que precisam de ação aparecem primeiro
+          </p>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <ul>
+            {slots.map((row) => (
+              <DocumentRow
+                key={row.type}
+                row={row}
+                onUpload={(type, resubmit) => {
+                  setUploadType(type);
+                  setIsResubmit(resubmit);
+                }}
+              />
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Documentos dos veículos — resumo com atalho */}
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Documentos dos veículos</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            O envio é feito na tela de Veículos
+          </p>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          {vehiclesQuery.isLoading ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              A carregar veículos…
+            </div>
+          ) : vehicleRows.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Car className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                Nenhum veículo registado ainda.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/driver/vehicles')}>
+                Adicionar veículo
+              </Button>
+            </div>
+          ) : (
+            <ul>
+              {vehicleRows.map(({ vehicle, approved, total }) => {
+                const complete = approved === total;
+                return (
+                  <li key={vehicle.id} className="border-b border-border py-3 last:border-0">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/driver/vehicles')}
+                      className="flex w-full items-center gap-3 rounded-md text-left transition-colors hover:bg-muted/40"
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${complete ? 'bg-success' : 'bg-warning'}`}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {vehicle.brand} {vehicle.model}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          <span className="font-mono tracking-tight">{vehicle.plate}</span>
+                          {' · '}
+                          {approved} de {total} aprovados
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">Gerir</span>
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <DocumentUploadDialog
+        open={!!uploadType}
+        onClose={() => setUploadType(null)}
+        type={uploadType}
+        isResubmit={isResubmit}
+      />
     </div>
   );
 }
