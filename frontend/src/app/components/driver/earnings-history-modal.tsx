@@ -14,6 +14,10 @@
 // ajustes são datados pela criação — é a única data disponível hoje, e o
 // backend aplica exatamente o mesmo critério ao montar o PDF, para que o
 // documento não divirja desta lista.
+//
+// Responsividade: o DialogContent tem max-w-[calc(100%-2rem)] e p-6, logo num
+// ecrã de 360px sobram ~280px de conteúdo. Por isso a data vive na linha
+// secundária junto ao detalhe, em vez de ocupar uma coluna própria.
 
 import { useMemo, useState } from 'react';
 import {
@@ -153,7 +157,7 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
 
         {/* Filtros */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[170px] flex-1 space-y-1.5">
+          <div className="min-w-[150px] flex-1 space-y-1.5">
             <Label htmlFor="preset">Período</Label>
             <Select value={preset} onValueChange={(v) => setPreset(v as Preset)}>
               <SelectTrigger id="preset"><SelectValue /></SelectTrigger>
@@ -167,7 +171,7 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
 
           {preset === 'custom' && (
             <>
-              <div className="space-y-1.5">
+              <div className="min-w-[130px] flex-1 space-y-1.5">
                 <Label htmlFor="from">De</Label>
                 <Input
                   id="from" type="date" value={customFrom}
@@ -175,7 +179,7 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
                   onChange={(e) => setCustomFrom(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
+              <div className="min-w-[130px] flex-1 space-y-1.5">
                 <Label htmlFor="to">Até</Label>
                 <Input
                   id="to" type="date" value={customTo}
@@ -204,11 +208,11 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
             </p>
           </div>
         ) : (
-          <ul className="max-h-[46vh] space-y-0 overflow-y-auto pr-1">
+          <ul className="max-h-[38vh] overflow-y-auto pr-1 sm:max-h-[46vh]">
             {rows.map((r) => (
               <li
                 key={r.id}
-                className="flex items-center gap-3 border-b border-border py-2.5 last:border-0"
+                className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-0"
               >
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-sm"
@@ -217,13 +221,12 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{r.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">{r.sublabel}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {r.date.toLocaleDateString('pt-PT')} · {r.sublabel}
+                  </p>
                 </div>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {r.date.toLocaleDateString('pt-PT')}
-                </span>
                 <span
-                  className={`w-24 shrink-0 text-right text-sm font-semibold tabular-nums ${
+                  className={`shrink-0 text-sm font-semibold tabular-nums ${
                     r.amount < 0 ? 'text-destructive' : 'text-success'
                   }`}
                 >
@@ -234,9 +237,15 @@ export function EarningsHistoryModal({ open, onClose, earnings, adjustments }: P
           </ul>
         )}
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose}>Fechar</Button>
-          <Button onClick={handleDownloadPdf} disabled={rows.length === 0 || isDownloading}>
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
+            Fechar
+          </Button>
+          <Button
+            onClick={handleDownloadPdf}
+            disabled={rows.length === 0 || isDownloading}
+            className="w-full sm:w-auto"
+          >
             {isDownloading
               ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A gerar…</>)
               : (<><FileDown className="mr-2 h-4 w-4" />Baixar PDF</>)}

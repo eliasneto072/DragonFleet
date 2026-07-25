@@ -1,19 +1,18 @@
 // src/app/components/driver/withdrawals.tsx
 //
-// Tela de retiradas do motorista. Layout empilhado, funciona no mobile.
+// Tela de retiradas do motorista.
 //
 // Notas de manutenção:
 // - O hero é azul, distinto do verde do dashboard, para separar as duas telas
 //   à primeira vista. A ilustração acompanha via tone="info".
-// - O hero é um flex de duas colunas: conteúdo à esquerda, ilustração à
-//   direita como item próprio. A ilustração NÃO é posicionada em absolute —
-//   assim ela nunca sangra para fora do card.
+// - O hero é um flex de duas colunas em todos os tamanhos; a ilustração encolhe
+//   no telemóvel em vez de desaparecer.
 // - O gradiente é fixo e não acompanha o modo escuro, então todo texto dentro
 //   dele usa branco com opacidade em vez de tokens de tema.
 // - shadow-brand tem tinta verde (rgba(16,136,101,…)); num hero azul isso
 //   produziria um halo esverdeado. Este hero usa shadow-md.
 // - Todo valor monetário passa por formatCurrency(). Ver o comentário no topo
-//   de shared/lib/format.ts: o prefixo do input de valor ainda estava em "R$".
+//   de shared/lib/format.ts.
 
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -38,9 +37,13 @@ import { FINANCIAL } from '@/shared/constants';
 import { PayoutIllustration } from '@/app/components/ui/payout-illustration';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 
-// Ponto único de verdade para o status de uma retirada. As variantes dark:
-// são necessárias porque bg-*-100 / text-*-800 do Tailwind não invertem
-// sozinhas — no modo escuro o badge ficaria texto escuro sobre fundo claro.
+// Ponto único de verdade para o status de uma retirada.
+//
+// As variantes dark: são obrigatórias: bg-*-100 com text-*-800 não invertem
+// sozinhas e no modo escuro dariam texto escuro sobre fundo claro. O estado
+// PAID usa a escala emerald no escuro em vez de brand-50/brand-700 porque, na
+// rampa invertida, brand-50 e brand-700 ficam ambos escuros e o contraste cai
+// abaixo do mínimo legível.
 const STATUS_META: Record<
   WithdrawalStatus,
   { label: string; icon: typeof CheckCircle; cls: string }
@@ -48,7 +51,7 @@ const STATUS_META: Record<
   PAID: {
     label: 'Pago',
     icon: CheckCircle,
-    cls: 'bg-brand-50 text-brand-700 dark:text-brand-400',
+    cls: 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300',
   },
   APPROVED: {
     label: 'Aprovado',
@@ -81,40 +84,39 @@ function StatusBadge({ status }: { status: WithdrawalStatus }) {
   );
 }
 
-// Espelha a estrutura real da tela para não haver salto quando os dados chegam.
 function WithdrawalsSkeleton() {
   return (
-    <div className="space-y-6" role="status" aria-busy="true">
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
       <span className="sr-only">A carregar as retiradas…</span>
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex items-start gap-3">
           <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
           <div className="space-y-2">
             <Skeleton className="h-7 w-36" />
-            <Skeleton className="h-4 w-56" />
+            <Skeleton className="h-4 w-52" />
           </div>
         </div>
-        <Skeleton className="h-9 w-36 shrink-0" />
+        <Skeleton className="h-9 w-full sm:w-36 sm:shrink-0" />
       </div>
 
       <Skeleton className="h-40 w-full rounded-xl" />
 
       <Card className="shadow-card">
-        <CardHeader className="space-y-2">
+        <CardHeader className="space-y-2 p-4 sm:p-6">
           <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-4 w-64" />
+          <Skeleton className="h-4 w-56" />
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="flex items-start justify-between gap-3 border-b pb-3 last:border-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-24 rounded-full" />
               </div>
               <div className="space-y-1.5 text-right">
-                <Skeleton className="ml-auto h-4 w-24" />
-                <Skeleton className="ml-auto h-3 w-14" />
+                <Skeleton className="ml-auto h-4 w-20" />
+                <Skeleton className="ml-auto h-3 w-12" />
               </div>
             </div>
           ))}
@@ -130,8 +132,7 @@ export function Withdrawals() {
   const location = useLocation();
 
   // O botão "Retirar" do hero do dashboard navega para cá com
-  // state.openNew = true, já abrindo o diálogo. Sem isso os dois botões do
-  // hero levariam exatamente ao mesmo lugar.
+  // state.openNew = true, já abrindo o diálogo.
   const [open, setOpen] = useState(
     () => Boolean((location.state as { openNew?: boolean } | null)?.openNew),
   );
@@ -186,7 +187,7 @@ export function Withdrawals() {
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-20">
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Erro ao carregar saques.</p>
         <Button
@@ -200,7 +201,7 @@ export function Withdrawals() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title="Retiradas"
         subtitle="Solicite saques e acompanhe seu histórico"
@@ -208,7 +209,7 @@ export function Withdrawals() {
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <ArrowDownToLine className="mr-2 h-4 w-4" />Nova Retirada
               </Button>
             </DialogTrigger>
@@ -242,11 +243,14 @@ export function Withdrawals() {
                   </p>
                 </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button" variant="outline" onClick={() => setOpen(false)}
+                    className="w-full sm:w-auto"
+                  >
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isPending}>
+                  <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
                     {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar
                   </Button>
                 </div>
@@ -258,13 +262,13 @@ export function Withdrawals() {
 
       {/* Hero: total sacado */}
       <div
-        className="overflow-hidden rounded-xl p-6 shadow-md"
+        className="overflow-hidden rounded-xl p-5 shadow-md sm:p-6"
         style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
       >
-        <div className="flex items-center justify-between gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           <div className="min-w-0 flex-1">
             <p className="text-sm text-white/70">Total sacado</p>
-            <p className="mt-1 text-4xl font-bold tracking-tight text-white tabular-nums">
+            <p className="mt-1 text-3xl font-bold tracking-tight text-white tabular-nums sm:text-4xl">
               {formatCurrency(totalWithdrawn)}
             </p>
             <p className="mt-2 text-sm text-white/70">
@@ -276,18 +280,18 @@ export function Withdrawals() {
           <PayoutIllustration
             tone="info"
             surface="dark"
-            className="hidden h-36 w-auto shrink-0 sm:block lg:h-40"
+            className="h-20 w-auto shrink-0 sm:h-32 lg:h-36"
           />
         </div>
       </div>
 
       {/* Histórico */}
       <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle>Histórico de retiradas</CardTitle>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Histórico de retiradas</CardTitle>
           <CardDescription>Acompanhe todas as suas solicitações</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {withdrawals.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nenhum saque solicitado ainda.
@@ -299,19 +303,17 @@ export function Withdrawals() {
                 return (
                   <li key={w.id} className="border-b pb-3 last:border-0 last:pb-0">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium tabular-nums">
-                            {formatCurrency(Number(w.amount))}
-                          </p>
-                          <StatusBadge status={w.status} />
-                        </div>
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                        <p className="font-medium tabular-nums">
+                          {formatCurrency(Number(w.amount))}
+                        </p>
+                        <StatusBadge status={w.status} />
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-medium tabular-nums">
                           {new Date(w.requestedAt).toLocaleDateString('pt-PT')}
                         </p>
-                        <p className="text-xs text-muted-foreground tabular-nums">
+                        <p className="text-xs tabular-nums text-muted-foreground">
                           {new Date(w.requestedAt).toLocaleTimeString('pt-PT', {
                             hour: '2-digit', minute: '2-digit',
                           })}
