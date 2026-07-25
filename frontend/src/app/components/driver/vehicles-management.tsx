@@ -43,7 +43,7 @@ function StatusBadge({ status }: { status: VehicleStatus }) {
   const s = STATUS_STYLES[status] ?? STATUS_STYLES.INACTIVE;
   const Icon = s.icon;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
+    <span className={`inline-flex shrink-0 items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
       <Icon className="h-3 w-3 mr-1" />{s.label}
     </span>
   );
@@ -233,22 +233,24 @@ export function VehiclesManagement() {
       </Dialog>
 
       {/* Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {vehicles.map((v) => (
           <Card
             key={v.id}
             className="group shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
           >
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base">{v.brand} {v.model}</CardTitle>
-                  <CardDescription>{v.plate} · {v.year}</CardDescription>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-base">{v.brand} {v.model}</CardTitle>
+                  <CardDescription className="truncate">
+                    <span className="font-mono tracking-tight">{v.plate}</span> · {v.year}
+                  </CardDescription>
                 </div>
                 <StatusBadge status={v.status} />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               {/* Ilustração — cor segue o status; anima no hover do card */}
               <VehicleIllustration status={v.status} className="mb-3 -mt-1" />
 

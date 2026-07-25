@@ -1,20 +1,24 @@
 // src/app/components/driver/vehicle-documents.tsx
 //
-// Bloco de documentos de um veículo (lado do motorista): mostra os 4 documentos
+// Bloco de documentos de um veículo (lado do motorista): mostra os documentos
 // obrigatórios, permite enviar os que faltam e reenviar os rejeitados/expirados.
 // O motorista só vê/gere os documentos do próprio veículo.
+//
+// Densidade: cada documento ocupa uma única linha (~28px). O status é
+// comunicado por um ícone colorido à esquerda do nome, em vez de um <Badge>
+// numa segunda linha — o texto do status continua acessível via title e
+// via <span className="sr-only">.
 
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
 import { Label } from '@/app/components/ui/label';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
   FileText, Upload, CheckCircle, XCircle, Clock, Loader2, AlertCircle,
-  ExternalLink, Paperclip, X, CalendarClock, RefreshCw,
+  ExternalLink, Paperclip, X, CalendarClock, RefreshCw, Circle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
@@ -26,7 +30,7 @@ const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'applicati
 const MAX_SIZE_MB = 10;
 const REPLACEABLE: DocumentStatus[] = ['REJECTED', 'EXPIRED'];
 
-// Os 4 documentos obrigatórios do veículo, na ordem em que aparecem.
+// Os documentos obrigatórios do veículo, na ordem em que aparecem.
 const VEHICLE_DOC_TYPES: DocumentType[] = [
   'DUA',
   'SEGURO_CARTA_VERDE',
@@ -34,15 +38,16 @@ const VEHICLE_DOC_TYPES: DocumentType[] = [
   'INSPECAO_PERIODICA',
 ];
 
-function statusBadge(status: DocumentStatus) {
-  switch (status) {
-    case 'APPROVED': return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
-    case 'PENDING': return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-    case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-    case 'EXPIRED': return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><CalendarClock className="h-3 w-3 mr-1" />Expirado</Badge>;
-    default: return null;
-  }
-}
+// Ponto único de verdade para status de documento. Trocar as classes de cor
+// aqui muda o bloco inteiro.
+const DOC_STATUS_META: Record<DocumentStatus, { label: string; icon: typeof CheckCircle; cls: string }> = {
+  APPROVED: { label: 'Aprovado', icon: CheckCircle, cls: 'text-green-600' },
+  PENDING: { label: 'Em análise', icon: Clock, cls: 'text-yellow-600' },
+  REJECTED: { label: 'Rejeitado', icon: XCircle, cls: 'text-red-600' },
+  EXPIRED: { label: 'Expirado', icon: CalendarClock, cls: 'text-orange-600' },
+};
+
+const MISSING_META = { label: 'Não enviado', icon: Circle, cls: 'text-muted-foreground/50' };
 
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -69,7 +74,16 @@ export function VehicleDocuments({ vehicleId, documents }: Props) {
   const [isResubmit, setIsResubmit] = useState(false);
 
   const vehicleDocs = documents.filter((d) => d.vehicleId === vehicleId);
-  const approvedCount = vehicleDocs.filter((d) => d.status === 'APPROVED').length;
+
+  // Resolve um documento por tipo obrigatório. O contador é derivado desta
+  // mesma lista, então nunca diverge do que está sendo renderizado.
+  const rows = VEHICLE_DOC_TYPES.map((type) => ({
+    type,
+    doc: vehicleDocs.find((d) => d.type === type),
+  }));
+  const totalCount = rows.length;
+  const approvedCount = rows.filter((r) => r.doc?.status === 'APPROVED').length;
+  const progress = totalCount === 0 ? 0 : Math.round((approvedCount / totalCount) * 100);
 
   const { mutate: sendDocument, isPending } = useMutation({
     mutationFn: () => documentsService.create(docType as DocumentType, file!, undefined, vehicleId),
@@ -130,56 +144,99 @@ export function VehicleDocuments({ vehicleId, documents }: Props) {
 
   return (
     <div className="border-t pt-3 mt-3">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5">
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
           <FileText className="h-3.5 w-3.5" />
-          Documentos do veículo
+          Documentos
         </p>
-        <span className="text-xs text-muted-foreground">{approvedCount}/4 aprovados</span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {approvedCount} de {totalCount}
+        </span>
       </div>
 
-      <div className="space-y-2">
-        {VEHICLE_DOC_TYPES.map((type) => {
-          const doc = vehicleDocs.find((d) => d.type === type);
-          const canResubmit = doc && REPLACEABLE.includes(doc.status);
+      {/* Progresso de aprovação */}
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-muted mb-1"
+        role="progressbar"
+        aria-valuenow={approvedCount}
+        aria-valuemin={0}
+        aria-valuemax={totalCount}
+        aria-label="Documentos aprovados"
+      >
+        <div
+          className="h-full rounded-full bg-green-500 transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <ul className="-mx-1">
+        {rows.map(({ type, doc }) => {
+          const meta = doc ? DOC_STATUS_META[doc.status] ?? MISSING_META : MISSING_META;
+          const Icon = meta.icon;
+          const canResubmit = !!doc && REPLACEABLE.includes(doc.status);
+          const name = DOCUMENT_TYPE_LABELS[type] ?? type;
+
           return (
-            <div key={type} className="flex items-center justify-between gap-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{DOCUMENT_TYPE_LABELS[type] ?? type}</p>
-                {doc ? (
-                  <div className="mt-0.5">{statusBadge(doc.status)}</div>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Não enviado</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+            <li
+              key={type}
+              className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/40"
+              title={`${name} — ${meta.label}`}
+            >
+              <Icon className={`h-3.5 w-3.5 shrink-0 ${meta.cls}`} aria-hidden="true" />
+              <span className="sr-only">{meta.label}:</span>
+              <span className={`min-w-0 flex-1 truncate text-xs ${doc ? 'font-medium' : 'text-muted-foreground'}`}>
+                {name}
+              </span>
+
+              <div className="flex shrink-0 items-center gap-1">
                 {doc && (
-                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => viewDocument(doc.id)} title="Ver">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => viewDocument(doc.id)}
+                    aria-label={`Ver ${name}`}
+                  >
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Button>
                 )}
                 {!doc && (
-                  <Button size="sm" variant="outline" className="h-7" onClick={() => openUpload(type, false)}>
-                    <Upload className="h-3 w-3 mr-1" />Enviar
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => openUpload(type, false)}
+                  >
+                    <Upload className="mr-1 h-3 w-3" />Enviar
                   </Button>
                 )}
                 {canResubmit && (
-                  <Button size="sm" className="h-7" onClick={() => openUpload(type, true)}>
-                    <RefreshCw className="h-3 w-3 mr-1" />Reenviar
+                  <Button
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => openUpload(type, true)}
+                  >
+                    <RefreshCw className="mr-1 h-3 w-3" />Reenviar
                   </Button>
                 )}
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
-      {/* Mostra o motivo de rejeição, se houver */}
-      {vehicleDocs.filter((d) => d.status === 'REJECTED' && d.notes?.trim()).map((d) => (
-        <div key={`note-${d.id}`} className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">
-          <span className="font-medium">{DOCUMENT_TYPE_LABELS[d.type] ?? d.type}:</span> {d.notes?.replace('[avisado-7d]', '').trim()}
-        </div>
-      ))}
+      {/* Motivo de rejeição, quando houver */}
+      {rows
+        .filter(({ doc }) => doc?.status === 'REJECTED' && doc.notes?.trim())
+        .map(({ type, doc }) => (
+          <div
+            key={`note-${doc!.id}`}
+            className="mt-2 rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-600"
+          >
+            <span className="font-medium">{DOCUMENT_TYPE_LABELS[type] ?? type}:</span>{' '}
+            {doc!.notes?.replace('[avisado-7d]', '').trim()}
+          </div>
+        ))}
 
       {/* Dialog de upload/reenvio */}
       <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
