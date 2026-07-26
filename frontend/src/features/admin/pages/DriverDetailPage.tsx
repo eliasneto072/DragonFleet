@@ -27,6 +27,7 @@ import { usersService } from '@/features/admin/services/users.service';
 import { balanceService, type AdjustmentType } from '@/features/admin/services/balance.service';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
+import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
@@ -429,6 +430,10 @@ export function DriverDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Retiradas — logo após o saldo, de propósito: aprovar uma retirada sem
+          olhar o disponível é o erro que a validação do servidor bloqueia. */}
+      <DriverWithdrawalsCard userId={id} />
 
       {/* Documentos pessoais */}
       <Card>
