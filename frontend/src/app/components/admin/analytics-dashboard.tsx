@@ -7,6 +7,10 @@
 // resposta muda alguma coisa hoje, é painel; se só faz sentido olhando semanas
 // para trás, é aqui.
 //
+// PERÍODO: este componente tem o seu próprio selector, independente do
+// intervalo do cartão de exportação da mesma página. Ajustar um não move o
+// outro — é uma escolha deliberada, não um esquecimento.
+//
 // FONTE DOS DADOS: uma única chamada a GET /analytics/stats, agregada em SQL.
 // Antes esta tela pedia /users, /earnings, /withdrawals e /documents — as
 // tabelas inteiras — e somava em JavaScript.
@@ -15,7 +19,7 @@
 // porque é ele que faz o GROUP BY. O frontend só formata o rótulo.
 //
 // PROPORÇÕES DESIGUAIS: uma frota real tem uma plataforma dominante. Com 99,8%
-// numa e frações de por cento nas outras, arredondar dava três linhas "0%"
+// numa e frações de por cento nas outras, arredondar dava várias linhas "0%"
 // indistinguíveis e segmentos invisíveis na barra. Daí o "<1%" e a largura
 // mínima por segmento.
 
@@ -83,7 +87,7 @@ function formatBucket(bucket: string, granularity: 'day' | 'month'): string {
  * cadastro" — lê como crescimento, não como parte de um todo.
  *
  * Fatias abaixo de 1% mostram "<1%" em vez de arredondar para zero: com uma
- * plataforma dominante, três linhas "0%" ficam indistinguíveis entre si.
+ * plataforma dominante, várias linhas "0%" ficam indistinguíveis entre si.
  */
 function formatShare(share: number): string {
   if (share <= 0) return '0%';
@@ -153,6 +157,8 @@ export function AnalyticsDashboard() {
   const [period, setPeriod] = useState<PeriodKey>('30d');
   const range = useMemo(() => periodRange(period), [period]);
 
+  // O período entra na chave: sem isso o React Query devolveria a cache do
+  // intervalo anterior ao trocar o selector.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.analytics.stats(range.from, range.to),
     queryFn: () => analyticsService.getStats(range),
@@ -266,8 +272,8 @@ export function AnalyticsDashboard() {
           {!hasSeries ? (
             <div className="flex flex-col items-center gap-2.5 px-2 py-8 text-center">
               <BarChart3 className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-              {/* Diz o motivo: com 13.023 € no período, "sem movimento suficiente"
-                  parece contradição. O que falta é movimento em datas distintas. */}
+              {/* Diz o motivo: sob um cabeçalho que anuncia milhares de euros no
+                  período, "sem movimento suficiente" parece contradição. */}
               <p className="max-w-md text-sm text-muted-foreground">
                 {active.length === 0
                   ? 'Nenhum lançamento neste período.'
