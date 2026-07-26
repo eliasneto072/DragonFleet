@@ -7,7 +7,10 @@ export function analyticsRouter(): Router {
 
   router.use(authMiddleware);
 
+  // Ambas exigem ADMIN ou MANAGER — validado dentro do service, não por
+  // middleware de papel, para que a regra viaje com a lógica.
   router.get('/stats', analyticsController.getStats);
+  router.get('/overview', analyticsController.getOverview);
 
   return router;
 }

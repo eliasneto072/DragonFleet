@@ -1,239 +1,389 @@
 // src/app/components/admin/admin-dashboard.tsx
+//
+// Painel do administrador: o que precisa de ação agora.
+//
+// DIVISÃO DE PAPÉIS: este painel responde "o que faço agora"; a tela de
+// Análises responde "como estamos a ir". Nenhum gráfico vive aqui — sob esse
+// critério, uma série temporal é sempre pergunta de Análises.
+//
+// O QUE SAIU: o gráfico de receita mensal e a pizza de plataformas, que
+// duplicavam o que Análises passou a mostrar corretamente (a pizza contava
+// lançamentos em vez de somar euros, e o eixo do gráfico formatava em R$).
+// Saíram também os três cartões do rodapé, que repetiam números do topo.
+//
+// A IDADE É O DADO: "5 documentos pendentes" não distingue cinco chegados
+// hoje de manhã de um parado há seis dias. Um documento parado é um motorista
+// que não está a faturar.
+//
+// FONTE: uma chamada a GET /analytics/overview, agregada em SQL. A versão
+// anterior descarregava /users, /earnings, /withdrawals e /documents inteiros
+// para totalizar no browser.
 
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { StatsCard } from '@/app/components/stats-card';
-import { Users, DollarSign, Car, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import {
-  BarChart, Bar,
-  XAxis, YAxis,
-  CartesianGrid, Tooltip,
-  ResponsiveContainer,
-  LineChart, Line,
-  PieChart, Pie, Cell,
-} from 'recharts';
-import { usersService }       from '@/features/admin/services/users.service';
-import { earningsService }    from '@/features/driver/services/earnings.service';
-import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
-import { vehiclesService }    from '@/features/driver/services/vehicles.service';
+  AlertCircle, CalendarClock, CheckCircle2, ChevronRight, Coins,
+  FileText, TrendingDown, TrendingUp, UserX,
+} from 'lucide-react';
+import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
+import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
-import { queryKeys }          from '@/shared/lib/query-keys';
-import { FINANCIAL }          from '@/shared/constants';
-import type { ApiEarning }    from '@/shared/types/api';
 
-const COLORS = ['#108865', '#1D1D1D', '#3b82f6', '#f59e0b'];
-
-function buildMonthlyRevenue(earnings: ApiEarning[], months = 6) {
-  const map: Record<string, number> = {};
-  earnings.forEach((e) => {
-    const d   = new Date(e.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    map[key]  = (map[key] ?? 0) + Number(e.amount);
-  });
-
-  const now = new Date();
-  return Array.from({ length: months }, (_, i) => {
-    const d   = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    return {
-      month:   d.toLocaleDateString('pt-PT', { month: 'short' }),
-      receita: Math.round((map[key] ?? 0) * FINANCIAL.companyCommission),
-    };
-  });
+/** Dias inteiros decorridos desde uma data ISO. */
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(diff / 86_400_000));
 }
 
-function buildPlatformData(earnings: ApiEarning[]) {
-  const map: Record<string, number> = {};
-  earnings.forEach((e) => {
-    map[e.platform] = (map[e.platform] ?? 0) + 1;
-  });
-  return Object.entries(map).map(([name, value]) => ({ name, value }));
+function agoLabel(days: number | null): string {
+  if (days === null) return '';
+  if (days === 0) return 'chegou hoje';
+  if (days === 1) return 'espera há 1 dia';
+  return `espera há ${days} dias`;
 }
 
-export function AdminDashboard() {
-  const usersQ       = useQuery({ queryKey: queryKeys.users.list,         queryFn: () => usersService.list() });
-  const earningsQ    = useQuery({ queryKey: queryKeys.earnings.list,       queryFn: () => earningsService.list() });
-  const withdrawalsQ = useQuery({ queryKey: queryKeys.withdrawals.list,    queryFn: () => withdrawalsService.list() });
-  const vehiclesQ    = useQuery({ queryKey: queryKeys.vehicles.list,       queryFn: () => vehiclesService.list() });
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
 
-  const isLoading = usersQ.isLoading || earningsQ.isLoading || withdrawalsQ.isLoading || vehiclesQ.isLoading;
-  const isError   = usersQ.isError   || earningsQ.isError   || withdrawalsQ.isError   || vehiclesQ.isError;
+// ── Linha da fila ─────────────────────────────────────────────────────────────
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Carregando dashboard…</span>
-      </div>
-    );
-  }
+interface QueueItem {
+  key: string;
+  icon: typeof FileText;
+  title: string;
+  detail: string;
+  /** Dias de espera; define a ordenação e a cor do detalhe. */
+  waiting: number | null;
+  actionLabel: string;
+  to: string;
+}
 
-  if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <AlertCircle className="h-10 w-10 text-red-400" />
-        <p className="text-muted-foreground">Erro ao carregar dados do dashboard.</p>
-      </div>
-    );
-  }
+/** Acima disto, o item passa a ser destacado como atrasado. */
+const OVERDUE_DAYS = 3;
 
-  const users       = usersQ.data?.users             ?? [];
-  const earnings    = earningsQ.data?.earnings        ?? [];
-  const withdrawals = withdrawalsQ.data?.withdrawals  ?? [];
-  const vehicles    = vehiclesQ.data?.vehicles        ?? [];
-
-  const drivers        = users.filter(u => u.role === 'DRIVER');
-  const activeDrivers  = drivers.filter(u => u.status === 'ACTIVE');
-  const totalRevenue   = earnings.reduce((s, e) => s + Number(e.amount), 0) * FINANCIAL.companyCommission;
-  const pendingW       = withdrawals.filter(w => w.status === 'PENDING');
-  const pendingWAmount = pendingW.reduce((s, w) => s + Number(w.amount), 0);
-
-  // Receita do mês corrente
-  const now = new Date();
-  const monthlyRevenue = earnings
-    .filter(e => {
-      const d = new Date(e.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    })
-    .reduce((s, e) => s + Number(e.amount), 0) * FINANCIAL.companyCommission;
-
-  const monthlyData   = buildMonthlyRevenue(earnings);
-  const platformData  = buildPlatformData(earnings);
-
-  // Veículos por status
-  const vehiclesByStatus = [
-    { name: 'Ativos',      value: vehicles.filter(v => v.status === 'ACTIVE').length },
-    { name: 'Manutenção',  value: vehicles.filter(v => v.status === 'MAINTENANCE').length },
-    { name: 'Inativos',    value: vehicles.filter(v => v.status === 'INACTIVE').length },
-  ].filter(v => v.value > 0);
+function QueueRow({ item, onGo }: { item: QueueItem; onGo: (to: string) => void }) {
+  const Icon = item.icon;
+  const overdue = item.waiting !== null && item.waiting >= OVERDUE_DAYS;
 
   return (
-    <div className="space-y-6">
+    <li className="flex items-center gap-3 border-t border-border py-3 first:border-t-0 sm:gap-4">
+      <Icon
+        className={`h-[19px] w-[19px] shrink-0 ${
+          overdue ? 'text-destructive' : 'text-muted-foreground'
+        }`}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{item.title}</p>
+        <p
+          className={`truncate text-xs ${
+            overdue ? 'font-medium text-destructive' : 'text-muted-foreground'
+          }`}
+        >
+          {item.detail}
+        </p>
+      </div>
+      <Button
+        size="sm" variant="outline" className="h-8 shrink-0"
+        onClick={() => onGo(item.to)}
+      >
+        {item.actionLabel}
+      </Button>
+    </li>
+  );
+}
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Total de Motoristas"
-          value={drivers.length.toString()}
-          description={`${activeDrivers.length} ativos`}
-          icon={<Users className="h-4 w-4" />}
-        />
-        <StatsCard
-          title="Receita do Mês"
-          value={`€ ${(monthlyRevenue / 1000).toFixed(1)}k`}
-          description={`${FINANCIAL.companyCommission * 100}% de comissão`}
-          icon={<DollarSign className="h-4 w-4" />}
-        />
-        <StatsCard
-          title="Veículos na Frota"
-          value={vehicles.length.toString()}
-          description={`${vehicles.filter(v => v.status === 'ACTIVE').length} ativos`}
-          icon={<Car className="h-4 w-4" />}
-        />
-        <StatsCard
-          title="Saques Pendentes"
-          value={pendingW.length.toString()}
-          description={`${formatCurrency(pendingWAmount)} a processar`}
-          icon={<Clock className="h-4 w-4" />}
-        />
+// ── Métrica ───────────────────────────────────────────────────────────────────
+
+function Metric({
+  label, value, hint, tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  hint?: React.ReactNode;
+  tone?: 'neutral' | 'success' | 'danger';
+}) {
+  const toneCls =
+    tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-destructive' : 'text-muted-foreground';
+  return (
+    <Card className="shadow-card">
+      <CardContent className="p-4 sm:p-5">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-1 text-xl font-bold tabular-nums sm:text-2xl">{value}</p>
+        {hint && <p className={`mt-1 flex items-center gap-1 text-xs ${toneCls}`}>{hint}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar o painel…</span>
+
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-4 w-72" />
       </div>
 
-      {/* Gráfico de receita mensal */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Receita da Plataforma por Mês</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => [`${formatCurrency(v)}`, 'Receita']} />
-              <Line type="monotone" dataKey="receita" stroke="#108865" strokeWidth={2} dot={{ fill: '#108865' }} />
-            </LineChart>
-          </ResponsiveContainer>
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-44" /></CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-52" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-8 w-20 shrink-0" />
+            </div>
+          ))}
         </CardContent>
       </Card>
 
-      {/* Distribuições */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Ganhos por Plataforma</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {platformData.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sem dados ainda.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={platformData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                    labelLine={false}
-                  >
-                    {platformData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        {[0, 1, 2].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardContent className="space-y-2 p-4 sm:p-5">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-7 w-32" />
+              <Skeleton className="h-3 w-24" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Veículos por Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {vehiclesByStatus.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Nenhum veículo cadastrado.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={vehiclesByStatus}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip formatter={(v: number) => [v, 'Veículos']} />
-                  <Bar dataKey="value" fill="#108865" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+// ── Componente principal ──────────────────────────────────────────────────────
+
+export function AdminDashboard() {
+  const navigate = useNavigate();
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: queryKeys.analytics.overview,
+    queryFn: () => analyticsService.getOverview(),
+  });
+
+  const overview: ApiOverview | undefined = data?.overview;
+
+  const queue = useMemo<QueueItem[]>(() => {
+    if (!overview) return [];
+    const { queue: q } = overview;
+    const items: QueueItem[] = [];
+
+    if (q.documentsPending.count > 0) {
+      const days = daysSince(q.documentsPending.oldestAt);
+      items.push({
+        key: 'docs',
+        icon: FileText,
+        title: `${q.documentsPending.count} documento${q.documentsPending.count !== 1 ? 's' : ''} por rever`,
+        detail: `O mais antigo ${agoLabel(days)}`,
+        waiting: days,
+        actionLabel: 'Rever',
+        to: '/app/admin/documents',
+      });
+    }
+
+    if (q.withdrawalsPending.count > 0) {
+      const days = daysSince(q.withdrawalsPending.oldestAt);
+      items.push({
+        key: 'withdrawals',
+        icon: Coins,
+        title: `${q.withdrawalsPending.count} retirada${q.withdrawalsPending.count !== 1 ? 's' : ''} pendente${q.withdrawalsPending.count !== 1 ? 's' : ''} · ${formatCurrency(q.withdrawalsPending.total)}`,
+        detail: `A mais antiga ${agoLabel(days)}`,
+        waiting: days,
+        actionLabel: 'Processar',
+        to: '/app/admin/financial',
+      });
+    }
+
+    if (q.driversBlocked > 0) {
+      items.push({
+        key: 'blocked',
+        icon: UserX,
+        title: `${q.driversBlocked} motorista${q.driversBlocked !== 1 ? 's' : ''} bloqueado${q.driversBlocked !== 1 ? 's' : ''} por documentação`,
+        detail: 'Não podem trabalhar até regularizar',
+        waiting: null,
+        actionLabel: 'Ver',
+        to: '/app/admin/drivers',
+      });
+    }
+
+    if (q.documentsExpiringSoon.count > 0) {
+      items.push({
+        key: 'expiring',
+        icon: CalendarClock,
+        title: `${q.documentsExpiringSoon.count} documento${q.documentsExpiringSoon.count !== 1 ? 's' : ''} expira${q.documentsExpiringSoon.count !== 1 ? 'm' : ''} em ${q.documentsExpiringSoon.days} dias`,
+        detail: 'Avise antes de o motorista parar',
+        waiting: null,
+        actionLabel: 'Ver',
+        to: '/app/admin/documents',
+      });
+    }
+
+    // Quem espera há mais tempo primeiro; itens sem idade vão para o fim.
+    return items.sort((a, b) => (b.waiting ?? -1) - (a.waiting ?? -1));
+  }, [overview]);
+
+  if (isLoading) return <DashboardSkeleton />;
+
+  if (isError || !overview) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
+        <p className="text-muted-foreground">Erro ao carregar o painel.</p>
+        <Button variant="outline" onClick={() => refetch()}>Tentar novamente</Button>
+      </div>
+    );
+  }
+
+  const { finance, drivers } = overview;
+
+  const revenueTrend = finance.revenuePrevMonth > 0
+    ? ((finance.revenueThisMonth - finance.revenuePrevMonth) / finance.revenuePrevMonth) * 100
+    : null;
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+
+      <div>
+        <h2 className="text-xl font-bold text-foreground sm:text-2xl">Painel</h2>
+        <p className="text-sm text-muted-foreground">
+          {drivers.total} motorista{drivers.total !== 1 ? 's' : ''} registado
+          {drivers.total !== 1 ? 's' : ''} · {drivers.activeLast30} faturou
+          {drivers.activeLast30 !== 1 ? 'ram' : ''} nos últimos 30 dias
+        </p>
       </div>
 
-      {/* Cards de resumo */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle>Receita Total</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">€ {(totalRevenue / 1000).toFixed(1)}k</p>
-            <p className="text-sm text-muted-foreground mt-2">Comissão acumulada da plataforma</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Total de Lançamentos</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{earnings.length.toLocaleString('pt-PT')}</p>
-            <p className="text-sm text-muted-foreground mt-2">Registros de ganhos no sistema</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Saques Pendentes</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-yellow-600">{pendingW.length}</p>
-            <p className="text-sm text-muted-foreground mt-2">Aguardando processamento</p>
-          </CardContent>
-        </Card>
+      {/* Fila de trabalho */}
+      <Card className="shadow-card">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 p-4 sm:p-6">
+          <div>
+            <CardTitle className="text-base sm:text-lg">Precisa da sua ação</CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Quem espera há mais tempo aparece primeiro
+            </p>
+          </div>
+          {queue.length > 0 && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {queue.length} {queue.length === 1 ? 'item' : 'itens'}
+            </span>
+          )}
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          {queue.length === 0 ? (
+            // O estado bom merece uma resposta explícita. Metade do valor do
+            // painel é saber que está tudo em dia sem verificar cinco telas.
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
+              <p className="text-sm font-medium">Nada à espera</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Documentos e retiradas estão em dia.
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {queue.map((item) => (
+                <QueueRow key={item.key} item={item} onGo={(to) => navigate(to)} />
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Posição financeira */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <Metric
+          label="Receita deste mês"
+          value={formatCurrency(finance.revenueThisMonth)}
+          tone={revenueTrend !== null && revenueTrend < 0 ? 'danger' : 'success'}
+          hint={
+            revenueTrend !== null ? (
+              <>
+                {revenueTrend >= 0
+                  ? <TrendingUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  : <TrendingDown className="h-3 w-3 shrink-0" aria-hidden="true" />}
+                {Math.abs(Math.round(revenueTrend))}% vs. mês anterior
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                {Math.round(finance.companyCommission * 100)}% de {formatCurrency(finance.grossThisMonth)}
+              </span>
+            )
+          }
+        />
+        <Metric
+          label="Devido aos motoristas"
+          value={formatCurrency(finance.owedToDrivers)}
+          hint={
+            finance.owedByDrivers > 0
+              ? `Inclui ${formatCurrency(finance.owedByDrivers)} a receber de motoristas`
+              : 'Podem sacar a qualquer momento'
+          }
+        />
+        <Metric
+          label="Pago este mês"
+          value={formatCurrency(finance.paidThisMonth)}
+          hint={`${finance.paidCountThisMonth} retirada${finance.paidCountThisMonth !== 1 ? 's' : ''} liquidada${finance.paidCountThisMonth !== 1 ? 's' : ''}`}
+        />
       </div>
+
+      {/* Motoristas parados */}
+      {drivers.stalled.length > 0 && (
+        <Card className="shadow-card">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-base sm:text-lg">Motoristas que pararam</CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Faturavam e deixaram de lançar há mais de {drivers.stalledAfterDays} dias
+            </p>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <ul>
+              {drivers.stalled.map((d) => {
+                const days = daysSince(d.lastEarningAt);
+                return (
+                  <li key={d.id} className="border-b border-border py-2 last:border-0">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/admin/drivers')}
+                      className="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-muted/40"
+                    >
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-muted-foreground"
+                        aria-hidden="true"
+                      >
+                        {initials(d.name)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{d.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          Último lançamento há {days} dias · {formatCurrency(d.totalEarned)} no total
+                        </span>
+                      </span>
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

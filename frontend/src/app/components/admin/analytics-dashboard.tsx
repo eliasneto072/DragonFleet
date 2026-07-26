@@ -11,6 +11,11 @@
 // intervalo do cartão de exportação da mesma página. Ajustar um não move o
 // outro — é uma escolha deliberada, não um esquecimento.
 //
+// COMISSÃO: vem dentro da resposta da API, não de shared/constants. A
+// constante do frontend estava em 0.20 enquanto SystemSettings guardava 15, e
+// a receita da empresa aparecia um terço acima do real. Com o valor a viajar
+// junto dos números que ele multiplica, não há como voltarem a divergir.
+//
 // FONTE DOS DADOS: uma única chamada a GET /analytics/stats, agregada em SQL.
 // Antes esta tela pedia /users, /earnings, /withdrawals e /documents — as
 // tabelas inteiras — e somava em JavaScript.
@@ -39,7 +44,6 @@ import { analyticsService, type ApiStats } from '@/features/admin/services/analy
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency, formatCurrencyCompact } from '@/shared/lib/format';
 import { platformColor, platformLabel } from '@/shared/lib/platform-labels';
-import { FINANCIAL } from '@/shared/constants';
 
 type PeriodKey = '30d' | '90d' | '12m';
 
@@ -179,7 +183,9 @@ export function AnalyticsDashboard() {
   }
 
   const granularity = stats.range.granularity;
-  const revenue = stats.grossEarnings * FINANCIAL.companyCommission;
+  // Comissão da resposta, não de shared/constants — ver nota no topo.
+  const commission = stats.companyCommission;
+  const revenue = stats.grossEarnings * commission;
 
   const series = stats.series.map((s) => ({
     label: formatBucket(s.bucket, granularity),
@@ -241,7 +247,7 @@ export function AnalyticsDashboard() {
         <Metric
           label="Receita da plataforma"
           value={formatCurrency(revenue)}
-          hint={`${Math.round(FINANCIAL.companyCommission * 100)}% dos ganhos brutos`}
+          hint={`${Math.round(commission * 100)}% dos ganhos brutos`}
         />
         <Metric
           label="Ganhos dos motoristas"

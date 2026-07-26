@@ -17,6 +17,12 @@ export class AnalyticsController {
     const stats = await analyticsService.getStats(getActor(req), { from, to });
     return ok(res, { stats });
   };
+
+  // GET /analytics/overview — fila de trabalho e posição financeira do painel.
+  getOverview = async (req: AuthRequest, res: Response) => {
+    const overview = await analyticsService.getOverview(getActor(req));
+    return ok(res, { overview });
+  };
 }
 
 export const analyticsController = new AnalyticsController();

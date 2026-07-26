@@ -24,6 +24,49 @@ export interface ApiStats {
   /** Bucket é "YYYY-MM-DD" ou "YYYY-MM", conforme range.granularity. */
   series: { bucket: string; total: number }[];
   topDrivers: { name: string; email: string; total: number }[];
+  /**
+   * Comissão vigente em fração (0.15 = 15%), vinda de SystemSettings.
+   *
+   * NÃO usar FINANCIAL.companyCommission para este cálculo: aquela constante
+   * está em 0.20 enquanto a configuração do sistema está em 15, e a receita
+   * da empresa aparecia um terço acima do real.
+   */
+  companyCommission: number;
+}
+
+export interface StalledDriver {
+  id: string;
+  name: string;
+  email: string;
+  lastEarningAt: string;
+  totalEarned: number;
+}
+
+export interface ApiOverview {
+  queue: {
+    documentsPending: { count: number; oldestAt: string | null };
+    withdrawalsPending: { count: number; total: number; oldestAt: string | null };
+    driversBlocked: number;
+    documentsExpiringSoon: { count: number; days: number };
+  };
+  finance: {
+    companyCommission: number;
+    revenueThisMonth: number;
+    revenuePrevMonth: number;
+    grossThisMonth: number;
+    /** Passivo: soma apenas dos saldos positivos. */
+    owedToDrivers: number;
+    /** A receber: soma dos saldos negativos, em valor absoluto. */
+    owedByDrivers: number;
+    paidThisMonth: number;
+    paidCountThisMonth: number;
+  };
+  drivers: {
+    total: number;
+    activeLast30: number;
+    stalledAfterDays: number;
+    stalled: StalledDriver[];
+  };
 }
 
 export interface StatsParams {
@@ -41,5 +84,10 @@ export const analyticsService = {
     if (params.to) query.set('to', params.to);
     const qs = query.toString();
     return apiClient.get(`/analytics/stats${qs ? `?${qs}` : ''}`);
+  },
+
+  /** GET /analytics/overview — fila de trabalho e posição financeira. */
+  getOverview(): Promise<{ overview: ApiOverview }> {
+    return apiClient.get('/analytics/overview');
   },
 };

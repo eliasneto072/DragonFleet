@@ -1,22 +1,78 @@
 import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
-import { analyticsRepository, type AnalyticsStats } from './analytics.repository';
+import { settingsService } from '../settings/settings.service';
+import {
+  analyticsRepository,
+  type AnalyticsStats,
+  type StalledDriver,
+} from './analytics.repository';
 
 type Actor = { id: string; role?: UserRole };
 
-/** Período padrão quando o pedido não traz datas. */
+/** Período padrão das análises quando o pedido não traz datas. */
 const DEFAULT_DAYS = 30;
 /** Guarda contra intervalos absurdos, que forçariam varreduras longas. */
 const MAX_DAYS = 366 * 3;
+/** Dias sem lançamentos a partir dos quais um motorista conta como parado. */
+const STALLED_AFTER_DAYS = 14;
+
+export interface AnalyticsStatsResponse extends AnalyticsStats {
+  /**
+   * Comissão vigente, em fração (0.15 = 15%).
+   *
+   * Vai na resposta de propósito: o frontend tinha 0.20 cravado em
+   * shared/constants enquanto SystemSettings guardava 15, e a receita da
+   * empresa aparecia um terço acima do real. Com o valor a viajar junto dos
+   * números que ele multiplica, não há como divergirem.
+   */
+  companyCommission: number;
+}
+
+export interface AnalyticsOverview {
+  queue: {
+    documentsPending: { count: number; oldestAt: string | null };
+    withdrawalsPending: { count: number; total: number; oldestAt: string | null };
+    driversBlocked: number;
+    documentsExpiringSoon: { count: number; days: number };
+  };
+  finance: {
+    companyCommission: number;
+    revenueThisMonth: number;
+    revenuePrevMonth: number;
+    grossThisMonth: number;
+    /** Passivo: soma apenas dos saldos positivos. */
+    owedToDrivers: number;
+    /** Valor a receber: soma dos saldos negativos, em valor absoluto. */
+    owedByDrivers: number;
+    paidThisMonth: number;
+    paidCountThisMonth: number;
+  };
+  drivers: {
+    total: number;
+    activeLast30: number;
+    stalledAfterDays: number;
+    stalled: StalledDriver[];
+  };
+}
+
+function ensureManager(actor: Actor) {
+  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
+    throw new AppError('Forbidden', 403, 'FORBIDDEN');
+  }
+}
+
+/** SystemSettings guarda a comissão em pontos percentuais (15 = 15%). */
+async function commissionFraction(): Promise<number> {
+  const settings = await settingsService.get();
+  return Number(settings.companyCommission ?? 0) / 100;
+}
 
 export class AnalyticsService {
   async getStats(
     actor: Actor,
     opts: { from?: string; to?: string } = {},
-  ): Promise<AnalyticsStats> {
-    if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
-      throw new AppError('Forbidden', 403, 'FORBIDDEN');
-    }
+  ): Promise<AnalyticsStatsResponse> {
+    ensureManager(actor);
 
     const to = opts.to ? new Date(opts.to) : new Date();
     const from = opts.from
@@ -40,7 +96,70 @@ export class AnalyticsService {
     to.setHours(23, 59, 59, 999);
     from.setHours(0, 0, 0, 0);
 
-    return analyticsRepository.getStats(from, to);
+    const [stats, companyCommission] = await Promise.all([
+      analyticsRepository.getStats(from, to),
+      commissionFraction(),
+    ]);
+
+    return { ...stats, companyCommission };
+  }
+
+  /**
+   * Painel: o que precisa de ação agora. Endpoint separado do getStats de
+   * propósito — são dois consumidores com necessidades diferentes, e juntá-los
+   * faria o painel puxar séries mensais que não usa e as análises puxarem
+   * filas de trabalho que não mostram.
+   */
+  async getOverview(actor: Actor): Promise<AnalyticsOverview> {
+    ensureManager(actor);
+
+    const settings = await settingsService.get();
+    const commission = Number(settings.companyCommission ?? 0) / 100;
+    const warningDays = Number(settings.documentExpiryWarningDays ?? 7);
+
+    const now = new Date();
+    const stalledSince = new Date(now);
+    stalledSince.setDate(stalledSince.getDate() - STALLED_AFTER_DAYS);
+
+    const expiringUntil = new Date(now);
+    expiringUntil.setDate(expiringUntil.getDate() + warningDays);
+
+    const raw = await analyticsRepository.getOverview(stalledSince, expiringUntil);
+
+    return {
+      queue: {
+        documentsPending: {
+          count: raw.documentsPending.count,
+          oldestAt: raw.documentsPending.oldestAt?.toISOString() ?? null,
+        },
+        withdrawalsPending: {
+          count: raw.withdrawalsPending.count,
+          total: raw.withdrawalsPending.total,
+          oldestAt: raw.withdrawalsPending.oldestAt?.toISOString() ?? null,
+        },
+        driversBlocked: raw.driversBlocked,
+        documentsExpiringSoon: {
+          count: raw.documentsExpiringSoon,
+          days: warningDays,
+        },
+      },
+      finance: {
+        companyCommission: commission,
+        revenueThisMonth: Math.round(raw.grossThisMonth * commission * 100) / 100,
+        revenuePrevMonth: Math.round(raw.grossPrevMonth * commission * 100) / 100,
+        grossThisMonth: raw.grossThisMonth,
+        owedToDrivers: raw.owedToDrivers,
+        owedByDrivers: raw.owedByDrivers,
+        paidThisMonth: raw.paidThisMonth,
+        paidCountThisMonth: raw.paidCountThisMonth,
+      },
+      drivers: {
+        total: raw.totalDrivers,
+        activeLast30: raw.activeLast30,
+        stalledAfterDays: STALLED_AFTER_DAYS,
+        stalled: raw.stalledDrivers,
+      },
+    };
   }
 }
 
