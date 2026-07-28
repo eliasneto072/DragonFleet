@@ -1,10 +1,17 @@
+# Nome do projeto fixo.
+#
+# Sem esta linha, o Compose deriva o nome da PASTA, e os volumes ficam
+# prefixados por ele. Renomear ou mover a pasta troca o volume por baixo dos
+# pés: o Postgres arranca com uma base vazia e o login deixa de funcionar,
+# sem nada indicar o porquê.
+name: dragonfleet
+
 services:
   # ──────────────────────────────────────────
   # Banco de dados PostgreSQL
   # ──────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    platform: linux/arm64
     container_name: dragonfleet-postgres
     restart: unless-stopped
     environment:
