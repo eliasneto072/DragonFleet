@@ -1,14 +1,27 @@
 // src/modules/balance/balance.service.ts
 //
 // Cálculo canônico do saldo do motorista:
-//   disponível = ganhos + créditos − débitos − levantados (APPROVED/PAID) − reservados (PENDING)
+//   disponível = fechos semanais + créditos − débitos
+//                − levantados (APPROVED/PAID) − reservados (PENDING)
+//
 // Levantamentos PENDING reservam o valor (evita pedir duas vezes o mesmo dinheiro);
 // REJECTED devolve ao saldo automaticamente (não entra na soma).
+//
+// OS LANÇAMENTOS DO MOTORISTA NÃO ENTRAM AQUI.
+//
+// O dinheiro tem uma porta só: o fecho semanal registado pela administração.
+// O que o motorista comunica é conferência cruzada para quem fecha a semana —
+// se também creditasse, o mesmo dinheiro entraria por dois caminhos e a semana
+// seria paga duas vezes. `totalEarnings` continua na resposta como informação,
+// mas fora do cálculo de `available`.
+//
+// Esta fórmula está replicada no SQL do passivo em analytics.repository —
+// alterar uma sem a outra faz o painel do admin divergir das contas individuais.
 
 import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
-import { AdjustmentType, UserRole, WithdrawalStatus } from '../../shared/types/enums';
+import { AdjustmentType, UserRole, WithdrawalStatus, SettlementStatus } from '../../shared/types/enums';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -17,7 +30,10 @@ function canManageBalance(role?: UserRole) {
 }
 
 export interface BalanceSummary {
+  /** Informativo: o que o motorista comunicou. NÃO entra em `available`. */
   totalEarnings: number;
+  /** Soma líquida dos fechos semanais registados. É daqui que vem o dinheiro. */
+  totalSettlements: number;
   totalCredits: number;
   totalDebits: number;
   totalWithdrawn: number;   // APPROVED + PAID
@@ -54,8 +70,12 @@ export class BalanceService {
     await this.ensureUserExists(userId);
 
     try {
-      const [earnings, credits, debits, withdrawn, pending] = await Promise.all([
+      const [earnings, settlements, credits, debits, withdrawn, pending] = await Promise.all([
         prisma.earning.aggregate({ where: { userId }, _sum: { amount: true } }),
+        prisma.weeklySettlement.aggregate({
+          where: { userId, status: SettlementStatus.REGISTERED },
+          _sum: { netToDriver: true },
+        }),
         prisma.balanceAdjustment.aggregate({
           where: { userId, type: AdjustmentType.CREDIT }, _sum: { amount: true },
         }),
@@ -73,16 +93,18 @@ export class BalanceService {
       ]);
 
       const totalEarnings = Number(earnings._sum.amount ?? 0);
+      const totalSettlements = Number(settlements._sum.netToDriver ?? 0);
       const totalCredits = Number(credits._sum.amount ?? 0);
       const totalDebits = Number(debits._sum.amount ?? 0);
       const totalWithdrawn = Number(withdrawn._sum.amount ?? 0);
       const pendingWithdrawals = Number(pending._sum.amount ?? 0);
 
       const available =
-        totalEarnings + totalCredits - totalDebits - totalWithdrawn - pendingWithdrawals;
+        totalSettlements + totalCredits - totalDebits - totalWithdrawn - pendingWithdrawals;
 
       return {
         totalEarnings,
+        totalSettlements,
         totalCredits,
         totalDebits,
         totalWithdrawn,

@@ -65,6 +65,12 @@ enum VehicleStatus {
   SOLD
 }
 
+enum EarningStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum EarningPlatform {
   UBER
   BOLT
@@ -116,22 +122,44 @@ model User {
   vehicleAssignments VehicleAssignment[]
   balanceAdjustments BalanceAdjustment[] @relation("adjustmentsReceived")
   adjustmentsMade    BalanceAdjustment[] @relation("adjustmentsMade")
+  settlements        WeeklySettlement[]  @relation("settlementsReceived")
+  settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
+  earningsReviewed   Earning[]           @relation("earningsReviewed")
 
   @@map("users")
 }
 
+// Lançamento comunicado pelo motorista.
+//
+// NÃO movimenta saldo. O dinheiro entra por uma porta só — o fecho semanal.
+// Isto aqui é o que o motorista diz ter feito, e serve de conferência cruzada
+// quando a administração fecha a semana: se o relatório da Uber disser 109 € e
+// o motorista tiver comunicado 119 €, alguém olha antes de fechar.
+//
+// Se estes valores também creditassem, o mesmo dinheiro entraria por dois
+// caminhos e o motorista seria pago duas vezes pela mesma semana.
 model Earning {
   id        String          @id @default(cuid())
   amount    Decimal         @db.Decimal(12, 2)
   date      DateTime        @db.Date
   platform  EarningPlatform
+  status    EarningStatus   @default(PENDING)
+  /// Justificação do motorista, ou motivo da recusa.
+  notes     String?
   userId    String          @map("user_id")
-  createdAt DateTime        @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("earningsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([date])
+  @@index([status])
   @@map("earnings")
 }
 
@@ -151,6 +179,7 @@ model Vehicle {
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   documents   Document[]
   assignments VehicleAssignment[]
+  settlements WeeklySettlement[]
 
   @@index([userId])
   @@index([status])
@@ -295,4 +324,82 @@ model SystemSettings {
   updatedBy                 String?  @map("updated_by")
 
   @@map("system_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fecho semanal de faturação
+//
+// A ÚNICA porta pela qual entra dinheiro na conta do motorista.
+//
+// O administrador regista, por semana e por motorista, o que entrou em cada
+// plataforma e o que saiu em despesas; a percentagem da empresa incide sobre o
+// lucro (receitas menos despesas), não sobre o bruto; e o líquido é creditado.
+//
+// Sem esta entidade, a comissão da empresa nunca era efetivamente cobrada: o
+// saldo do motorista era 100% do que ele lançava, e a percentagem existia
+// apenas como número nas telas de análise.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SettlementStatus {
+  DRAFT      // preparado, ainda nao creditado
+  REGISTERED // creditado ao motorista — imutavel a partir daqui
+  CANCELLED  // estornado; o credito e revertido
+}
+
+model WeeklySettlement {
+  id        String  @id @default(cuid())
+  userId    String  @map("user_id")
+  vehicleId String? @map("vehicle_id")
+
+  weekStart DateTime @map("week_start") @db.Date
+  weekEnd   DateTime @map("week_end")   @db.Date
+
+  // Receitas por plataforma. Campos nomeados em vez de uma tabela filha:
+  // sao poucas plataformas, fixas, e assim o fecho e uma linha so.
+  uberAmount   Decimal @default(0) @map("uber_amount")   @db.Decimal(12, 2)
+  boltAmount   Decimal @default(0) @map("bolt_amount")   @db.Decimal(12, 2)
+  otherRevenue Decimal @default(0) @map("other_revenue") @db.Decimal(12, 2)
+
+  // Deducoes operacionais.
+  tollsAmount     Decimal @default(0) @map("tolls_amount")     @db.Decimal(12, 2) // Via Verde
+  fuelAmount      Decimal @default(0) @map("fuel_amount")      @db.Decimal(12, 2) // Prio
+  vehicleFee      Decimal @default(0) @map("vehicle_fee")      @db.Decimal(12, 2)
+  otherDeductions Decimal @default(0) @map("other_deductions") @db.Decimal(12, 2)
+
+  // Percentagem aplicada, em pontos percentuais (15 = 15%).
+  //
+  // GRAVADA no fecho, e nao lida das configuracoes na hora de exibir: quando
+  // alguem alterar a percentagem global, os fechos passados tem de continuar a
+  // mostrar a conta que foi efetivamente paga. Recibo nao muda depois de
+  // emitido.
+  commissionRate Decimal @default(0) @map("commission_rate") @db.Decimal(5, 2)
+
+  // Totais congelados no momento do registo. Guardados em vez de recalculados
+  // na leitura, pela mesma razao: o documento tem de permanecer igual ao que
+  // foi acordado, mesmo que a formula mude no futuro.
+  grossRevenue     Decimal @default(0) @map("gross_revenue")     @db.Decimal(12, 2)
+  totalDeductions  Decimal @default(0) @map("total_deductions")  @db.Decimal(12, 2)
+  profitBase       Decimal @default(0) @map("profit_base")       @db.Decimal(12, 2)
+  commissionAmount Decimal @default(0) @map("commission_amount") @db.Decimal(12, 2)
+  netToDriver      Decimal @default(0) @map("net_to_driver")     @db.Decimal(12, 2)
+
+  status SettlementStatus @default(DRAFT)
+  notes  String?
+
+  createdById  String    @map("created_by_id")
+  registeredAt DateTime? @map("registered_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt      @map("updated_at")
+
+  user      User     @relation("settlementsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("settlementsCreated", fields: [createdById], references: [id])
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  // Guarda estrutural contra creditar a mesma semana duas vezes. E a protecao
+  // que nao depende de ninguem se lembrar de conferir.
+  @@unique([userId, weekStart])
+  @@index([userId])
+  @@index([weekStart])
+  @@index([status])
+  @@map("weekly_settlements")
 }
