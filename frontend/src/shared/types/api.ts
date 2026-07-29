@@ -22,6 +22,8 @@ export type DocumentType =
   | 'OTHER';
 export type DocumentStatus   = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+export type EarningStatus    = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type SettlementStatus = 'DRAFT' | 'REGISTERED' | 'CANCELLED';
 export type VehicleStatus    = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'SOLD';
 
 // ---------- Modelos ----------
@@ -36,13 +38,26 @@ export interface ApiUser {
   updatedAt: string;
 }
 
+/**
+ * Lançamento comunicado pelo motorista.
+ *
+ * NÃO movimenta saldo em nenhum estado. O dinheiro entra por uma porta só — o
+ * fecho semanal registado pela administração. Isto é o que o motorista diz ter
+ * feito, e serve de conferência a quem fecha a semana.
+ */
 export interface ApiEarning {
   id:        string;
   amount:    number;
   date:      string;
   platform:  EarningPlatform;
+  status:    EarningStatus;
+  /** Justificação do motorista, ou motivo da recusa. */
+  notes:     string | null;
   userId:    string;
+  reviewedById: string | null;
+  reviewedAt:   string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiWithdrawal {

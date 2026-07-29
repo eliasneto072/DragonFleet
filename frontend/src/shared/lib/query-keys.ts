@@ -71,15 +71,26 @@ export const queryKeys = {
   //
   // Em stats o período entra na chave: trocar o selector muda a chave e o
   // React Query busca de novo, mantendo em cache o resultado de cada período.
-  // Sem isso os dados de 30 dias continuariam a aparecer depois de escolher
-  // 12 meses.
-  //
-  // overview não tem período: é sempre o estado actual da fila de trabalho.
+  // overview não tem período: é sempre o estado atual da fila de trabalho.
   analytics: {
     all: ['analytics'] as const,
     stats: (from?: string, to?: string) =>
       ['analytics', 'stats', from ?? 'default', to ?? 'default'] as const,
     overview: ['analytics', 'overview'] as const,
+  },
+
+  // Weekly settlements
+  //
+  // A única origem de dinheiro na conta do motorista. Invalidar por prefixo
+  // (settlements.all) depois de registar ou cancelar: o saldo e o painel
+  // dependem disto.
+  settlements: {
+    all: ['settlements'] as const,
+    list: (userId?: string, status?: string) =>
+      ['settlements', 'list', userId ?? 'all', status ?? 'all'] as const,
+    detail: (id: string) => ['settlements', 'detail', id] as const,
+    reported: (userId: string, from: string, to: string) =>
+      ['settlements', 'reported', userId, from, to] as const,
   },
 
   // Settings (admin)
