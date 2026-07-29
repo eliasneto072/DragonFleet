@@ -21,6 +21,7 @@ import SupportPage from '@/features/driver/pages/SupportPage';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { DriversPage } from '@/features/admin/pages/DriversPage';
 import { DriverDetailPage } from '@/features/admin/pages/DriverDetailPage'; // ← novo
+import { SettlementsPage } from '@/features/admin/pages/SettlementsPage';
 import { FinancialPage } from '@/features/admin/pages/FinancialPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
           { path: 'drivers', element: <DriversPage /> },
           { path: 'drivers/:id', element: <DriverDetailPage /> }, // ← novo
           { path: 'documents', element: <DocumentsAdminPage /> },
+          { path: 'settlements', element: <SettlementsPage /> },
           { path: 'financial', element: <FinancialPage /> },
           { path: 'fleet', element: <FleetPage /> },
           { path: 'fleet/:id', element: <VehicleDetailPage /> },
