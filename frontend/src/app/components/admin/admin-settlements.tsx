@@ -6,8 +6,12 @@
 // formulário tem doze campos e um painel de cálculo, e num diálogo ficaria com
 // scroll interno sobre uma lista que ninguém está a ler.
 //
-// O fecho registado não se edita — é um recibo. As únicas ações sobre ele são
-// consultar e cancelar; corrigir significa cancelar e criar outro.
+// O detalhe, esse, é diálogo: é leitura, cabe num ecrã e fecha-se com Esc.
+//
+// APAGAR: rascunhos e cancelados. Um fecho registado é a explicação de um
+// crédito no saldo — apagá-lo deixaria o dinheiro lá e a razão desaparecida.
+// Quem precisa de eliminar um registado cancela primeiro, o que reverte o valor
+// e regista o motivo, e só depois apaga.
 
 import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -25,8 +29,12 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, CheckCircle2, FileText, Loader2,
-  Pencil, Plus, ReceiptText, Trash2,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import {
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronRight, FileText,
+  Loader2, Pencil, Plus, ReceiptText, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
@@ -69,10 +77,22 @@ function StatusBadge({ status }: { status: SettlementStatus }) {
   );
 }
 
-/** "2026-07-06T00:00:00.000Z" → "06/07", sem passar por Date. */
+/** "2026-07-06T00:00:00.000Z" → "06/07". Sem passar por Date: a string é dia
+ *  puro, e converter em fuso negativo devolveria a véspera. */
 function shortDay(iso: string): string {
   const [, m, d] = iso.slice(0, 10).split('-');
   return `${d}/${m}`;
+}
+
+function fullDay(iso: string): string {
+  return iso.slice(0, 10).split('-').reverse().join('/');
+}
+
+function stamp(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString('pt-PT')} às ${d.toLocaleTimeString('pt-PT', {
+    hour: '2-digit', minute: '2-digit',
+  })}`;
 }
 
 function ListSkeleton() {
@@ -95,6 +115,122 @@ function ListSkeleton() {
   );
 }
 
+// ── Detalhe ───────────────────────────────────────────────────────────────────
+
+function Row({
+  label, value, muted, strong, negative,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+  strong?: boolean;
+  negative?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1">
+      <dt className={muted ? 'text-muted-foreground' : ''}>{label}</dt>
+      <dd
+        className={`shrink-0 tabular-nums ${strong ? 'font-semibold' : ''} ${
+          negative ? 'text-destructive' : ''
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function SettlementDetail({ s }: { s: ApiSettlement }) {
+  return (
+    <div className="space-y-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={s.status} />
+        <span className="text-muted-foreground">
+          {fullDay(s.weekStart)} a {fullDay(s.weekEnd)}
+        </span>
+        {s.vehiclePlate && (
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Car className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="font-mono tracking-tight">{s.vehiclePlate}</span>
+          </span>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Receitas
+        </p>
+        <dl className="border-t border-border pt-1">
+          <Row label="Uber" value={formatCurrency(s.uberAmount)} />
+          <Row label="Bolt" value={formatCurrency(s.boltAmount)} />
+          {s.otherRevenue > 0 && (
+            <Row label="Outras receitas" value={formatCurrency(s.otherRevenue)} />
+          )}
+          <div className="border-t border-border">
+            <Row label="Total" value={formatCurrency(s.grossRevenue)} strong />
+          </div>
+        </dl>
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Deduções
+        </p>
+        <dl className="border-t border-border pt-1">
+          <Row label="Via Verde" value={`− ${formatCurrency(s.tollsAmount)}`} />
+          <Row label="Prio (combustível)" value={`− ${formatCurrency(s.fuelAmount)}`} />
+          <Row label="Viatura" value={`− ${formatCurrency(s.vehicleFee)}`} />
+          {s.otherDeductions > 0 && (
+            <Row label="Outros" value={`− ${formatCurrency(s.otherDeductions)}`} />
+          )}
+          <div className="border-t border-border">
+            <Row label="Despesas" value={`− ${formatCurrency(s.operatingCosts)}`} strong />
+          </div>
+        </dl>
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Resultado
+        </p>
+        <dl className="border-t border-border pt-1">
+          <Row label="Lucro" value={formatCurrency(s.profitBase)} />
+          <Row
+            label={`Comissão da empresa (${s.commissionRate}%)`}
+            value={`− ${formatCurrency(s.commissionAmount)}`}
+          />
+          <div className="border-t border-border">
+            <Row
+              label="Creditado ao motorista"
+              value={formatCurrency(s.netToDriver)}
+              strong
+              negative={s.netToDriver < 0}
+            />
+          </div>
+        </dl>
+      </div>
+
+      {s.notes?.trim() && (
+        <div className="rounded-lg bg-secondary p-3">
+          <p className="text-xs font-medium text-muted-foreground">Comentários</p>
+          <p className="mt-1 text-sm">{s.notes}</p>
+        </div>
+      )}
+
+      <div className="space-y-0.5 border-t border-border pt-3 text-xs text-muted-foreground">
+        <p>Criado por {s.createdByName ?? '—'} em {stamp(s.createdAt)}</p>
+        {s.registeredAt && <p>Registado em {stamp(s.registeredAt)}</p>}
+        <p>
+          A percentagem de {s.commissionRate}% ficou gravada neste fecho: alterá-la nas
+          Configurações não muda esta conta.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Componente ────────────────────────────────────────────────────────────────
+
 export function AdminSettlements() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -111,8 +247,10 @@ export function AdminSettlements() {
   );
   const [driverFilter, setDriverFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SettlementStatus>('all');
+  const [detail, setDetail] = useState<ApiSettlement | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ApiSettlement | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
 
   const driversQuery = useQuery({
     queryKey: queryKeys.users.list,
@@ -148,17 +286,23 @@ export function AdminSettlements() {
       toast.success('Fecho cancelado. O crédito foi revertido.');
       setCancelTarget(null);
       setCancelReason('');
+      setDetail(null);
     },
     onError: (err: any) => toast.error(err?.message ?? 'Não foi possível cancelar o fecho.'),
   });
 
-  const { mutate: removeDraft } = useMutation({
+  const { mutate: remove, isPending: removing } = useMutation({
     mutationFn: (id: string) => settlementsService.remove(id),
     onSuccess: () => {
       invalidate();
-      toast.success('Rascunho apagado.');
+      toast.success('Fecho apagado.');
+      setDeleteTarget(null);
+      setDetail(null);
     },
-    onError: (err: any) => toast.error(err?.message ?? 'Não foi possível apagar o rascunho.'),
+    onError: (err: any) => {
+      setDeleteTarget(null);
+      toast.error(err?.message ?? 'Não foi possível apagar o fecho.');
+    },
   });
 
   // ── Formulário ──────────────────────────────────────────────────────────────
@@ -178,9 +322,7 @@ export function AdminSettlements() {
             <h2 className="text-xl font-bold text-foreground sm:text-2xl">
               {mode.id ? 'Editar rascunho' : 'Novo fecho'}
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Registo semanal de faturação
-            </p>
+            <p className="text-sm text-muted-foreground">Registo semanal de faturação</p>
           </div>
         </div>
 
@@ -275,57 +417,63 @@ export function AdminSettlements() {
             <CardTitle className="text-base sm:text-lg">
               {settlements.length} fecho{settlements.length !== 1 ? 's' : ''}
             </CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Toque numa linha para ver o detalhe
+            </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             <ul>
               {settlements.map((s) => (
-                <li key={s.id} className="border-b border-border py-3 last:border-0">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-medium">{s.userName}</p>
-                        <StatusBadge status={s.status} />
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {shortDay(s.weekStart)} a {shortDay(s.weekEnd)}
-                        {s.vehiclePlate && (
-                          <> · <span className="font-mono tracking-tight">{s.vehiclePlate}</span></>
-                        )}
-                        {' · '}
-                        {formatCurrency(s.grossRevenue)} bruto, {s.commissionRate}% de comissão
-                      </p>
-                    </div>
-
-                    <p
-                      className={`shrink-0 text-sm font-semibold tabular-nums ${
-                        s.status === 'CANCELLED'
-                          ? 'text-muted-foreground line-through'
-                          : s.netToDriver < 0
-                            ? 'text-destructive'
-                            : 'text-foreground'
-                      }`}
+                <li key={s.id} className="border-b border-border py-1 last:border-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                    {/* A área de leitura é o botão; as ações ficam fora dele,
+                        senão clicar em "Apagar" abriria também o detalhe. */}
+                    <button
+                      type="button"
+                      onClick={() => setDetail(s)}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-2 text-left transition-colors hover:bg-muted/40"
                     >
-                      {formatCurrency(s.netToDriver)}
-                    </p>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-medium">{s.userName}</span>
+                          <StatusBadge status={s.status} />
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {shortDay(s.weekStart)} a {shortDay(s.weekEnd)}
+                          {s.vehiclePlate && (
+                            <> · <span className="font-mono tracking-tight">{s.vehiclePlate}</span></>
+                          )}
+                          {' · '}
+                          {formatCurrency(s.grossRevenue)} bruto, {s.commissionRate}% de comissão
+                        </span>
+                      </span>
+
+                      <span
+                        className={`shrink-0 text-sm font-semibold tabular-nums ${
+                          s.status === 'CANCELLED'
+                            ? 'text-muted-foreground line-through'
+                            : s.netToDriver < 0
+                              ? 'text-destructive'
+                              : 'text-foreground'
+                        }`}
+                      >
+                        {formatCurrency(s.netToDriver)}
+                      </span>
+
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </button>
 
                     <div className="flex shrink-0 items-center gap-1.5">
                       {s.status === 'DRAFT' && (
-                        <>
-                          <Button
-                            size="sm" variant="outline" className="h-8"
-                            onClick={() => setMode({ view: 'form', id: s.id })}
-                          >
-                            <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Continuar
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => removeDraft(s.id)}
-                            aria-label="Apagar rascunho"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          </Button>
-                        </>
+                        <Button
+                          size="sm" variant="outline" className="h-8"
+                          onClick={() => setMode({ view: 'form', id: s.id })}
+                        >
+                          <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Continuar
+                        </Button>
                       )}
                       {s.status === 'REGISTERED' && (
                         <Button
@@ -335,18 +483,58 @@ export function AdminSettlements() {
                           <Ban className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Cancelar
                         </Button>
                       )}
+                      {s.status !== 'REGISTERED' && (
+                        <Button
+                          size="sm" variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleteTarget(s)}
+                          aria-label="Apagar fecho"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </Button>
+                      )}
                     </div>
                   </div>
-
-                  {s.notes?.trim() && (
-                    <p className="mt-2 text-xs text-muted-foreground">{s.notes}</p>
-                  )}
                 </li>
               ))}
             </ul>
           </CardContent>
         </Card>
       )}
+
+      {/* Detalhe */}
+      <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{detail?.userName}</DialogTitle>
+            <DialogDescription>Detalhe do fecho semanal</DialogDescription>
+          </DialogHeader>
+
+          {detail && <SettlementDetail s={detail} />}
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDetail(null)}>
+              Fechar
+            </Button>
+            {detail?.status === 'DRAFT' && (
+              <Button
+                className="w-full sm:w-auto"
+                onClick={() => { setMode({ view: 'form', id: detail.id }); setDetail(null); }}
+              >
+                <Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />Continuar edição
+              </Button>
+            )}
+            {detail?.status === 'REGISTERED' && (
+              <Button
+                variant="destructive" className="w-full sm:w-auto"
+                onClick={() => { setCancelTarget(detail); setCancelReason(''); }}
+              >
+                <Ban className="mr-1.5 h-4 w-4" aria-hidden="true" />Cancelar fecho
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancelar reverte o crédito — o servidor recusa se o dinheiro já saiu. */}
       <Dialog
@@ -399,6 +587,34 @@ export function AdminSettlements() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Apagar — só rascunhos e cancelados chegam aqui. */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar este fecho?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.status === 'CANCELLED'
+                ? 'O fecho já está cancelado e não afeta nenhum saldo. Apagá-lo remove-o do histórico em definitivo.'
+                : 'O rascunho será removido. Nada foi creditado, por isso nenhum saldo muda.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={removing}
+              onClick={(e) => { e.preventDefault(); remove(deleteTarget!.id); }}
+            >
+              {removing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -305,16 +305,27 @@ export class SettlementsService {
     return updated;
   }
 
-  /** Remove um rascunho. Registados nunca são apagados — cancelam-se. */
+  /**
+   * Remove rascunhos e fechos já cancelados.
+   *
+   * Um fecho REGISTERED é a explicação de um crédito no saldo: apagá-lo deixa o
+   * dinheiro lá e a razão desaparecida, e ninguém consegue responder por que o
+   * saldo mudou naquele dia.
+   *
+   * Cancelado já não afeta saldo nenhum — a reversão aconteceu, e o cancel
+   * recusa quando o dinheiro já foi levantado. Por isso apagar aí não deixa
+   * nada por explicar. Quem precisa de eliminar um registado faz os dois
+   * passos: cancela com motivo, depois apaga.
+   */
   async remove(actor: Actor, id: string): Promise<void> {
     this.ensureManager(actor);
 
     const existing = await settlementsRepository.findById(id);
     if (!existing) throw new AppError('Fecho não encontrado', 404, 'SETTLEMENT_NOT_FOUND');
 
-    if (existing.status !== SettlementStatus.DRAFT) {
+    if (existing.status === SettlementStatus.REGISTERED) {
       throw new AppError(
-        'Só rascunhos podem ser apagados. Fechos registados devem ser cancelados, para o histórico permanecer.',
+        'Um fecho registado explica um crédito no saldo. Cancele-o primeiro — o valor é revertido e o motivo fica registado — e depois apague.',
         400,
         'SETTLEMENT_NOT_DELETABLE',
       );
