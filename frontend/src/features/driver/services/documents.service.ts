@@ -13,6 +13,14 @@ interface UpdateDocumentInput {
 interface UpdateStatusInput {
   status: DocumentStatus;
   notes?: string;
+  /**
+   * Datas lidas do documento pela administração ao rever.
+   *
+   * `null` limpa a data — em expiresAt, marca o documento como sem validade.
+   * Omitir deixa como está, para que rejeitar não obrigue a preencher nada.
+   */
+  issuedAt?: string | null;
+  expiresAt?: string | null;
 }
 
 /** Busca o ficheiro autenticado e devolve-o como Blob. */

@@ -9,7 +9,7 @@
 // - "Ver" + "Analisar"; ações no dialog de análise; rejeição com motivo opcional
 // - "Ver" via endpoint autenticado do backend
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -35,6 +35,10 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { usersService } from '@/features/admin/services/users.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import {
+  DocumentValidityFields, EMPTY_VALIDITY, isValidityDecided, validityFromDocument,
+  type ValidityValue,
+} from './document-validity-fields';
 import type { DocumentStatus, ApiDocument, DocumentType } from '@/shared/types/api';
 import {
   DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil, VEHICLE_DOCUMENT_TYPES, DRIVER_DOCUMENT_TYPES,
@@ -129,9 +133,21 @@ export function AdminDocuments() {
   const isLoading = docsQ.isLoading || usersQ.isLoading || vehiclesQ.isLoading;
   const isError = docsQ.isError || usersQ.isError || vehiclesQ.isError;
 
+  // Validade do documento em revisão. Reposta sempre que o diálogo abre noutro
+  // documento — senão as datas do anterior ficariam no formulário.
+  const [validity, setValidity] = useState<ValidityValue>(EMPTY_VALIDITY);
+
+  useEffect(() => {
+    setValidity(reviewDoc ? validityFromDocument(reviewDoc) : EMPTY_VALIDITY);
+  }, [reviewDoc?.id]);
+
   const { mutate: updateStatus, isPending: updating } = useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: DocumentStatus; notes?: string }) =>
-      documentsService.updateStatus(id, { status, notes }),
+    mutationFn: ({ id, status, notes, dates }: {
+      id: string;
+      status: DocumentStatus;
+      notes?: string;
+      dates?: { issuedAt: string | null; expiresAt: string | null };
+    }) => documentsService.updateStatus(id, { status, notes, ...dates }),
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
       toast.success(status === 'APPROVED' ? 'Documento aprovado!' : 'Documento rejeitado.');
@@ -647,6 +663,12 @@ export function AdminDocuments() {
                   <Button variant="outline" className="w-full" onClick={() => viewDocument(reviewDoc.id)}>
                     <Eye className="h-4 w-4 mr-2" />Ver ficheiro
                   </Button>
+
+                  {/* Logo abaixo de "Ver ficheiro", de propósito: as datas são
+                      lidas do documento, e é essa a sequência do trabalho. */}
+                  {reviewDoc.status !== 'REJECTED' && (
+                    <DocumentValidityFields value={validity} onChange={setValidity} />
+                  )}
                 </div>
 
                 <DialogFooter className="mt-2 flex-col sm:flex-row gap-2 sm:justify-between">
@@ -694,8 +716,25 @@ export function AdminDocuments() {
                     {reviewDoc.status !== 'APPROVED' && (
                       <Button
                         className="flex-1 sm:flex-none"
-                        disabled={updating}
-                        onClick={() => updateStatus({ id: reviewDoc.id, status: 'APPROVED' })}
+                        // Aprovar sem decidir a validade deixaria o documento
+                        // para sempre sem avisar ninguém. "Não expira" é uma
+                        // decisão válida; ausência de decisão não é.
+                        disabled={updating || !isValidityDecided(validity)}
+                        title={
+                          isValidityDecided(validity)
+                            ? undefined
+                            : 'Indique a validade ou marque como sem validade'
+                        }
+                        onClick={() =>
+                          updateStatus({
+                            id: reviewDoc.id,
+                            status: 'APPROVED',
+                            dates: {
+                              issuedAt: validity.issuedAt,
+                              expiresAt: validity.neverExpires ? null : validity.expiresAt,
+                            },
+                          })
+                        }
                       >
                         {updating
                           ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
