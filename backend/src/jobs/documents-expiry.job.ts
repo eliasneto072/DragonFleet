@@ -1,26 +1,46 @@
 // src/jobs/documents-expiry.job.ts
 //
-// Verificação diária da validade dos documentos (regra dos 90 dias do Registo
-// Criminal em Portugal). Duas responsabilidades:
+// Verificação diária da validade dos documentos. Duas responsabilidades:
 //
 //   1. AVISAR — documentos que expiram daqui a exatamente 7 dias geram uma
 //      notificação in-app + email ao motorista.
 //   2. EXPIRAR — documentos aprovados cuja data de expiração já passou ficam
 //      com status EXPIRED, e o motorista passa a AGUARDANDO_REGULARIZACAO.
 //
+// COBRE TODOS OS TIPOS. Antes filtrava por REGISTO_CRIMINAL, do tempo em que
+// era o único com validade calculada — os 90 dias somados no envio. Agora a
+// administração lê a validade do próprio documento ao rever, seja ele qual for,
+// e a carta de condução, o certificado TVDE e a inspeção passam a avisar
+// também. O filtro é a existência de expiresAt: documento sem data nunca entra,
+// o que é correto para os que não caducam.
+//
 // O job corre sem "actor" (é automático), por isso fala diretamente com o
 // prisma e o emailService, sem passar pela camada de permissões.
 
 import { prisma } from '../config/prisma';
 import { emailService } from '../shared/services/email.service';
-import {
-  DocumentStatus,
-  DocumentType,
-  UserStatus,
-} from '../shared/types/enums';
+import { DocumentStatus, UserStatus } from '../shared/types/enums';
 
 const WARNING_DAYS = 7;
-const DOC_LABEL = 'Registo Criminal';
+
+/** Rótulos legíveis. Sem entrada aqui, usa-se o próprio valor do enum. */
+const DOC_LABELS: Record<string, string> = {
+  // Motorista
+  CARTAO_CIDADAO: 'Cartão de Cidadão',
+  REGISTO_CRIMINAL: 'Registo Criminal',
+  CARTA_CONDUCAO: 'Carta de Condução',
+  CERTIFICADO_TVDE: 'Certificado TVDE',
+  FOTO_PERFIL: 'Fotografia de Perfil',
+  // Veículo
+  DUA: 'DUA',
+  SEGURO_CARTA_VERDE: 'Seguro (Carta Verde)',
+  SEGURO_CONDICOES_ESPECIAIS: 'Seguro (Condições Especiais)',
+  INSPECAO_PERIODICA: 'Inspeção Periódica',
+};
+
+function docLabel(type: string): string {
+  return DOC_LABELS[type] ?? type;
+}
 
 /** Início e fim (UTC) do dia que cai daqui a N dias. */
 function dayWindow(daysFromNow: number): { start: Date; end: Date } {
@@ -52,13 +72,12 @@ async function notifyDriver(
   }
 }
 
-/** (1) Avisa motoristas cujo Registo Criminal expira daqui a 7 dias. */
+/** (1) Avisa motoristas cujos documentos expiram daqui a 7 dias. */
 export async function warnExpiringSoon(): Promise<number> {
   const { start, end } = dayWindow(WARNING_DAYS);
 
   const docs = await prisma.document.findMany({
     where: {
-      type: DocumentType.REGISTO_CRIMINAL,
       status: DocumentStatus.APPROVED,
       expiresAt: { gte: start, lt: end },
     },
@@ -66,6 +85,7 @@ export async function warnExpiringSoon(): Promise<number> {
   });
 
   for (const doc of docs) {
+    const label = docLabel(doc.type);
     const dateStr = doc.expiresAt
       ? new Date(doc.expiresAt).toLocaleDateString('pt-PT')
       : '';
@@ -73,8 +93,8 @@ export async function warnExpiringSoon(): Promise<number> {
       doc.user.id,
       doc.user.email,
       doc.user.name,
-      'O seu Registo Criminal está a expirar',
-      `O seu ${DOC_LABEL} expira a ${dateStr} (em ${WARNING_DAYS} dias). ` +
+      `${label} está a expirar`,
+      `O seu ${label} expira a ${dateStr} (em ${WARNING_DAYS} dias). ` +
         'Por favor, submeta um documento atualizado para continuar ativo na plataforma.',
     );
   }
@@ -89,7 +109,6 @@ export async function expireOverdue(): Promise<number> {
 
   const docs = await prisma.document.findMany({
     where: {
-      type: DocumentType.REGISTO_CRIMINAL,
       status: DocumentStatus.APPROVED,
       expiresAt: { lt: now },
     },
@@ -97,8 +116,10 @@ export async function expireOverdue(): Promise<number> {
   });
 
   for (const doc of docs) {
-    // Marca o documento como expirado e o motorista como "aguardando regularização"
-    // numa transação, para os dois ficarem sempre coerentes.
+    const label = docLabel(doc.type);
+
+    // Marca o documento como expirado e o motorista como "aguardando
+    // regularização" numa transação, para os dois ficarem sempre coerentes.
     await prisma.$transaction([
       prisma.document.update({
         where: { id: doc.id },
@@ -114,8 +135,8 @@ export async function expireOverdue(): Promise<number> {
       doc.user.id,
       doc.user.email,
       doc.user.name,
-      'Registo Criminal expirado',
-      `O seu ${DOC_LABEL} expirou. A sua conta está em modo "aguardando regularização". ` +
+      `${label} expirado`,
+      `O seu ${label} expirou. A sua conta está em modo "aguardando regularização". ` +
         'Submeta um documento atualizado para reativar o seu acesso.',
     );
   }

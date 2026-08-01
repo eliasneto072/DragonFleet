@@ -82,7 +82,6 @@ export class DocumentsController {
   create = async (req: AuthRequest, res: Response) => {
     // req.body vem do multipart, não precisa de Zod aqui
     const type = req.body?.type;
-    const issuedAt = req.body?.issuedAt; // opcional; obrigatório p/ Registo Criminal (validado no service)
     const vehicleId = req.body?.vehicleId || undefined; // presente = documento de veículo
 
     if (!type || !Object.values(DocumentType).includes(type)) {
@@ -99,11 +98,12 @@ export class DocumentsController {
       'documents'
     );
 
+    // Sem datas no envio: a validade é lida do documento pela administração,
+    // ao rever. Ver documentsService.resolveDates.
     const document = await documentsService.create(getActor(req), {
       type: type as DocumentType,
       fileUrl,
       fileKey,
-      issuedAt,
       vehicleId,
     });
 
@@ -134,7 +134,13 @@ export class DocumentsController {
     const document = await documentsService.updateStatus(
       getActor(req),
       parsed.params.id,
-      parsed.body
+      {
+        ...parsed.body,
+        // O schema aceita null para limpar a nota; o service trabalha com
+        // undefined para "não mexer". São coisas diferentes e a conversão
+        // tem de ser explícita.
+        notes: parsed.body.notes ?? undefined,
+      }
     );
 
     return ok(res, { document });
