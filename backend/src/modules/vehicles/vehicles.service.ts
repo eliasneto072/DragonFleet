@@ -7,7 +7,9 @@ import { assignmentsRepository } from './assignments.repository';
 import { forceActivation as forceActivationLogic } from './activation.service';
 import { prisma } from '../../config/prisma';
 import { CreateVehicleInput, UpdateVehicleInput } from './vehicles.service.types';
-import { IVehiclePublic, IVehicleAssignmentWithUser } from './vehicles.types';
+import {
+  IVehiclePublic, IVehicleAssignmentWithUser, IVehicleAssignmentWithVehicle,
+} from './vehicles.types';
 
 type Actor = {
   id: string;
@@ -210,6 +212,22 @@ export class VehiclesService {
     }
     await this.ensureVehicleExists(vehicleId);
     return assignmentsRepository.listByVehicle(vehicleId);
+  }
+
+  /**
+   * Histórico de veículos de um motorista.
+   *
+   * Restrito à gestão, como o histórico por veículo: é informação operacional
+   * sobre a frota, não dados pessoais do próprio.
+   */
+  async getDriverVehicleHistory(
+    actor: Actor,
+    userId: string,
+  ): Promise<IVehicleAssignmentWithVehicle[]> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+    return assignmentsRepository.listByUser(userId);
   }
 
   // ── Ativação híbrida (só admin/manager) ────────────────────────────────────

@@ -36,3 +36,15 @@ export interface IVehicleAssignment {
 export type IVehicleAssignmentWithUser = IVehicleAssignment & {
   user?: IUserPublic | null;
 };
+
+/** O mesmo histórico visto do lado do motorista: que carros ele conduziu. */
+export type IVehicleAssignmentWithVehicle = IVehicleAssignment & {
+  vehicle?: {
+    id: string;
+    brand: string;
+    model: string;
+    plate: string;
+    year: number;
+    status: string;
+  } | null;
+};

@@ -87,6 +87,16 @@ export class VehiclesController {
     return ok(res, { history });
   };
 
+  // GET /vehicles/driver/:userId/assignments
+  // O inverso de assignmentHistory: que carros esta pessoa conduziu.
+  driverVehicleHistory = async (req: AuthRequest, res: Response) => {
+    const parsed = userIdParamSchema.parse({ params: req.params });
+    const history = await vehiclesService.getDriverVehicleHistory(
+      getActor(req), parsed.params.userId,
+    );
+    return ok(res, { history });
+  };
+
   forceActivation = async (req: AuthRequest, res: Response) => {
     const parsed = vehicleIdParamSchema.parse({ params: req.params });
     const forced = req.body?.forced !== false; // default true
