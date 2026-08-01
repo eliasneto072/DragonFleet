@@ -108,6 +108,23 @@ export interface ApiVehicle {
   updatedAt: string;
 }
 
+/** Histórico visto do lado do motorista: que carros conduziu, e quando. */
+export interface ApiDriverAssignment {
+  id:        string;
+  vehicleId: string;
+  userId:    string | null;
+  startedAt: string;
+  endedAt:   string | null;
+  vehicle?: {
+    id: string;
+    brand: string;
+    model: string;
+    plate: string;
+    year: number;
+    status: VehicleStatus;
+  } | null;
+}
+
 export interface ApiVehicleAssignment {
   id:        string;
   vehicleId: string;

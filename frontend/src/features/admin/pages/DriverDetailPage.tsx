@@ -28,6 +28,7 @@ import { balanceService, type AdjustmentType } from '@/features/admin/services/b
 import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
+import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
@@ -507,6 +508,10 @@ export function DriverDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Histórico de veículos — o inverso do que a ficha do veículo mostra:
+          que carros esta pessoa conduziu, e quando. */}
+      <DriverVehicleHistory userId={id} />
 
       {/* Dialog de ajuste de saldo */}
       <Dialog open={adjustOpen} onOpenChange={(v) => { if (!v) setAdjustOpen(false); }}>

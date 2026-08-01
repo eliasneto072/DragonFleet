@@ -18,13 +18,12 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { AlertCircle, Loader2, Paperclip, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
-import { DOCUMENT_TYPE_LABELS, requiresIssueDate } from '@/shared/lib/document-labels';
+import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
 import type { DocumentType } from '@/shared/types/api';
 
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
@@ -53,7 +52,6 @@ export function DocumentUploadDialog({
 
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
-  const [issuedAt, setIssuedAt] = useState('');
 
   // Limpa o formulário sempre que o diálogo abre para um documento diferente,
   // senão o ficheiro escolhido numa tentativa anterior reaparece na seguinte.
@@ -61,14 +59,15 @@ export function DocumentUploadDialog({
     if (open) {
       setFile(null);
       setFileError('');
-      setIssuedAt('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }, [open, type]);
 
   const { mutate, isPending } = useMutation({
     mutationFn: () =>
-      documentsService.create(type as DocumentType, file!, issuedAt || undefined, vehicleId),
+      // Sem data de emissão: a validade é preenchida pela administração ao
+      // rever, lendo do próprio documento. Ver DocumentValidityFields.
+      documentsService.create(type as DocumentType, file!, undefined, vehicleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
@@ -112,15 +111,10 @@ export function DocumentUploadDialog({
       toast.error('Selecione um ficheiro.');
       return;
     }
-    if (requiresIssueDate(type) && !issuedAt) {
-      toast.error('Indique a data de emissão.');
-      return;
-    }
     mutate();
   }
 
   const label = type ? (DOCUMENT_TYPE_LABELS[type] ?? type) : '';
-  const needsIssueDate = !!type && requiresIssueDate(type);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -136,25 +130,6 @@ export function DocumentUploadDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-2 space-y-4">
-          {needsIssueDate && (
-            <div className="space-y-2">
-              <Label htmlFor="issuedAt">Data de emissão</Label>
-              <Input
-                id="issuedAt"
-                type="date"
-                value={issuedAt}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setIssuedAt(e.target.value)}
-                required
-              />
-              <p className="flex items-start gap-1 text-xs text-muted-foreground">
-                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                O Registo Criminal é válido por 90 dias a partir da data de emissão.
-                Avisamos 7 dias antes de expirar.
-              </p>
-            </div>
-          )}
-
           <div className="space-y-2">
             <Label>Ficheiro</Label>
             <div

@@ -1,7 +1,7 @@
 // src/features/driver/services/vehicles.service.ts
 
 import { apiClient } from '@/shared/lib/api-client';
-import type { ApiVehicle, ApiVehicleAssignment, VehicleStatus } from '@/shared/types/api';
+import type { ApiVehicle, ApiVehicleAssignment, ApiDriverAssignment, VehicleStatus } from '@/shared/types/api';
 
 interface CreateVehicleInput {
   brand:   string;
@@ -66,6 +66,16 @@ export const vehiclesService = {
   /** GET /vehicles/:id/assignments */
   assignmentHistory(id: string): Promise<{ history: ApiVehicleAssignment[] }> {
     return apiClient.get(`/vehicles/${id}/assignments`);
+  },
+
+  /**
+   * GET /vehicles/driver/:userId/assignments — que carros esta pessoa conduziu.
+   *
+   * O inverso de assignmentHistory: mesma tabela, outro ângulo. A ficha do
+   * motorista precisa deste; a do veículo, do outro.
+   */
+  driverVehicleHistory(userId: string): Promise<{ history: ApiDriverAssignment[] }> {
+    return apiClient.get(`/vehicles/driver/${userId}/assignments`);
   },
 
   // ── Ativação híbrida (admin/manager) ────────────────────────────────────
