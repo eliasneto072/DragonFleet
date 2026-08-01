@@ -16,6 +16,16 @@ const MAX_DAYS = 366 * 3;
 /** Dias sem lançamentos a partir dos quais um motorista conta como parado. */
 const STALLED_AFTER_DAYS = 14;
 
+/** Segunda-feira da semana anterior à de `ref`, em UTC. */
+function lastWeekRange(ref: Date): { start: Date; end: Date } {
+  const d = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate()));
+  const weekday = (d.getUTCDay() + 6) % 7; // 0 = segunda
+  d.setUTCDate(d.getUTCDate() - weekday - 7);
+  const end = new Date(d);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return { start: d, end };
+}
+
 export interface AnalyticsStatsResponse extends AnalyticsStats {
   /**
    * Comissão vigente, em fração (0.15 = 15%).
@@ -32,8 +42,18 @@ export interface AnalyticsOverview {
   queue: {
     documentsPending: { count: number; oldestAt: string | null };
     withdrawalsPending: { count: number; total: number; oldestAt: string | null };
+    /** Lançamentos comunicados à espera de confirmação. */
+    earningsPending: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
+    /** Motoristas ativos sem fecho da semana passada. */
+    missingSettlements: {
+      count: number;
+      /** Primeiros nomes, para a linha do painel. */
+      drivers: { id: string; name: string }[];
+      weekStart: string;
+      weekEnd: string;
+    };
   };
   finance: {
     companyCommission: number;
@@ -124,7 +144,9 @@ export class AnalyticsService {
     const expiringUntil = new Date(now);
     expiringUntil.setDate(expiringUntil.getDate() + warningDays);
 
-    const raw = await analyticsRepository.getOverview(stalledSince, expiringUntil);
+    const lastWeek = lastWeekRange(now);
+
+    const raw = await analyticsRepository.getOverview(stalledSince, expiringUntil, lastWeek);
 
     return {
       queue: {
@@ -137,10 +159,21 @@ export class AnalyticsService {
           total: raw.withdrawalsPending.total,
           oldestAt: raw.withdrawalsPending.oldestAt?.toISOString() ?? null,
         },
+        earningsPending: {
+          count: raw.earningsPending.count,
+          oldestAt: raw.earningsPending.oldestAt?.toISOString() ?? null,
+        },
         driversBlocked: raw.driversBlocked,
         documentsExpiringSoon: {
           count: raw.documentsExpiringSoon,
           days: warningDays,
+        },
+        missingSettlements: {
+          count: raw.missingSettlements.length,
+          // Só os primeiros: a linha do painel mostra nomes, não uma lista.
+          drivers: raw.missingSettlements.slice(0, 4),
+          weekStart: lastWeek.start.toISOString().slice(0, 10),
+          weekEnd: lastWeek.end.toISOString().slice(0, 10),
         },
       },
       finance: {

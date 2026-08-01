@@ -46,8 +46,17 @@ export interface ApiOverview {
   queue: {
     documentsPending: { count: number; oldestAt: string | null };
     withdrawalsPending: { count: number; total: number; oldestAt: string | null };
+    /** Lançamentos comunicados à espera de confirmação. Não movimentam saldo. */
+    earningsPending: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
+    /** Motoristas ativos sem fecho da semana passada. */
+    missingSettlements: {
+      count: number;
+      drivers: { id: string; name: string }[];
+      weekStart: string;
+      weekEnd: string;
+    };
   };
   finance: {
     companyCommission: number;

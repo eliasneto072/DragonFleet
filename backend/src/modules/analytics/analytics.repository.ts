@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import {
   UserRole, UserStatus, WithdrawalStatus, DocumentStatus, EarningPlatform,
+  EarningStatus, SettlementStatus,
 } from '../../shared/types/enums';
 
 /**
@@ -39,11 +40,20 @@ export interface StalledDriver {
   totalEarned: number;
 }
 
+/** Motorista ativo sem fecho da semana de referência. */
+export interface DriverWithoutSettlement {
+  id: string;
+  name: string;
+}
+
 export interface OverviewRaw {
   documentsPending: { count: number; oldestAt: Date | null };
   withdrawalsPending: { count: number; total: number; oldestAt: Date | null };
+  earningsPending: { count: number; oldestAt: Date | null };
   driversBlocked: number;
   documentsExpiringSoon: number;
+  /** Quem ainda não tem a semana passada fechada. */
+  missingSettlements: DriverWithoutSettlement[];
   grossThisMonth: number;
   grossPrevMonth: number;
   paidThisMonth: number;
@@ -163,7 +173,11 @@ export const analyticsRepository = {
    * @param stalledSince  Corte para considerar um motorista parado.
    * @param expiringUntil Limite superior do aviso de expiração de documento.
    */
-  async getOverview(stalledSince: Date, expiringUntil: Date): Promise<OverviewRaw> {
+  async getOverview(
+    stalledSince: Date,
+    expiringUntil: Date,
+    lastWeek: { start: Date; end: Date },
+  ): Promise<OverviewRaw> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -174,8 +188,12 @@ export const analyticsRepository = {
       docsPendingOldest,
       withdrawalsPendingAgg,
       withdrawalsPendingOldest,
+      earningsPendingCount,
+      earningsPendingOldest,
       driversBlocked,
       documentsExpiringSoon,
+      activeDriverRows,
+      settledUserRows,
       grossThisMonthAgg,
       grossPrevMonthAgg,
       paidThisMonthAgg,
@@ -204,6 +222,16 @@ export const analyticsRepository = {
         select: { requestedAt: true },
       }),
 
+      // Lançamentos comunicados à espera de confirmação. Não movimentam saldo,
+      // mas cada um é um motorista à espera de resposta.
+      prisma.earning.count({ where: { status: EarningStatus.PENDING } }),
+
+      prisma.earning.findFirst({
+        where: { status: EarningStatus.PENDING },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+
       prisma.user.count({
         where: { role: UserRole.DRIVER, status: UserStatus.AGUARDANDO_REGULARIZACAO },
       }),
@@ -215,6 +243,28 @@ export const analyticsRepository = {
           status: DocumentStatus.APPROVED,
           expiresAt: { gte: now, lte: expiringUntil },
         },
+      }),
+
+      // Quem devia ter fecho da semana passada. As duas consultas são
+      // separadas e cruzadas em memória: um NOT EXISTS com sobreposição de
+      // intervalos em SQL fica difícil de ler e de conferir, e são poucas
+      // dezenas de linhas de cada lado.
+      prisma.user.findMany({
+        where: { role: UserRole.DRIVER, status: UserStatus.ACTIVE },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+
+      // Rascunho conta como feito: quem preparou e ainda não registou não
+      // precisa de ver o aviso a meio do trabalho.
+      prisma.weeklySettlement.findMany({
+        where: {
+          status: { not: SettlementStatus.CANCELLED },
+          weekStart: { lte: lastWeek.end },
+          weekEnd: { gte: lastWeek.start },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
       }),
 
       prisma.earning.aggregate({
@@ -310,11 +360,19 @@ export const analyticsRepository = {
 
     const balances = balancesRaw[0] ?? { owed_to: 0, owed_by: 0 };
 
+    const settledIds = new Set(settledUserRows.map((r) => r.userId));
+    const missingSettlements = activeDriverRows.filter((d) => !settledIds.has(d.id));
+
     return {
       documentsPending: {
         count: docsPendingCount,
         oldestAt: docsPendingOldest?.createdAt ?? null,
       },
+      earningsPending: {
+        count: earningsPendingCount,
+        oldestAt: earningsPendingOldest?.createdAt ?? null,
+      },
+      missingSettlements,
       withdrawalsPending: {
         count: withdrawalsPendingAgg._count._all,
         total: Number(withdrawalsPendingAgg._sum.amount ?? 0),

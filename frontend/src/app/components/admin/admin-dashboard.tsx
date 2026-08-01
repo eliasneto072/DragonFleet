@@ -27,7 +27,7 @@ import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   AlertCircle, CalendarClock, CheckCircle2, ChevronRight, Coins,
-  FileText, TrendingDown, TrendingUp, UserX,
+  FileText, HandCoins, ReceiptText, TrendingDown, TrendingUp, UserX,
 } from 'lucide-react';
 import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -47,6 +47,12 @@ function agoLabel(days: number | null): string {
   return `espera há ${days} dias`;
 }
 
+/** "2026-07-06" e "2026-07-12" → "06/07 a 12/07". */
+function weekLabel({ weekStart, weekEnd }: { weekStart: string; weekEnd: string }): string {
+  const dm = (d: string) => d.slice(0, 10).split('-').slice(1).reverse().join('/');
+  return `${dm(weekStart)} a ${dm(weekEnd)}`;
+}
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
@@ -63,12 +69,19 @@ interface QueueItem {
   waiting: number | null;
   actionLabel: string;
   to: string;
+  /** Passado ao navegar: pré-preenche o formulário de destino. */
+  state?: Record<string, unknown>;
 }
 
 /** Acima disto, o item passa a ser destacado como atrasado. */
 const OVERDUE_DAYS = 3;
 
-function QueueRow({ item, onGo }: { item: QueueItem; onGo: (to: string) => void }) {
+function QueueRow({
+  item, onGo,
+}: {
+  item: QueueItem;
+  onGo: (to: string, state?: Record<string, unknown>) => void;
+}) {
   const Icon = item.icon;
   const overdue = item.waiting !== null && item.waiting >= OVERDUE_DAYS;
 
@@ -92,7 +105,7 @@ function QueueRow({ item, onGo }: { item: QueueItem; onGo: (to: string) => void 
       </div>
       <Button
         size="sm" variant="outline" className="h-8 shrink-0"
-        onClick={() => onGo(item.to)}
+        onClick={() => onGo(item.to, item.state)}
       >
         {item.actionLabel}
       </Button>
@@ -221,6 +234,41 @@ export function AdminDashboard() {
       });
     }
 
+    // O fecho é o que faz o motorista receber: uma semana por fechar é uma
+    // semana em que ninguém foi pago. Fica no topo, sem idade — não é atraso
+    // de dias, é uma tarefa da semana.
+    if (q.missingSettlements.count > 0) {
+      const names = q.missingSettlements.drivers.map((d) => d.name.split(' ')[0]);
+      const extra = q.missingSettlements.count - names.length;
+      items.push({
+        key: 'settlements',
+        icon: ReceiptText,
+        title: `${q.missingSettlements.count} motorista${q.missingSettlements.count !== 1 ? 's' : ''} sem fecho da semana passada`,
+        detail: `${names.join(', ')}${extra > 0 ? ` e mais ${extra}` : ''} · ${weekLabel(q.missingSettlements)}`,
+        waiting: null,
+        actionLabel: 'Fechar',
+        to: '/app/admin/settlements',
+        state: {
+          userId: q.missingSettlements.drivers[0]?.id,
+          weekStart: q.missingSettlements.weekStart,
+          weekEnd: q.missingSettlements.weekEnd,
+        },
+      });
+    }
+
+    if (q.earningsPending.count > 0) {
+      const days = daysSince(q.earningsPending.oldestAt);
+      items.push({
+        key: 'earnings',
+        icon: HandCoins,
+        title: `${q.earningsPending.count} valor${q.earningsPending.count !== 1 ? 'es' : ''} comunicado${q.earningsPending.count !== 1 ? 's' : ''} por confirmar`,
+        detail: `O mais antigo ${agoLabel(days)}`,
+        waiting: days,
+        actionLabel: 'Rever',
+        to: '/app/admin/drivers',
+      });
+    }
+
     if (q.documentsExpiringSoon.count > 0) {
       items.push({
         key: 'expiring',
@@ -234,7 +282,13 @@ export function AdminDashboard() {
     }
 
     // Quem espera há mais tempo primeiro; itens sem idade vão para o fim.
-    return items.sort((a, b) => (b.waiting ?? -1) - (a.waiting ?? -1));
+    // O fecho é a exceção: sai da ordenação por idade e fica no topo, porque
+    // é dele que depende o motorista receber.
+    const settlement = items.filter((i) => i.key === 'settlements');
+    const rest = items
+      .filter((i) => i.key !== 'settlements')
+      .sort((a, b) => (b.waiting ?? -1) - (a.waiting ?? -1));
+    return [...settlement, ...rest];
   }, [overview]);
 
   if (isLoading) return <DashboardSkeleton />;
@@ -296,7 +350,11 @@ export function AdminDashboard() {
           ) : (
             <ul>
               {queue.map((item) => (
-                <QueueRow key={item.key} item={item} onGo={(to) => navigate(to)} />
+                <QueueRow
+                  key={item.key}
+                  item={item}
+                  onGo={(to, state) => navigate(to, state ? { state } : undefined)}
+                />
               ))}
             </ul>
           )}
