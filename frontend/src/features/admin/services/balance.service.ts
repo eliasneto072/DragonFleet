@@ -5,7 +5,13 @@ import { apiClient } from '@/shared/lib/api-client';
 export type AdjustmentType = 'CREDIT' | 'DEBIT';
 
 export interface BalanceSummary {
+  /**
+   * Informativo: o que o motorista comunicou. NÃO entra em `available`.
+   * O dinheiro vem dos fechos semanais; os lançamentos são conferência.
+   */
   totalEarnings: number;
+  /** Soma líquida dos fechos registados. É daqui que vem o saldo. */
+  totalSettlements: number;
   totalCredits: number;
   totalDebits: number;
   totalWithdrawn: number;

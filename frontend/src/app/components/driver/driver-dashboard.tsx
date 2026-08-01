@@ -1,39 +1,16 @@
 // src/app/components/driver/driver-dashboard.tsx
 //
-// Painel do motorista.
+// Painel do motorista, construído sobre os FECHOS SEMANAIS.
 //
-// REGRA DE NEGÓCIO — ajustes de saldo entram nos ganhos:
-// Um crédito lançado pela administração é, na prática, uma corrida que entrou
-// por fora do registo. Por isso os cartões "Ganhos líquidos", "Esta semana" e
-// "Semana anterior" somam créditos e subtraem débitos. A palavra "ajuste" não
-// aparece na interface do motorista.
-// O cartão chama-se "Ganhos líquidos", e não "Ganhos totais", porque com
-// débitos incluídos o número pode descer de uma semana para a outra — um
-// número chamado "ganhos" que diminui confunde.
+// MUDANÇA DE FUNDO: a versão anterior somava os lançamentos do próprio
+// motorista. Esses lançamentos deixaram de creditar — passaram a ser
+// conferência para quem fecha a semana — e o dinheiro entra apenas pelos
+// fechos registados pela administração. Somá-los aqui mostrava um total que já
+// não correspondia ao saldo, e um motorista que não comunicasse nada via o
+// gráfico vazio enquanto o saldo subia todas as semanas.
 //
-// LIMITAÇÃO CONHECIDA — datação dos ajustes:
-// Earning tem `date` (o dia da corrida) e `createdAt` (quando foi lançada).
-// BalanceAdjustment só tem `createdAt`. Os ajustes são portanto datados pela
-// criação. O backend aplica o mesmo critério ao gerar o PDF.
-//
-// GRÁFICOS — adaptam-se ao volume de dados:
-// Barras em vez de linha, porque linha interpola e afirmaria ganhos zero em
-// meses em que o motorista simplesmente não estava na plataforma. Quando o
-// período tem menos de dois intervalos com movimento, mostra-se um estado
-// explicativo em vez do gráfico.
-//
-// RESPONSIVIDADE:
-// O shell dá px-4 no telemóvel, logo o cartão útil tem ~328px num ecrã de 360.
-// O hero divide essa largura entre texto e ilustração; o detalhe do saldo e os
-// botões ficam FORA dessa linha, ocupando a largura toda, senão quebrariam em
-// duas linhas cada.
-//
-// MODO ESCURO:
-// O gradiente do hero é fixo e não acompanha o tema — em dark a escala de
-// marca clareia, e um hero mais claro no escuro fica errado. Todo o texto lá
-// dentro usa branco com opacidade, nunca text-brand-*. Já as barras e o
-// tooltip do gráfico usam variáveis de tema: Recharts renderiza SVG no DOM
-// (não canvas), por isso var(--…) resolve normalmente.
+// A tela responde às três perguntas dele, por esta ordem: quanto tenho, como
+// correu cada semana, e o que já comuniquei.
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -41,47 +18,33 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
+import { Textarea } from '@/app/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/app/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 import {
-  TrendingUp, TrendingDown, Loader2, AlertCircle, Plus,
-  ArrowDownToLine, History, ChevronDown, BarChart3, Lightbulb,
-} from 'lucide-react';
-import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import {
+  AlertCircle, ArrowDownToLine, CalendarRange, CheckCircle2, ChevronDown,
+  ChevronRight, Clock, History, Lightbulb, Loader2, Plus, XCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth/context/AuthContext';
 import { earningsService } from '@/features/driver/services/earnings.service';
-import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
 import { balanceService } from '@/features/admin/services/balance.service';
 import { queryKeys } from '@/shared/lib/query-keys';
-import { useAuth } from '@/features/auth/context/AuthContext';
-import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/lib/format';
-import {
-  PLATFORM_OPTIONS, platformColor, platformLabel, ADJUSTMENT_COLOR,
-} from '@/shared/lib/platform-labels';
+import { formatCurrency, formatCurrencyCompact } from '@/shared/lib/format';
+import { PLATFORM_OPTIONS, platformLabel } from '@/shared/lib/platform-labels';
 import { WalletIllustration } from '@/app/components/ui/wallet-illustration';
-import { EarningsHistoryModal } from './earnings-history-modal';
-import type { Adjustment } from '@/features/admin/services/balance.service';
-import type { ApiEarning, ApiWithdrawal, EarningPlatform } from '@/shared/types/api';
+import type { ApiEarning, EarningPlatform, EarningStatus } from '@/shared/types/api';
 
-type Period = '14d' | '30d' | '12m';
-
-const PERIOD_LABELS: Record<Period, string> = {
-  '14d': 'Últimos 14 dias',
-  '30d': 'Últimos 30 dias',
-  '12m': 'Últimos 12 meses',
-};
-
-// Recharts renderiza SVG no DOM, então variáveis de tema resolvem aqui.
-// --chart-1 é #108865 em claro e #2aa37c em escuro; um hex fixo ficaria
-// apagado contra o fundo escuro.
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'var(--popover)',
   border: '1px solid var(--border)',
@@ -90,270 +53,94 @@ const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   boxShadow: 'var(--shadow-md)',
 };
 
-// ── Helpers de data ───────────────────────────────────────────────────────────
-
-// Earnings vêm como @db.Date. `new Date("2026-06-21")` parseia como meia-noite
-// UTC, mas os limites de semana são locais — a diferença pode empurrar um ganho
-// para o dia ou a semana errados. Parsear Y/M/D para data local resolve.
-function parseLocalDate(value: string | Date): Date {
-  if (value instanceof Date) return value;
-  const datePart = String(value).slice(0, 10);
-  const [y, m, d] = datePart.split('-').map(Number);
-  if (y && m && d) return new Date(y, m - 1, d);
-  return new Date(value);
+/** "2026-07-06T00:00:00.000Z" → "06/07". Sem passar por Date: a string é dia
+ *  puro, e converter em fuso negativo devolveria a véspera. */
+function shortDay(iso: string): string {
+  const [, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}`;
 }
 
-function startOfDay(d: Date): Date {
-  const c = new Date(d);
-  c.setHours(0, 0, 0, 0);
-  return c;
+function fullDay(iso: string): string {
+  return iso.slice(0, 10).split('-').reverse().join('/');
 }
 
-function startOfWeek(): Date {
-  const d = startOfDay(new Date());
-  d.setDate(d.getDate() - d.getDay());
-  return d;
-}
+// ── Estado do lançamento ──────────────────────────────────────────────────────
 
-function dayKey(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+const EARNING_STATUS: Record<
+  EarningStatus,
+  { label: string; icon: typeof CheckCircle2; cls: string }
+> = {
+  PENDING: {
+    label: 'Por confirmar',
+    icon: Clock,
+    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  },
+  APPROVED: {
+    label: 'Confirmado',
+    icon: CheckCircle2,
+    cls: 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300',
+  },
+  REJECTED: {
+    label: 'Recusado',
+    icon: XCircle,
+    cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+  },
+};
 
-function monthKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-// ── Movimentos ────────────────────────────────────────────────────────────────
-
-/** Ganho registado ou ajuste, reduzidos a data + valor com sinal. */
-interface Movement {
-  date: Date;
-  amount: number;
-  platform: EarningPlatform | null; // null = ajuste de saldo
-}
-
-function toMovements(earnings: ApiEarning[], adjustments: Adjustment[]): Movement[] {
-  return [
-    ...earnings.map((e) => ({
-      date: parseLocalDate(e.date),
-      amount: Number(e.amount),
-      platform: e.platform,
-    })),
-    ...adjustments.map((a) => ({
-      date: startOfDay(new Date(a.createdAt)),
-      amount: a.type === 'CREDIT' ? Number(a.amount) : -Number(a.amount),
-      platform: null,
-    })),
-  ];
-}
-
-function sumBetween(movements: Movement[], from: Date, to: Date): number {
-  return movements
-    .filter((m) => m.date >= from && m.date < to)
-    .reduce((s, m) => s + m.amount, 0);
-}
-
-// ── Séries dos gráficos ───────────────────────────────────────────────────────
-
-interface Bucket { label: string; total: number }
-
-function buildSeries(movements: Movement[], period: Period): Bucket[] {
-  const now = new Date();
-
-  if (period === '12m') {
-    const map: Record<string, number> = {};
-    movements.forEach((m) => {
-      const k = monthKey(m.date);
-      map[k] = (map[k] ?? 0) + m.amount;
-    });
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-      return {
-        label: d.toLocaleDateString('pt-PT', { month: 'short' }),
-        total: Math.round((map[monthKey(d)] ?? 0) * 100) / 100,
-      };
-    });
-  }
-
-  const days = period === '14d' ? 14 : 30;
-  const map: Record<string, number> = {};
-  movements.forEach((m) => {
-    const k = dayKey(m.date);
-    map[k] = (map[k] ?? 0) + m.amount;
-  });
-
-  return Array.from({ length: days }, (_, i) => {
-    const d = startOfDay(new Date());
-    d.setDate(d.getDate() - (days - 1 - i));
-    return {
-      label: d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' }),
-      total: Math.round((map[dayKey(d)] ?? 0) * 100) / 100,
-    };
-  });
-}
-
-/** Origem dos ganhos nos últimos `days`, por plataforma + ajustes líquidos. */
-function buildOrigin(movements: Movement[], days = 30) {
-  const cutoff = startOfDay(new Date());
-  cutoff.setDate(cutoff.getDate() - (days - 1));
-  const inRange = movements.filter((m) => m.date >= cutoff);
-
-  const byPlatform: Record<string, { amount: number; count: number }> = {};
-  let adjustmentsNet = 0;
-
-  inRange.forEach((m) => {
-    if (m.platform === null) {
-      adjustmentsNet += m.amount;
-      return;
-    }
-    byPlatform[m.platform] = byPlatform[m.platform] ?? { amount: 0, count: 0 };
-    byPlatform[m.platform].amount += m.amount;
-    byPlatform[m.platform].count += 1;
-  });
-
-  const segments = Object.entries(byPlatform)
-    .map(([key, v]) => ({
-      key,
-      label: platformLabel(key),
-      color: platformColor(key),
-      amount: v.amount,
-      count: v.count,
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  // Créditos líquidos entram como um segmento próprio para que a soma da barra
-  // bata com o cartão "Ganhos líquidos". Descontos líquidos não viram segmento
-  // (não há barra negativa); aparecem como nota abaixo da legenda.
-  if (adjustmentsNet > 0) {
-    segments.push({
-      key: 'ADJUSTMENT',
-      label: 'Adicionado pela gestão',
-      color: ADJUSTMENT_COLOR,
-      amount: adjustmentsNet,
-      count: 0,
-    });
-  }
-
-  const total = segments.reduce((s, x) => s + x.amount, 0);
-  return {
-    segments: segments.map((s) => ({
-      ...s,
-      share: total > 0 ? (s.amount / total) * 100 : 0,
-    })),
-    total,
-    deductions: adjustmentsNet < 0 ? Math.abs(adjustmentsNet) : 0,
-  };
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-function DashboardSkeleton() {
+function EarningBadge({ status }: { status: EarningStatus }) {
+  const meta = EARNING_STATUS[status];
+  if (!meta) return null;
+  const Icon = meta.icon;
   return (
-    <div className="space-y-6" role="status" aria-busy="true">
-      <span className="sr-only">A carregar o painel…</span>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-44" />
-          <Skeleton className="h-4 w-60" />
-        </div>
-        <Skeleton className="h-9 w-full sm:w-36 sm:shrink-0" />
-      </div>
-
-      <Skeleton className="h-52 w-full rounded-xl sm:h-48" />
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-        {[0, 1, 2].map((i) => (
-          <Card key={i} className={`shadow-card ${i === 0 ? 'col-span-2 sm:col-span-1' : ''}`}>
-            <CardContent className="space-y-2 p-4 pt-5 sm:p-6">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-7 w-28" />
-              <Skeleton className="h-3 w-20" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="shadow-card">
-        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-52" /></CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-          <Skeleton className="h-[240px] w-full" />
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-card">
-        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-52" /></CardHeader>
-        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
-          <Skeleton className="h-3.5 w-full rounded-full" />
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-4 w-full" />)}
-        </CardContent>
-      </Card>
-    </div>
+    <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+      <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
+      {meta.label}
+    </span>
   );
 }
 
-// ── Estado de dados insuficientes ─────────────────────────────────────────────
+// ── Comunicar um valor ────────────────────────────────────────────────────────
 
-function NotEnoughData({ onRegister }: { onRegister: () => void }) {
-  return (
-    <div className="flex flex-col items-center gap-3 px-2 py-10 text-center sm:py-12">
-      <BarChart3 className="h-9 w-9 text-muted-foreground" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-medium">Ainda não dá para desenhar a evolução</p>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          Registe ganhos em pelo menos dois dias diferentes e o gráfico aparece aqui.
-        </p>
-      </div>
-      <Button variant="outline" size="sm" onClick={onRegister}>
-        <Plus className="mr-1.5 h-3.5 w-3.5" />Registar ganho
-      </Button>
-    </div>
-  );
-}
-
-// ── Modal de registo de ganho ─────────────────────────────────────────────────
-
-function AddEarningModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function ReportEarningModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
-
   const [amount, setAmount] = useState('');
   const [platform, setPlatform] = useState<EarningPlatform>('UBER');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState('');
 
-  const mutation = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationFn: () =>
-      earningsService.create({ amount: parseFloat(amount), platform, date }),
+      earningsService.create({
+        amount: parseFloat(amount),
+        platform,
+        date,
+        notes: notes.trim() || null,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.earnings.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
-      toast.success('Ganho registado com sucesso!');
+      toast.success('Comunicado. O escritório vai confirmar no fecho da semana.');
       handleClose();
     },
-    onError: () => toast.error('Erro ao registar ganho. Tenta novamente.'),
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao comunicar o valor.'),
   });
 
   function handleClose() {
     setAmount('');
     setPlatform('UBER');
     setDate(new Date().toISOString().slice(0, 10));
+    setNotes('');
     onClose();
-  }
-
-  function handleSubmit() {
-    const value = parseFloat(amount);
-    if (!amount || isNaN(value) || value <= 0) {
-      toast.error('Insere um valor válido.');
-      return;
-    }
-    mutation.mutate();
   }
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Registar Ganho</DialogTitle>
+          <DialogTitle>Registar ganho</DialogTitle>
+          <DialogDescription>
+            O valor entra na conta quando o escritório fechar a semana. Isto serve para
+            garantir que nada fica de fora.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -361,14 +148,15 @@ function AddEarningModal({ open, onClose }: { open: boolean; onClose: () => void
             <Label htmlFor="amount">Valor (€)</Label>
             <Input
               id="amount" type="number" min="0.01" step="0.01" placeholder="0,00"
+              inputMode="decimal"
               value={amount} onChange={(e) => setAmount(e.target.value)}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Plataforma</Label>
+            <Label htmlFor="platform">Plataforma</Label>
             <Select value={platform} onValueChange={(v) => setPlatform(v as EarningPlatform)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="platform"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PLATFORM_OPTIONS.map((p) => (
                   <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
@@ -385,23 +173,160 @@ function AddEarningModal({ open, onClose }: { open: boolean; onClose: () => void
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="notes">Observação</Label>
+            <Textarea
+              id="notes" rows={2}
+              placeholder="Ex.: corrida de sábado à noite que não apareceu no relatório."
+              value={notes} onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
         </div>
 
         <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
           <Button
-            variant="outline" onClick={handleClose} disabled={mutation.isPending}
+            variant="outline" onClick={handleClose} disabled={isPending}
             className="w-full sm:w-auto"
           >
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={mutation.isPending} className="w-full sm:w-auto">
-            {mutation.isPending
-              ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />A guardar…</>)
-              : 'Guardar'}
+          <Button
+            onClick={() => {
+              const v = parseFloat(amount);
+              if (!amount || isNaN(v) || v <= 0) { toast.error('Insere um valor válido.'); return; }
+              mutate();
+            }}
+            disabled={isPending}
+            className="w-full sm:w-auto"
+          >
+            {isPending
+              ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A enviar…</>)
+              : 'Enviar'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Detalhe de uma semana ─────────────────────────────────────────────────────
+
+function WeekRow({ label, value, muted, strong, negative }: {
+  label: string; value: string; muted?: boolean; strong?: boolean; negative?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1">
+      <dt className={muted ? 'text-muted-foreground' : ''}>{label}</dt>
+      <dd className={`shrink-0 tabular-nums ${strong ? 'font-semibold' : ''} ${negative ? 'text-destructive' : ''}`}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function WeekDetail({ s }: { s: ApiSettlement }) {
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-muted-foreground">
+        {fullDay(s.weekStart)} a {fullDay(s.weekEnd)}
+        {s.vehiclePlate && (
+          <> · <span className="font-mono tracking-tight">{s.vehiclePlate}</span></>
+        )}
+      </p>
+
+      <div>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          O que entrou
+        </p>
+        <dl className="border-t border-border pt-1">
+          <WeekRow label="Uber" value={formatCurrency(s.uberAmount)} />
+          <WeekRow label="Bolt" value={formatCurrency(s.boltAmount)} />
+          {s.otherRevenue > 0 && (
+            <WeekRow label="Outras receitas" value={formatCurrency(s.otherRevenue)} />
+          )}
+          <div className="border-t border-border">
+            <WeekRow label="Total" value={formatCurrency(s.grossRevenue)} strong />
+          </div>
+        </dl>
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          O que saiu
+        </p>
+        <dl className="border-t border-border pt-1">
+          <WeekRow label="Via Verde" value={`− ${formatCurrency(s.tollsAmount)}`} />
+          <WeekRow label="Combustível" value={`− ${formatCurrency(s.fuelAmount)}`} />
+          <WeekRow label="Viatura" value={`− ${formatCurrency(s.vehicleFee)}`} />
+          {s.otherDeductions > 0 && (
+            <WeekRow label="Outros" value={`− ${formatCurrency(s.otherDeductions)}`} />
+          )}
+          <div className="border-t border-border">
+            <WeekRow label="Despesas" value={`− ${formatCurrency(s.operatingCosts)}`} strong />
+          </div>
+        </dl>
+      </div>
+
+      <div>
+        <dl className="border-t border-border pt-1">
+          <WeekRow label="Lucro da semana" value={formatCurrency(s.profitBase)} />
+          <WeekRow
+            label={`Comissão da empresa (${s.commissionRate}%)`}
+            value={`− ${formatCurrency(s.commissionAmount)}`}
+          />
+          <div className="border-t border-border">
+            <WeekRow
+              label="Ficou para si"
+              value={formatCurrency(s.netToDriver)}
+              strong
+              negative={s.netToDriver < 0}
+            />
+          </div>
+        </dl>
+      </div>
+
+      {s.notes?.trim() && (
+        <div className="rounded-lg bg-secondary p-3">
+          <p className="text-xs font-medium text-muted-foreground">Observações do escritório</p>
+          <p className="mt-1 text-sm">{s.notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar o painel…</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="h-4 w-60" />
+        </div>
+        <Skeleton className="h-9 w-full sm:w-36" />
+      </div>
+      <Skeleton className="h-52 w-full rounded-xl sm:h-48" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        {[0, 1, 2].map((i) => (
+          <Card key={i} className={`shadow-card ${i === 0 ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <CardContent className="space-y-2 p-4 sm:p-6">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-28" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-52" /></CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <Skeleton className="h-[240px] w-full" />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -411,19 +336,14 @@ export function DriverDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const [period, setPeriod] = useState<Period>('14d');
+  const [weekDetail, setWeekDetail] = useState<ApiSettlement | null>(null);
 
-  const earningsQuery = useQuery({
-    queryKey: queryKeys.earnings.list,
-    queryFn: () => earningsService.list(),
-  });
-
-  const withdrawalsQuery = useQuery({
-    queryKey: queryKeys.withdrawals.list,
-    queryFn: () => withdrawalsService.list(),
+  const settlementsQuery = useQuery({
+    queryKey: queryKeys.settlements.list(user?.id, 'REGISTERED'),
+    queryFn: () => settlementsService.list({ status: 'REGISTERED' }),
+    enabled: !!user?.id,
   });
 
   const balanceQuery = useQuery({
@@ -432,54 +352,57 @@ export function DriverDashboard() {
     enabled: !!user?.id,
   });
 
-  // GET /balance/:userId/adjustments é libertado ao próprio dono
-  // (ensureOwnerOrManager no balance.service do backend), não só a admins.
-  const adjustmentsQuery = useQuery({
-    queryKey: queryKeys.balance.adjustments(user?.id ?? ''),
-    queryFn: () => balanceService.listAdjustments(user!.id),
-    enabled: !!user?.id,
+  const earningsQuery = useQuery({
+    queryKey: queryKeys.earnings.list,
+    queryFn: () => earningsService.list(),
   });
 
-  const earnings = earningsQuery.data?.earnings ?? [];
-  const withdrawals: ApiWithdrawal[] = withdrawalsQuery.data?.withdrawals ?? [];
-  const adjustments = adjustmentsQuery.data?.adjustments ?? [];
+  const settlements = settlementsQuery.data?.settlements ?? [];
   const summary = balanceQuery.data?.balance;
+  const earnings: ApiEarning[] = earningsQuery.data?.earnings ?? [];
 
-  const movements = useMemo(
-    () => toMovements(earnings, adjustments),
-    [earnings, adjustments],
+  // Mais recente primeiro na lista; o gráfico inverte para ler da esquerda.
+  const weeks = useMemo(
+    () => [...settlements].sort((a, b) => b.weekStart.localeCompare(a.weekStart)),
+    [settlements],
   );
 
-  const series = useMemo(() => buildSeries(movements, period), [movements, period]);
-  const origin = useMemo(() => buildOrigin(movements), [movements]);
+  const series = useMemo(
+    () =>
+      [...weeks]
+        .slice(0, 12)
+        .reverse()
+        .map((s) => ({
+          label: shortDay(s.weekStart),
+          total: Math.round(s.netToDriver * 100) / 100,
+        })),
+    [weeks],
+  );
 
-  const isLoading = earningsQuery.isLoading || withdrawalsQuery.isLoading;
-  const isError = earningsQuery.isError || withdrawalsQuery.isError;
+  const pendingEarnings = earnings.filter((e) => e.status === 'PENDING');
 
-  if (isLoading) return <DashboardSkeleton />;
+  if (settlementsQuery.isLoading) return <DashboardSkeleton />;
 
-  if (isError) {
+  if (settlementsQuery.isError) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
-        <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-muted-foreground">Erro ao carregar dados do dashboard.</p>
+        <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
+        <p className="text-muted-foreground">Erro ao carregar o painel.</p>
+        <Button variant="outline" onClick={() => settlementsQuery.refetch()}>
+          Tentar novamente
+        </Button>
       </div>
     );
   }
 
-  // ── Saldo ───────────────────────────────────────────────────────────────────
-  const localBalance = Math.max(
-    movements.reduce((s, m) => s + m.amount, 0)
-      - withdrawals
-        .filter((w) => w.status === 'PAID' || w.status === 'APPROVED')
-        .reduce((s, w) => s + Number(w.amount), 0),
-    0,
-  );
-  const balance = summary?.available ?? localBalance;
+  const balance = summary?.available ?? 0;
+  const lastWeek = weeks[0];
+  const totalReceived = weeks.reduce((s, w) => s + w.netToDriver, 0);
+  const average = weeks.length ? totalReceived / weeks.length : 0;
 
   const breakdownRows: { label: string; value: number; sign: '+' | '−' }[] = summary
     ? [
-        { label: 'Ganhos registados', value: summary.totalEarnings, sign: '+' },
+        { label: 'Fechos semanais', value: summary.totalSettlements, sign: '+' },
         ...(summary.totalCredits > 0
           ? [{ label: 'Adicionado pela gestão', value: summary.totalCredits, sign: '+' as const }]
           : []),
@@ -495,34 +418,6 @@ export function DriverDashboard() {
       ]
     : [];
 
-  // ── KPIs (líquidos de ajustes) ──────────────────────────────────────────────
-  const netTotal = movements.reduce((s, m) => s + m.amount, 0);
-
-  const thisWeekStart = startOfWeek();
-  const thisWeekEnd = new Date(thisWeekStart);
-  thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-
-  const thisWeek = sumBetween(movements, thisWeekStart, thisWeekEnd);
-  const lastWeek = sumBetween(movements, lastWeekStart, thisWeekStart);
-  const weekTrend = lastWeek > 0 ? ((thisWeek - lastWeek) / lastWeek) * 100 : null;
-
-  // ── Frases de conclusão ─────────────────────────────────────────────────────
-  const activeBuckets = series.filter((b) => b.total > 0);
-  const hasSeries = activeBuckets.length >= 2;
-
-  const best = activeBuckets.reduce<Bucket | null>(
-    (acc, b) => (!acc || b.total > acc.total ? b : acc), null,
-  );
-  const average = activeBuckets.length
-    ? activeBuckets.reduce((s, b) => s + b.total, 0) / activeBuckets.length
-    : 0;
-  const unit = period === '12m' ? 'mês' : 'dia';
-  const unitPlural = period === '12m' ? 'meses' : 'dias';
-
-  const topSegment = origin.segments[0];
-
   return (
     <div className="space-y-5 sm:space-y-6">
 
@@ -536,19 +431,16 @@ export function DriverDashboard() {
             Aqui está o resumo da sua atividade.
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="w-full sm:w-auto sm:shrink-0">
-          <Plus className="h-4 w-4 mr-2" />
-          Registar Ganho
+        <Button onClick={() => setReportOpen(true)} className="w-full sm:w-auto sm:shrink-0">
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Registar ganho
         </Button>
       </div>
 
-      {/* Hero */}
+      {/* Saldo */}
       <div
         className="overflow-hidden rounded-xl p-5 shadow-brand sm:p-6"
         style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
       >
-        {/* Só o valor divide a linha com a ilustração. O detalhe e os botões
-            ficam abaixo, com a largura toda, senão quebrariam no telemóvel. */}
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="min-w-0 flex-1">
             <p className="text-sm text-white/70">Saldo disponível para retirada</p>
@@ -556,10 +448,8 @@ export function DriverDashboard() {
               {formatCurrency(balance)}
             </p>
           </div>
-
           <WalletIllustration
-            tone="brand"
-            surface="dark"
+            tone="brand" surface="dark"
             className="h-20 w-auto shrink-0 sm:h-32 lg:h-40"
           />
         </div>
@@ -607,71 +497,68 @@ export function DriverDashboard() {
           </button>
           <button
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:flex-none"
-            onClick={() => setHistoryOpen(true)}
+            onClick={() => navigate('/app/driver/withdrawals')}
           >
             <History className="h-4 w-4 shrink-0" /> Histórico
           </button>
         </div>
       </div>
 
-      {/* KPIs — no telemóvel o total ocupa a linha toda e as semanas dividem
-          a seguinte; três cartões empilhados afastavam demais o gráfico. */}
+      {/* Indicadores */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card className="col-span-2 shadow-card sm:col-span-1">
           <CardContent className="p-4 pt-4 sm:p-6 sm:pt-5">
-            <p className="mb-1 text-sm text-muted-foreground">Ganhos líquidos</p>
-            <p className="text-2xl font-bold tabular-nums">{formatCurrency(netTotal)}</p>
+            <p className="mb-1 text-sm text-muted-foreground">Última semana fechada</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {lastWeek ? formatCurrency(lastWeek.netToDriver) : '—'}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {earnings.length} lançamento{earnings.length !== 1 ? 's' : ''}
+              {lastWeek
+                ? `${shortDay(lastWeek.weekStart)} a ${shortDay(lastWeek.weekEnd)}`
+                : 'Ainda sem fechos'}
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-card">
           <CardContent className="p-4 pt-4 sm:p-6 sm:pt-5">
-            <p className="mb-1 text-sm text-muted-foreground">Esta semana</p>
-            <p className="text-xl font-bold tabular-nums sm:text-2xl">{formatCurrency(thisWeek)}</p>
-            {weekTrend !== null ? (
-              <p className={`mt-1 flex items-center gap-1 text-xs ${weekTrend >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {weekTrend >= 0
-                  ? <TrendingUp className="h-3 w-3 shrink-0" />
-                  : <TrendingDown className="h-3 w-3 shrink-0" />}
-                <span className="truncate">{formatPercent(weekTrend)} vs. anterior</span>
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">Desde domingo</p>
-            )}
+            <p className="mb-1 text-sm text-muted-foreground">Média por semana</p>
+            <p className="text-xl font-bold tabular-nums sm:text-2xl">
+              {formatCurrency(average)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {weeks.length} semana{weeks.length !== 1 ? 's' : ''}
+            </p>
           </CardContent>
         </Card>
         <Card className="shadow-card">
           <CardContent className="p-4 pt-4 sm:p-6 sm:pt-5">
-            <p className="mb-1 text-sm text-muted-foreground">Semana anterior</p>
-            <p className="text-xl font-bold tabular-nums sm:text-2xl">{formatCurrency(lastWeek)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">7 dias antes</p>
+            <p className="mb-1 text-sm text-muted-foreground">Total recebido</p>
+            <p className="text-xl font-bold tabular-nums sm:text-2xl">
+              {formatCurrency(totalReceived)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Desde o início</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Quanto ganhou por dia */}
+      {/* Evolução semanal */}
       <Card className="shadow-card">
-        <CardHeader className="flex flex-col gap-3 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:p-6">
-          <div className="min-w-0">
-            <CardTitle className="text-base sm:text-lg">Quanto ganhou por {unit}</CardTitle>
-            <p className="mt-0.5 text-sm text-muted-foreground">{PERIOD_LABELS[period]}</p>
-          </div>
-          <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-            <SelectTrigger className="w-full sm:w-[168px] sm:shrink-0" aria-label="Período do gráfico">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-                <SelectItem key={p} value={p}>{PERIOD_LABELS[p]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Quanto recebeu por semana</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Depois de descontadas as despesas e a comissão
+          </p>
         </CardHeader>
         <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-          {!hasSeries ? (
-            <NotEnoughData onRegister={() => setAddOpen(true)} />
+          {series.length < 2 ? (
+            <div className="flex flex-col items-center gap-2.5 px-2 py-8 text-center">
+              <CalendarRange className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="max-w-md text-sm text-muted-foreground">
+                {series.length === 0
+                  ? 'Ainda não há semanas fechadas. Assim que o escritório fechar a primeira, ela aparece aqui.'
+                  : 'Com duas semanas fechadas o gráfico começa a mostrar a evolução.'}
+              </p>
+            </div>
           ) : (
             <>
               <div className="h-[220px] w-full sm:h-[260px]">
@@ -683,7 +570,7 @@ export function DriverDashboard() {
                       tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={12}
                     />
                     <YAxis
-                      stroke="var(--muted-foreground)" fontSize={10} width={52}
+                      stroke="var(--muted-foreground)" fontSize={10} width={56}
                       tickLine={false} axisLine={false}
                       tickFormatter={(v) => (v === 0 ? '€0' : formatCurrencyCompact(v))}
                     />
@@ -692,107 +579,134 @@ export function DriverDashboard() {
                       contentStyle={CHART_TOOLTIP_STYLE}
                       labelStyle={{ color: 'var(--muted-foreground)' }}
                       itemStyle={{ color: 'var(--popover-foreground)' }}
-                      formatter={(v: number) => [formatCurrency(v), 'Ganhos']}
+                      formatter={(v: number) => [formatCurrency(v), 'Recebido']}
+                      labelFormatter={(l) => `Semana de ${l}`}
                     />
-                    <Bar dataKey="total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                    <Bar dataKey="total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
 
-              {best && (
-                <p className="mt-3 flex items-start gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
-                  <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>
-                    Melhor {unit}: <strong className="font-medium text-foreground">{formatCurrency(best.total)}</strong> em {best.label}.
-                    Média de {formatCurrency(average)} nos {unitPlural} com movimento.
-                  </span>
-                </p>
-              )}
+              <p className="mt-3 flex items-start gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
+                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  Média de <strong className="font-medium text-foreground">{formatCurrency(average)}</strong> por
+                  semana nas {weeks.length} semanas fechadas.
+                </span>
+              </p>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* De onde vem o seu dinheiro */}
+      {/* Semanas */}
       <Card className="shadow-card">
         <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">De onde vem o seu dinheiro</CardTitle>
+          <CardTitle className="text-base sm:text-lg">As suas semanas</CardTitle>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Últimos 30 dias · {formatCurrency(origin.total)} no total
+            Toque para ver o detalhe de receitas e despesas
           </p>
         </CardHeader>
         <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-          {origin.segments.length === 0 ? (
+          {weeks.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum ganho nos últimos 30 dias.
+              Nenhuma semana fechada ainda.
             </p>
           ) : (
-            <>
-              <div className="mb-4 flex h-3.5 gap-0.5 overflow-hidden">
-                {origin.segments.map((s, i) => (
-                  <div
-                    key={s.key}
-                    style={{
-                      width: `${s.share}%`,
-                      background: s.color,
-                      borderTopLeftRadius: i === 0 ? 7 : 0,
-                      borderBottomLeftRadius: i === 0 ? 7 : 0,
-                      borderTopRightRadius: i === origin.segments.length - 1 ? 7 : 0,
-                      borderBottomRightRadius: i === origin.segments.length - 1 ? 7 : 0,
-                    }}
-                  />
-                ))}
-              </div>
-
-              <ul className="space-y-2">
-                {origin.segments.map((s) => (
-                  <li key={s.key} className="flex items-center gap-2 text-sm sm:gap-2.5">
+            <ul>
+              {weeks.slice(0, 10).map((s) => (
+                <li key={s.id} className="border-b border-border py-1 last:border-0">
+                  <button
+                    type="button"
+                    onClick={() => setWeekDetail(s)}
+                    className="flex w-full items-center gap-3 rounded-md px-1 py-2 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {shortDay(s.weekStart)} a {shortDay(s.weekEnd)}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {formatCurrency(s.grossRevenue)} em corridas
+                        {' · '}
+                        {formatCurrency(s.operatingCosts + s.commissionAmount)} de descontos
+                      </span>
+                    </span>
                     <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                      style={{ background: s.color }}
+                      className={`shrink-0 text-sm font-semibold tabular-nums ${
+                        s.netToDriver < 0 ? 'text-destructive' : 'text-foreground'
+                      }`}
+                    >
+                      {formatCurrency(s.netToDriver)}
+                    </span>
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                    {s.count > 0 && (
-                      <span className="hidden shrink-0 text-muted-foreground md:inline">
-                        {s.count} lançamento{s.count !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    <span className="shrink-0 tabular-nums">{formatCurrency(s.amount)}</span>
-                    <span className="w-9 shrink-0 text-right tabular-nums text-muted-foreground">
-                      {Math.round(s.share)}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              {origin.deductions > 0 && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Descontos aplicados no período: −{formatCurrency(origin.deductions)}
-                </p>
-              )}
-
-              {topSegment && (
-                <p className="mt-3 flex items-start gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
-                  <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>
-                    <strong className="font-medium text-foreground">{topSegment.label}</strong> responde
-                    por {Math.round(topSegment.share)}% do que entrou nos últimos 30 dias.
-                  </span>
-                </p>
-              )}
-            </>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
 
-      <AddEarningModal open={addOpen} onClose={() => setAddOpen(false)} />
-      <EarningsHistoryModal
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        earnings={earnings}
-        adjustments={adjustments}
-      />
+      {/* Comunicações */}
+      {earnings.length > 0 && (
+        <Card className="shadow-card">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-base sm:text-lg">Valores que comunicou</CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {pendingEarnings.length > 0
+                ? `${pendingEarnings.length} por confirmar pelo escritório`
+                : 'Entram no fecho da semana correspondente'}
+            </p>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <ul>
+              {earnings.slice(0, 6).map((e) => (
+                <li key={e.id} className="border-b border-border py-2.5 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{platformLabel(e.platform)}</p>
+                        <EarningBadge status={e.status} />
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {fullDay(e.date)}
+                        {e.notes?.trim() && ` · ${e.notes}`}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums">
+                      {formatCurrency(e.amount)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <ReportEarningModal open={reportOpen} onClose={() => setReportOpen(false)} />
+
+      {/* Detalhe da semana */}
+      <Dialog open={!!weekDetail} onOpenChange={(o) => { if (!o) setWeekDetail(null); }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalhe da semana</DialogTitle>
+            <DialogDescription>Tudo o que entrou e saiu neste período</DialogDescription>
+          </DialogHeader>
+          {weekDetail && <WeekDetail s={weekDetail} />}
+          <DialogFooter>
+            <Button
+              variant="outline" className="w-full sm:w-auto"
+              onClick={() => setWeekDetail(null)}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
