@@ -1,15 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Fleet Management Platform</title>
-    </head>
+    <title>DragonFleet</title>
+    <meta name="description" content="Gestão de frota e motoristas TVDE." />
 
-    <body>
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
-  
+    <!-- Favicon. O .ico traz 16, 32 e 48px numa só resposta, que é o que os
+         browsers mais antigos procuram na raiz; os PNG servem os restantes. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/dragonfleet-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Cor da barra do browser em telemóvel, alinhada com a marca. -->
+    <meta name="theme-color" content="#0F5132" />
+
+    <!-- Partilha em mensagens e redes. Sem isto, uma ligação para a aplicação
+         aparece sem título nem imagem. -->
+    <meta property="og:title" content="DragonFleet" />
+    <meta property="og:description" content="Gestão de frota e motoristas TVDE." />
+    <meta property="og:image" content="/dragonfleet-512.png" />
+    <meta property="og:type" content="website" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
