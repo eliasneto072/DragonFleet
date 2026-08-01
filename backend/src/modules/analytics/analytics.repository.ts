@@ -242,19 +242,28 @@ export const analyticsRepository = {
       `,
 
       // Passivo real: soma apenas os saldos POSITIVOS. Um motorista com saldo
-      // negativo (débito maior que ganhos) não abate o que a empresa deve aos
-      // outros — isso é valor a receber, não menos dívida. A fórmula do saldo
-      // por motorista é a mesma de balance.service.getSummary; alterar lá sem
-      // alterar aqui faz o painel divergir das contas individuais.
+      // negativo não abate o que a empresa deve aos outros — isso é valor a
+      // receber, não menos dívida.
+      //
+      // A origem do dinheiro são os FECHOS SEMANAIS registados. Esta consulta
+      // somava a tabela de ganhos, do tempo em que o motorista lançava o
+      // próprio saldo; os lançamentos passaram a ser conferência e não creditam
+      // nada, por isso somá-los aqui inflava o passivo e ignorava o que foi
+      // efetivamente fechado.
+      //
+      // A fórmula por motorista é a mesma de balance.service.getSummary;
+      // alterar lá sem alterar aqui faz o painel divergir das contas
+      // individuais.
       prisma.$queryRaw<{ owed_to: number; owed_by: number }[]>`
         WITH balances AS (
           SELECT
-            COALESCE(e.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
+            COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
               - COALESCE(w.total, 0) - COALESCE(p.total, 0) AS available
           FROM users u
           LEFT JOIN (
-            SELECT user_id, SUM(amount) AS total FROM earnings GROUP BY user_id
-          ) e ON e.user_id = u.id
+            SELECT user_id, SUM(net_to_driver) AS total FROM weekly_settlements
+            WHERE status = 'REGISTERED' GROUP BY user_id
+          ) s ON s.user_id = u.id
           LEFT JOIN (
             SELECT user_id, SUM(amount) AS total FROM balance_adjustments
             WHERE type = 'CREDIT' GROUP BY user_id
