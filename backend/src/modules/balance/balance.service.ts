@@ -155,17 +155,17 @@ export class BalanceService {
 
     const user = await this.ensureUserExists(userId);
 
-    // Débito não pode deixar o saldo negativo (proteção contra erro de digitação).
-    if (input.type === AdjustmentType.DEBIT) {
-      const { available } = await this.getSummary(actor, userId);
-      if (input.amount > available) {
-        throw new AppError(
-          `Débito superior ao saldo disponível (€${available.toFixed(2)}).`,
-          400,
-          'DEBIT_EXCEEDS_BALANCE',
-        );
-      }
-    }
+    // O débito PODE deixar o saldo negativo.
+    //
+    // Havia aqui uma guarda que o recusava, escrita quando a regra era outra.
+    // Mas o negativo é o comportamento pretendido: um motorista cujas despesas
+    // superem os ganhos fica a dever, e o valor é descontado dos fechos
+    // seguintes. Impedir o débito não faria a dívida desaparecer — apenas
+    // impediria de a registar, e o saldo passaria a mentir.
+    //
+    // O erro de digitação que a guarda tentava evitar continua possível, e é
+    // tratado do lado certo: o painel avisa quem está negativo, e o ajuste fica
+    // no histórico com nome e motivo, podendo ser corrigido com um crédito.
 
     const reasonText = input.reason?.trim() || '';
 

@@ -667,8 +667,8 @@ export function AdminSettlements() {
               rows={3}
             />
             <p className="text-xs text-muted-foreground">
-              Se o motorista já tiver levantado o valor, o cancelamento é recusado — nesse
-              caso aplique um débito com motivo.
+              Se o motorista já tiver levantado o valor, o saldo dele fica negativo e será
+              descontado dos próximos fechos.
             </p>
           </div>
 

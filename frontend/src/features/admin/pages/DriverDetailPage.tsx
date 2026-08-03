@@ -527,6 +527,14 @@ export function DriverDetailPage() {
                 ? `Creditar saldo de ${user.name}.`
                 : `Debitar saldo de ${user.name}.`}
               {balance && ` Disponível: ${eur(balance.available)}.`}
+              {/* O débito pode ultrapassar o disponível: o saldo fica negativo
+                  e é descontado dos próximos fechos. Dizê-lo evita a hesitação
+                  de quem lê o disponível e o toma por limite. */}
+              {adjustType === 'DEBIT' && balance && balance.available >= 0 && (
+                <span className="mt-1 block text-muted-foreground">
+                  Um débito maior deixa o saldo negativo, e será descontado dos próximos fechos.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 

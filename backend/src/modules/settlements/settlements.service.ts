@@ -269,9 +269,13 @@ export class SettlementsService {
   /**
    * Cancela um fecho registado, revertendo o crédito.
    *
-   * Recusa se o motorista já tiver levantado o dinheiro — nesse caso o saldo
-   * ficaria negativo e a reversão criaria uma dívida silenciosa. A saída
-   * correta aí é um débito explícito, com motivo.
+   * Pode deixar o saldo negativo, e isso é aceite: se o fecho estava errado, o
+   * valor não era devido, e o motorista passa a dever o que já levantou. Havia
+   * aqui uma guarda que recusava esse caso — escrita quando a regra era que o
+   * saldo nunca ficasse abaixo de zero. Impedir o cancelamento não fazia o erro
+   * desaparecer; obrigava a mantê-lo registado como se estivesse certo.
+   *
+   * O motivo fica nas notas internas e o painel assinala quem está negativo.
    */
   async cancel(actor: Actor, id: string, reason?: string): Promise<SettlementPublic> {
     this.ensureManager(actor);
@@ -281,20 +285,6 @@ export class SettlementsService {
 
     if (existing.status === SettlementStatus.CANCELLED) {
       throw new AppError('Este fecho já está cancelado.', 400, 'ALREADY_CANCELLED');
-    }
-
-    if (existing.status === SettlementStatus.REGISTERED && existing.netToDriver > 0) {
-      // Importado aqui para evitar dependência circular entre os módulos.
-      const { balanceService } = await import('../balance/balance.service');
-      const { available } = await balanceService.getSummary(actor, existing.userId);
-
-      if (available - existing.netToDriver < 0) {
-        throw new AppError(
-          `Cancelar deixaria o saldo do motorista negativo. Disponível: ${eur(available)}, fecho: ${eur(existing.netToDriver)}. Aplique um débito com motivo em vez de cancelar.`,
-          400,
-          'CANCEL_WOULD_OVERDRAW',
-        );
-      }
     }
 
     const note = reason?.trim();
