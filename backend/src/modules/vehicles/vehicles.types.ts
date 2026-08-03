@@ -12,6 +12,13 @@ export interface IVehicle {
   status: VehicleStatus;
   activationForced: boolean;
 
+  /**
+   * Encargo semanal da viatura. Preenche o campo "Viatura" no fecho semanal
+   * como valor sugerido — o fecho grava a sua própria cópia, para que alterar
+   * isto não reescreva semanas já pagas.
+   */
+  weeklyFee: number;
+
   userId: string | null; // pode ser null (veículo não atribuído)
 
   createdAt: Date;

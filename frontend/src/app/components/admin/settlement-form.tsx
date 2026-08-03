@@ -32,7 +32,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import { AlertCircle, Car, Info, Loader2, Save, Wallet } from 'lucide-react';
+import { AlertCircle, Car, Eye, EyeOff, Info, Loader2, Save, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { usersService } from '@/features/admin/services/users.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
@@ -169,6 +169,11 @@ export function SettlementForm({
   const [amounts, setAmounts] = useState<Amounts>(EMPTY_AMOUNTS);
   const [rate, setRate] = useState('');
   const [notes, setNotes] = useState('');
+  const [internalNotes, setInternalNotes] = useState('');
+  // O encargo da viatura é sugerido a partir do veículo, mas só enquanto o
+  // administrador não lhe tocar: sobrescrever um valor escrito à mão apagaria
+  // trabalho dele.
+  const [feeTouched, setFeeTouched] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const setAmount = (key: keyof Amounts) => (v: string) =>
@@ -200,6 +205,9 @@ export function SettlementForm({
     });
     setRate(fromNumber(s.commissionRate));
     setNotes(s.notes ?? '');
+    setInternalNotes(s.internalNotes ?? '');
+    // Um rascunho guardado já tem o valor decidido; não voltar a sugerir.
+    setFeeTouched(true);
   }, [existingQuery.data]);
 
   // ── Dados de apoio ──────────────────────────────────────────────────────────
@@ -222,6 +230,17 @@ export function SettlementForm({
   useEffect(() => {
     if (vehicleId && !vehicles.some((v) => v.id === vehicleId)) setVehicleId('');
   }, [userId, vehicles, vehicleId]);
+
+  // Sugere o encargo do veículo escolhido. Só enquanto o campo estiver por
+  // tocar — trocar de carro depois de escrever um valor à mão não deve apagá-lo.
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+  useEffect(() => {
+    if (feeTouched) return;
+    setAmounts((prev) => ({
+      ...prev,
+      vehicleFee: selectedVehicle?.weeklyFee ? String(selectedVehicle.weeklyFee) : '',
+    }));
+  }, [selectedVehicle?.id, selectedVehicle?.weeklyFee, feeTouched]);
 
   // Conferência cruzada: o que o motorista comunicou nesta semana.
   const reportedQuery = useQuery({
@@ -278,6 +297,7 @@ export function SettlementForm({
       weekEnd,
       ...payload,
       notes: notes.trim() || null,
+      internalNotes: internalNotes.trim() || null,
     };
   }
 
@@ -285,7 +305,9 @@ export function SettlementForm({
     setAmounts(EMPTY_AMOUNTS);
     setRate('');
     setNotes('');
+    setInternalNotes('');
     setVehicleId('');
+    setFeeTouched(false);
   }
 
   const invalidate = () => {
@@ -523,7 +545,13 @@ export function SettlementForm({
               <MoneyField
                 id="vehicleFee" label="Viatura"
                 icon={<Car className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
-                value={amounts.vehicleFee} onChange={setAmount('vehicleFee')}
+                value={amounts.vehicleFee}
+                onChange={(v) => { setFeeTouched(true); setAmount('vehicleFee')(v); }}
+                hint={
+                  selectedVehicle?.weeklyFee
+                    ? `Valor definido em ${selectedVehicle.plate}: ${formatCurrency(selectedVehicle.weeklyFee)}`
+                    : undefined
+                }
               />
               <MoneyField
                 id="otherDeductions" label="Outros"
@@ -624,13 +652,37 @@ export function SettlementForm({
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base">Comentários</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Observações sobre esta semana. O motorista vê este texto."
-                rows={4}
-              />
+            <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+              <div className="space-y-1.5">
+                <Label htmlFor="settlement-notes" className="flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  Para o motorista
+                </Label>
+                <Textarea
+                  id="settlement-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Observações sobre esta semana. O motorista vê este texto."
+                  rows={3}
+                />
+              </div>
+
+              {/* Campo separado, e não uma marca no mesmo texto: o servidor
+                  omite este na resposta ao motorista, e misturar os dois num
+                  campo só tornaria impossível filtrar. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="settlement-internal" className="flex items-center gap-1.5">
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  Nota interna
+                </Label>
+                <Textarea
+                  id="settlement-internal"
+                  value={internalNotes}
+                  onChange={(e) => setInternalNotes(e.target.value)}
+                  placeholder="Só a administração vê. Não sai na resposta ao motorista."
+                  rows={3}
+                />
+              </div>
             </CardContent>
           </Card>
 

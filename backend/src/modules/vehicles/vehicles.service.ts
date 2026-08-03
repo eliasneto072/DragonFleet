@@ -89,6 +89,12 @@ export class VehiclesService {
       year: input.year,
       vin: input.vin,
       status: input.status ?? VehicleStatus.PENDING, // nasce pendente até os documentos serem aprovados
+      // O encargo é o que o motorista paga: só a gestão o define. Sem esta
+      // guarda, ele alteraria o valor que lhe é cobrado ao editar o próprio
+      // veículo, que é uma operação que lhe está permitida.
+      ...(canManageVehicles(actor.role) && input.weeklyFee !== undefined
+        ? { weeklyFee: input.weeklyFee }
+        : {}),
       userId: userId,
     };
 
@@ -106,6 +112,13 @@ export class VehiclesService {
       throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_VEHICLE_STATUS');
     }
 
+    // Mesma razão do create: o encargo é cobrado ao motorista, e ele edita o
+    // próprio veículo. Recusar em vez de ignorar em silêncio — assim quem
+    // tentar percebe porquê.
+    if (!canManageVehicles(actor.role) && input.weeklyFee !== undefined) {
+      throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_VEHICLE_FEE');
+    }
+
     if (input.plate) {
       const existingVehicle = await vehiclesRepository.findByPlate(input.plate);
 
@@ -121,6 +134,7 @@ export class VehiclesService {
       ...(input.year !== undefined ? { year: input.year } : {}),
       ...(input.vin !== undefined ? { vin: input.vin } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.weeklyFee !== undefined ? { weeklyFee: input.weeklyFee } : {}),
     };
 
     return vehiclesRepository.update(id, data);

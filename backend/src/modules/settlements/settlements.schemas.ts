@@ -26,7 +26,10 @@ const amountsShape = {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das configurações. */
   commissionRate: z.coerce.number().min(0).max(100).optional(),
+  /** Visível ao motorista, no detalhe da semana. */
   notes: z.string().max(2000).optional().nullable(),
+  /** Só a gestão vê. Filtrado na origem, no repositório. */
+  internalNotes: z.string().max(2000).optional().nullable(),
 };
 
 export const settlementIdParamSchema = z.object({

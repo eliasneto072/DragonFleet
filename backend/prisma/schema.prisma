@@ -172,6 +172,12 @@ model Vehicle {
   vin              String?       @unique
   status           VehicleStatus @default(PENDING)
   activationForced Boolean       @default(false) @map("activation_forced")
+
+  /// Encargo semanal da viatura, usado como valor sugerido no fecho semanal.
+  /// Fica aqui e não no fecho porque é uma característica do carro; o fecho
+  /// grava a sua própria cópia, para que alterar isto não reescreva semanas
+  /// já pagas.
+  weeklyFee        Decimal       @default(0) @map("weekly_fee") @db.Decimal(12, 2)
   userId           String?       @map("user_id")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt
@@ -384,7 +390,15 @@ model WeeklySettlement {
   netToDriver      Decimal @default(0) @map("net_to_driver")     @db.Decimal(12, 2)
 
   status SettlementStatus @default(DRAFT)
-  notes  String?
+
+  /// Observações visíveis ao motorista, no detalhe da semana.
+  notes String?
+
+  /// Observações internas. NUNCA saem numa resposta para o motorista — ver o
+  /// filtro em settlements.repository.toPublic. Existem separadas de `notes`
+  /// porque aquelas já são mostradas no painel dele, e reaproveitar o campo
+  /// exporia o que se pretende reservado.
+  internalNotes String? @map("internal_notes")
 
   createdById  String    @map("created_by_id")
   registeredAt DateTime? @map("registered_at")

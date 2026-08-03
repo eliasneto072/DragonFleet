@@ -17,7 +17,15 @@ type Row = NonNullable<Awaited<ReturnType<typeof prisma.weeklySettlement.findFir
   vehicle?: { plate: string } | null;
 };
 
-function toPublic(r: Row): SettlementPublic {
+/**
+ * Converte a linha para o formato público.
+ *
+ * `includeInternal` decide se as observações internas seguem na resposta. O
+ * filtro é aqui, e não na interface: uma tela que se esqueça de esconder o
+ * campo expõe o que devia ser reservado, enquanto um campo que nunca sai da
+ * base não pode ser exposto por descuido de quem escreve a próxima tela.
+ */
+function toPublic(r: Row, includeInternal = false): SettlementPublic {
   const grossRevenue = Number(r.grossRevenue);
   const totalDeductions = Number(r.totalDeductions);
   const commissionAmount = Number(r.commissionAmount);
@@ -53,6 +61,7 @@ function toPublic(r: Row): SettlementPublic {
 
     status: r.status as SettlementStatus,
     notes: r.notes,
+    ...(includeInternal ? { internalNotes: r.internalNotes } : {}),
 
     createdById: r.createdById,
     createdByName: r.createdBy?.name ?? null,
@@ -63,9 +72,9 @@ function toPublic(r: Row): SettlementPublic {
 }
 
 export const settlementsRepository = {
-  async findById(id: string): Promise<SettlementPublic | null> {
+  async findById(id: string, includeInternal = false): Promise<SettlementPublic | null> {
     const row = await prisma.weeklySettlement.findUnique({ where: { id }, include });
-    return row ? toPublic(row as Row) : null;
+    return row ? toPublic(row as Row, includeInternal) : null;
   },
 
   async findMany(filter: {
@@ -73,7 +82,7 @@ export const settlementsRepository = {
     status?: SettlementStatus;
     from?: Date;
     to?: Date;
-  }): Promise<SettlementPublic[]> {
+  }, includeInternal = false): Promise<SettlementPublic[]> {
     const rows = await prisma.weeklySettlement.findMany({
       where: {
         ...(filter.userId ? { userId: filter.userId } : {}),
@@ -90,7 +99,7 @@ export const settlementsRepository = {
       orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
       include,
     });
-    return rows.map((r) => toPublic(r as Row));
+    return rows.map((r) => toPublic(r as Row, includeInternal));
   },
 
   /**
@@ -125,7 +134,7 @@ export const settlementsRepository = {
   async create(data: Record<string, unknown>): Promise<SettlementPublic> {
     try {
       const row = await prisma.weeklySettlement.create({ data: data as never, include });
-      return toPublic(row as Row);
+      return toPublic(row as Row, true);
     } catch (err) {
       logger.error('Erro ao criar fecho semanal', err);
       throw err;
@@ -139,7 +148,7 @@ export const settlementsRepository = {
         data: data as never,
         include,
       });
-      return toPublic(row as Row);
+      return toPublic(row as Row, true);
     } catch (err) {
       logger.error('Erro ao atualizar fecho semanal', err);
       throw err;

@@ -27,7 +27,10 @@ export interface SettlementAmounts {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das configurações. */
   commissionRate?: number;
+  /** Observações visíveis ao motorista. */
   notes?: string | null;
+  /** Observações internas. Só a gestão as vê. */
+  internalNotes?: string | null;
 }
 
 /** Edição de rascunho: pode mover a semana e o veículo, não o motorista. */
@@ -77,6 +80,12 @@ export interface SettlementPublic extends SettlementTotals {
   commissionRate: number;
   status: SettlementStatus;
   notes: string | null;
+  /**
+   * Só presente quando quem consulta é gestão. Para o motorista o campo é
+   * omitido na origem, no repositório — não escondido na interface, que seria
+   * uma proteção que a próxima tela esqueceria.
+   */
+  internalNotes?: string | null;
 
   createdById: string;
   createdByName: string | null;

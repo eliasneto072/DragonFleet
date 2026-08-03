@@ -33,8 +33,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronRight, FileText,
-  Loader2, Pencil, Plus, ReceiptText, Trash2,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronRight, Eye, EyeOff,
+  FileText, Loader2, Pencil, Plus, ReceiptText, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
@@ -212,8 +212,21 @@ function SettlementDetail({ s }: { s: ApiSettlement }) {
 
       {s.notes?.trim() && (
         <div className="rounded-lg bg-secondary p-3">
-          <p className="text-xs font-medium text-muted-foreground">Comentários</p>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            Comentários — o motorista vê
+          </p>
           <p className="mt-1 text-sm">{s.notes}</p>
+        </div>
+      )}
+
+      {s.internalNotes?.trim() && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+            <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+            Nota interna — só a administração
+          </p>
+          <p className="mt-1 text-sm text-amber-900 dark:text-amber-200">{s.internalNotes}</p>
         </div>
       )}
 

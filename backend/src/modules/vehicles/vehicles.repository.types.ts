@@ -7,6 +7,7 @@ export type CreateVehicleData = {
   year: number;
   vin?: string | null;
   status: VehicleStatus;
+  weeklyFee?: number;
   userId?: string | null; // opcional — veículo pode nascer não atribuído
 };
 
@@ -18,6 +19,7 @@ export type UpdateVehicleData = {
   vin?: string | null;
   status?: VehicleStatus;
   activationForced?: boolean;
+  weeklyFee?: number;
   userId?: string | null;
 };
 

@@ -121,6 +121,7 @@ export class SettlementsService {
       commissionAmount: totals.commissionAmount,
       netToDriver: totals.netToDriver,
       notes: input.notes?.trim() || null,
+      internalNotes: input.internalNotes?.trim() || null,
     };
   }
 
@@ -131,20 +132,22 @@ export class SettlementsService {
     filter: { userId?: string; status?: SettlementStatus; from?: string; to?: string } = {},
   ): Promise<SettlementPublic[]> {
     // Motorista vê apenas os próprios; a gestão vê todos, ou filtra por pessoa.
-    const userId = canManage(actor.role) ? filter.userId : actor.id;
+    const isManager = canManage(actor.role);
+    const userId = isManager ? filter.userId : actor.id;
 
     return settlementsRepository.findMany({
       userId,
       status: filter.status,
       from: filter.from ? parseDay(filter.from, 'from') : undefined,
       to: filter.to ? parseDay(filter.to, 'to') : undefined,
-    });
+    }, isManager);
   }
 
   async getById(actor: Actor, id: string): Promise<SettlementPublic> {
-    const found = await settlementsRepository.findById(id);
+    const isManager = canManage(actor.role);
+    const found = await settlementsRepository.findById(id, isManager);
     if (!found) throw new AppError('Fecho não encontrado', 404, 'SETTLEMENT_NOT_FOUND');
-    if (!canManage(actor.role) && found.userId !== actor.id) {
+    if (!isManager && found.userId !== actor.id) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
     return found;
@@ -297,7 +300,9 @@ export class SettlementsService {
     const note = reason?.trim();
     const updated = await settlementsRepository.update(id, {
       status: SettlementStatus.CANCELLED,
-      ...(note ? { notes: note } : {}),
+      // O motivo vai para as notas internas, não para `notes`: aquele campo é
+      // do motorista e sobrescrevê-lo apagaria o que lhe foi comunicado.
+      ...(note ? { internalNotes: note } : {}),
     });
 
     logger.info(`[settlement] ${actor.id} cancelou fecho ${id}${note ? `: ${note}` : ''}`);

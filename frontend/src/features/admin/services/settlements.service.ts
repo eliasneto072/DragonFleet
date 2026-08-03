@@ -22,7 +22,10 @@ export interface SettlementAmounts {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das Configurações. */
   commissionRate?: number;
+  /** Observações visíveis ao motorista. */
   notes?: string | null;
+  /** Observações internas. Só a gestão as recebe da API. */
+  internalNotes?: string | null;
 }
 
 /** Resultado do cálculo. Devolvido pelo servidor, nunca calculado aqui. */
@@ -60,6 +63,8 @@ export interface ApiSettlement extends SettlementTotals {
   commissionRate: number;
   status: SettlementStatus;
   notes: string | null;
+  /** Ausente quando quem consulta é o motorista — filtrado no servidor. */
+  internalNotes?: string | null;
 
   createdById: string;
   createdByName: string | null;
