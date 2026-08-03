@@ -193,7 +193,7 @@ export function AdminDashboard() {
 
   const queue = useMemo<QueueItem[]>(() => {
     if (!overview) return [];
-    const { queue: q } = overview;
+    const { queue: q, finance } = overview;
     const items: QueueItem[] = [];
 
     if (q.documentsPending.count > 0) {
@@ -265,6 +265,23 @@ export function AdminDashboard() {
         detail: `O mais antigo ${agoLabel(days)}`,
         waiting: days,
         actionLabel: 'Rever',
+        to: '/app/admin/drivers',
+      });
+    }
+
+    // Saldo negativo não é uma tarefa pendente — é um estado. Entra na fila na
+    // mesma porque é aqui que o administrador olha, e ninguém descobre isto
+    // sem abrir ficha a ficha.
+    if (finance.negativeDrivers.length > 0) {
+      const names = finance.negativeDrivers.slice(0, 3).map((d) => d.name.split(' ')[0]);
+      const extra = finance.negativeDrivers.length - names.length;
+      items.push({
+        key: 'negative',
+        icon: TrendingDown,
+        title: `${finance.negativeDrivers.length} motorista${finance.negativeDrivers.length !== 1 ? 's' : ''} com saldo negativo`,
+        detail: `${names.join(', ')}${extra > 0 ? ` e mais ${extra}` : ''} · ${formatCurrency(finance.owedByDrivers)} no total`,
+        waiting: null,
+        actionLabel: 'Ver',
         to: '/app/admin/drivers',
       });
     }

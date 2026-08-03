@@ -67,6 +67,8 @@ export interface ApiOverview {
     owedToDrivers: number;
     /** A receber: soma dos saldos negativos, em valor absoluto. */
     owedByDrivers: number;
+    /** Quem está abaixo de zero, com o saldo de cada um. */
+    negativeDrivers: { id: string; name: string; balance: number }[];
     paidThisMonth: number;
     paidCountThisMonth: number;
   };

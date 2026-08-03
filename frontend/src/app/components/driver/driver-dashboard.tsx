@@ -396,6 +396,7 @@ export function DriverDashboard() {
   }
 
   const balance = summary?.available ?? 0;
+  const isNegative = balance < 0;
   const lastWeek = weeks[0];
   const totalReceived = weeks.reduce((s, w) => s + w.netToDriver, 0);
   const average = weeks.length ? totalReceived / weeks.length : 0;
@@ -438,12 +439,21 @@ export function DriverDashboard() {
 
       {/* Saldo */}
       <div
-        className="overflow-hidden rounded-xl p-5 shadow-brand sm:p-6"
-        style={{ background: 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)' }}
+        className={`overflow-hidden rounded-xl p-5 sm:p-6 ${isNegative ? 'shadow-md' : 'shadow-brand'}`}
+        style={{
+          // Saldo negativo troca o verde da marca por um tom sóbrio. Um número
+          // negativo sobre o mesmo cartão de sempre lê-se como erro de leitura;
+          // a cor diz que o estado é outro antes de o número ser lido.
+          background: isNegative
+            ? 'linear-gradient(135deg, #7f1d1d 0%, #601414 100%)'
+            : 'linear-gradient(135deg, #0d6b4f 0%, #0a5440 100%)',
+        }}
       >
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-white/70">Saldo disponível para retirada</p>
+            <p className="text-sm text-white/70">
+              {isNegative ? 'Saldo a regularizar' : 'Saldo disponível para retirada'}
+            </p>
             <p className="mt-1 text-3xl font-bold tracking-tight text-white tabular-nums sm:text-4xl">
               {formatCurrency(balance)}
             </p>
@@ -453,6 +463,13 @@ export function DriverDashboard() {
             className="h-20 w-auto shrink-0 sm:h-32 lg:h-40"
           />
         </div>
+
+        {isNegative && (
+          <p className="mt-3 rounded-lg bg-white/10 p-3 text-sm text-white/90">
+            As despesas das últimas semanas superaram os ganhos. O valor será
+            descontado dos próximos fechos — não é uma dívida a pagar agora.
+          </p>
+        )}
 
         {breakdownRows.length > 0 && (
           <div className="mt-3">
@@ -489,12 +506,16 @@ export function DriverDashboard() {
         )}
 
         <div className="mt-4 flex gap-2">
-          <button
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:flex-none"
-            onClick={() => navigate('/app/driver/withdrawals', { state: { openNew: true } })}
-          >
-            <ArrowDownToLine className="h-4 w-4 shrink-0" /> Retirar
-          </button>
+          {/* Sem saldo não há o que retirar; o servidor recusaria de qualquer
+              forma, e oferecer o botão só levaria a um erro evitável. */}
+          {!isNegative && (
+            <button
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:flex-none"
+              onClick={() => navigate('/app/driver/withdrawals', { state: { openNew: true } })}
+            >
+              <ArrowDownToLine className="h-4 w-4 shrink-0" /> Retirar
+            </button>
+          )}
           <button
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 sm:flex-none"
             onClick={() => navigate('/app/driver/withdrawals')}

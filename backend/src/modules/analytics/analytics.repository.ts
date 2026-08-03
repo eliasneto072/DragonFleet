@@ -60,6 +60,8 @@ export interface OverviewRaw {
   paidCountThisMonth: number;
   owedToDrivers: number;
   owedByDrivers: number;
+  /** Quem está com saldo abaixo de zero. */
+  negativeDrivers: { id: string; name: string; balance: number }[];
   totalDrivers: number;
   activeLast30: number;
   stalledDrivers: StalledDriver[];
@@ -200,6 +202,7 @@ export const analyticsRepository = {
       totalDrivers,
       activeLast30Raw,
       balancesRaw,
+      negativeRows,
       stalledRaw,
     ] = await Promise.all([
       prisma.document.count({ where: { status: DocumentStatus.PENDING } }),
@@ -338,6 +341,47 @@ export const analyticsRepository = {
         FROM balances
       `,
 
+      // Quem está negativo, por nome. O total já era calculado, mas sem os
+      // nomes o alerta obrigaria a abrir ficha a ficha para descobrir quem é.
+      //
+      // A fórmula repete a de balance.service.getSummary — alterar lá sem
+      // alterar aqui faz o painel divergir das contas individuais.
+      prisma.$queryRaw<{ id: string; name: string; available: number }[]>`
+        SELECT u.id, u.name,
+          CAST(
+            COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
+              - COALESCE(w.total, 0) - COALESCE(p.total, 0)
+          AS FLOAT) AS available
+        FROM users u
+        LEFT JOIN (
+          SELECT user_id, SUM(net_to_driver) AS total FROM weekly_settlements
+          WHERE status = 'REGISTERED' GROUP BY user_id
+        ) s ON s.user_id = u.id
+        LEFT JOIN (
+          SELECT user_id, SUM(amount) AS total FROM balance_adjustments
+          WHERE type = 'CREDIT' GROUP BY user_id
+        ) c ON c.user_id = u.id
+        LEFT JOIN (
+          SELECT user_id, SUM(amount) AS total FROM balance_adjustments
+          WHERE type = 'DEBIT' GROUP BY user_id
+        ) d ON d.user_id = u.id
+        LEFT JOIN (
+          SELECT user_id, SUM(amount) AS total FROM withdrawals
+          WHERE status IN ('APPROVED', 'PAID') GROUP BY user_id
+        ) w ON w.user_id = u.id
+        LEFT JOIN (
+          SELECT user_id, SUM(amount) AS total FROM withdrawals
+          WHERE status = 'PENDING' GROUP BY user_id
+        ) p ON p.user_id = u.id
+        WHERE u.role = 'DRIVER'
+        GROUP BY u.id, u.name, s.total, c.total, d.total, w.total, p.total
+        HAVING (
+          COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
+            - COALESCE(w.total, 0) - COALESCE(p.total, 0)
+        ) < 0
+        ORDER BY available ASC
+      `,
+
       // JOIN e não LEFT JOIN: só entram motoristas que JÁ faturaram alguma vez.
       // Quem nunca lançou nada não "parou", ainda não começou — é outro
       // problema, com outra conversa.
@@ -386,6 +430,11 @@ export const analyticsRepository = {
       paidCountThisMonth: paidThisMonthAgg._count._all,
       owedToDrivers: Number(balances.owed_to),
       owedByDrivers: Number(balances.owed_by),
+      negativeDrivers: negativeRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        balance: Number(r.available),
+      })),
       totalDrivers,
       activeLast30: Number(activeLast30Raw[0]?.count ?? 0),
       stalledDrivers: stalledRaw.map((d) => ({

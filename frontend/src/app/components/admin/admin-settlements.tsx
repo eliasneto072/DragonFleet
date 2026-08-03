@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
 import { PageHeader } from '@/app/components/ui/page-header';
@@ -93,6 +94,48 @@ function stamp(iso: string): string {
   return `${d.toLocaleDateString('pt-PT')} às ${d.toLocaleTimeString('pt-PT', {
     hour: '2-digit', minute: '2-digit',
   })}`;
+}
+
+type PeriodKey = 'all' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom';
+
+const PERIOD_LABELS: Record<PeriodKey, string> = {
+  all: 'Todo o histórico',
+  thisWeek: 'Esta semana',
+  lastWeek: 'Semana passada',
+  thisMonth: 'Este mês',
+  lastMonth: 'Mês passado',
+  custom: 'Personalizado',
+};
+
+function toInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Intervalo de cada atalho. O filtro incide sobre weekStart, por isso "esta
+ * semana" apanha o fecho cuja semana começou nesta segunda — e não os que
+ * foram criados nestes dias, que é outra coisa.
+ */
+function periodRange(period: PeriodKey): { from?: string; to?: string } {
+  if (period === 'all' || period === 'custom') return {};
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  if (period === 'thisWeek' || period === 'lastWeek') {
+    const monday = new Date(now);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    if (period === 'lastWeek') monday.setDate(monday.getDate() - 7);
+    const sunday = new Date(monday);
+    sunday.setDate(sunday.getDate() + 6);
+    return { from: toInput(monday), to: toInput(sunday) };
+  }
+
+  const offset = period === 'lastMonth' ? -1 : 0;
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  return { from: toInput(first), to: toInput(last) };
 }
 
 function ListSkeleton() {
@@ -260,6 +303,9 @@ export function AdminSettlements() {
   );
   const [driverFilter, setDriverFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SettlementStatus>('all');
+  const [period, setPeriod] = useState<PeriodKey>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [detail, setDetail] = useState<ApiSettlement | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ApiSettlement | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -271,16 +317,24 @@ export function AdminSettlements() {
   });
   const drivers = (driversQuery.data?.users ?? []).filter((u) => u.role === 'DRIVER');
 
-  const params = useMemo(
-    () => ({
+  const params = useMemo(() => {
+    const range = period === 'custom'
+      ? { from: customFrom || undefined, to: customTo || undefined }
+      : periodRange(period);
+    return {
       userId: driverFilter === 'all' ? undefined : driverFilter,
       status: statusFilter === 'all' ? undefined : statusFilter,
-    }),
-    [driverFilter, statusFilter],
-  );
+      ...range,
+    };
+  }, [driverFilter, statusFilter, period, customFrom, customTo]);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.settlements.list(params.userId, params.status),
+    // O período entra na chave, senão trocar de filtro devolveria a cache do
+    // intervalo anterior.
+    queryKey: [
+      ...queryKeys.settlements.list(params.userId, params.status),
+      params.from ?? 'any', params.to ?? 'any',
+    ] as const,
     queryFn: () => settlementsService.list(params),
     enabled: mode.view === 'list',
   });
@@ -383,6 +437,41 @@ export function AdminSettlements() {
             </SelectContent>
           </Select>
         </div>
+
+        <div className="min-w-[170px] flex-1 space-y-1.5 sm:flex-none">
+          <Label htmlFor="filter-period">Período</Label>
+          <Select value={period} onValueChange={(v) => setPeriod(v as PeriodKey)}>
+            <SelectTrigger id="filter-period" className="w-full sm:w-[190px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PERIOD_LABELS) as PeriodKey[]).map((p) => (
+                <SelectItem key={p} value={p}>{PERIOD_LABELS[p]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {period === 'custom' && (
+          <>
+            <div className="min-w-[140px] flex-1 space-y-1.5 sm:flex-none">
+              <Label htmlFor="filter-from">De</Label>
+              <Input
+                id="filter-from" type="date" value={customFrom} max={customTo || undefined}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="w-full sm:w-40"
+              />
+            </div>
+            <div className="min-w-[140px] flex-1 space-y-1.5 sm:flex-none">
+              <Label htmlFor="filter-to">Até</Label>
+              <Input
+                id="filter-to" type="date" value={customTo} min={customFrom || undefined}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="w-full sm:w-40"
+              />
+            </div>
+          </>
+        )}
 
         <div className="min-w-[150px] flex-1 space-y-1.5 sm:flex-none">
           <Label htmlFor="filter-status">Estado</Label>

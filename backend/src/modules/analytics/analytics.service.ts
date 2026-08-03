@@ -64,6 +64,11 @@ export interface AnalyticsOverview {
     owedToDrivers: number;
     /** Valor a receber: soma dos saldos negativos, em valor absoluto. */
     owedByDrivers: number;
+    /**
+     * Quem está abaixo de zero. Sem os nomes, o total obrigaria a abrir ficha
+     * a ficha para descobrir de quem se trata.
+     */
+    negativeDrivers: { id: string; name: string; balance: number }[];
     paidThisMonth: number;
     paidCountThisMonth: number;
   };
@@ -183,6 +188,7 @@ export class AnalyticsService {
         grossThisMonth: raw.grossThisMonth,
         owedToDrivers: raw.owedToDrivers,
         owedByDrivers: raw.owedByDrivers,
+        negativeDrivers: raw.negativeDrivers,
         paidThisMonth: raw.paidThisMonth,
         paidCountThisMonth: raw.paidCountThisMonth,
       },
