@@ -21,19 +21,22 @@ import {
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
   Car, Plus, Loader2, AlertCircle, Search, CheckCircle, Clock, XCircle,
-  FileWarning, FileCheck, ChevronRight, ArrowRight,
+  FileWarning, FileCheck, ChevronRight, ArrowRight, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { usersService } from '@/features/admin/services/users.service';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { formatCurrency } from '@/shared/lib/format';
 import type { ApiVehicle, ApiDocument, VehicleStatus } from '@/shared/types/api';
 import {
   VEHICLE_STATUS_LABELS, VEHICLE_STATUS_STYLES, summarizeVehicleDocs,
 } from '@/shared/lib/vehicle-labels';
 
-const EMPTY_FORM = { brand: '', model: '', plate: '', year: new Date().getFullYear(), vin: '' };
+const EMPTY_FORM = {
+  brand: '', model: '', plate: '', year: new Date().getFullYear(), vin: '', weeklyFee: '',
+};
 
 function StatusBadge({ status }: { status: VehicleStatus }) {
   const label = VEHICLE_STATUS_LABELS[status] ?? status;
@@ -98,20 +101,54 @@ export function FleetManagement() {
     return users.find((u) => u.id === userId)?.name ?? null;
   };
 
-  const { mutate: createVehicle, isPending: creating } = useMutation({
-    mutationFn: () => vehiclesService.create({
-      brand: form.brand.trim(),
-      model: form.model.trim(),
-      plate: form.plate.trim().toUpperCase(),
-      year: Number(form.year),
-      vin: form.vin.trim() || undefined,
-    }),
+  // Id do veículo em edição; null cria um novo. O mesmo formulário serve os
+  // dois casos — sem edição, os veículos já registados nunca receberiam o
+  // encargo semanal.
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function openEdit(v: ApiVehicle) {
+    setEditingId(v.id);
+    setForm({
+      brand: v.brand,
+      model: v.model,
+      plate: v.plate,
+      year: v.year,
+      vin: v.vin ?? '',
+      weeklyFee: v.weeklyFee ? String(v.weeklyFee) : '',
+    });
+    setOpen(true);
+  }
+
+  function closeForm() {
+    setOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  }
+
+  const { mutate: saveVehicle, isPending: creating } = useMutation({
+    mutationFn: () => {
+      const payload = {
+        brand: form.brand.trim(),
+        model: form.model.trim(),
+        plate: form.plate.trim().toUpperCase(),
+        year: Number(form.year),
+        vin: form.vin.trim() || undefined,
+        weeklyFee: form.weeklyFee.trim() === '' ? 0 : Number(form.weeklyFee),
+      };
+      return editingId
+        ? vehiclesService.update(editingId, payload)
+        : vehiclesService.create(payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
-      toast.success('Veículo cadastrado! Nasce pendente até os documentos serem aprovados.');
-      setOpen(false); setForm(EMPTY_FORM);
+      toast.success(
+        editingId
+          ? 'Veículo atualizado.'
+          : 'Veículo cadastrado! Nasce pendente até os documentos serem aprovados.',
+      );
+      closeForm();
     },
-    onError: (err: any) => toast.error(err?.message ?? 'Erro ao cadastrar veículo.'),
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao guardar o veículo.'),
   });
 
   const filtered = useMemo(() => {
@@ -159,20 +196,20 @@ export function FleetManagement() {
         subtitle="Gerir a frota, documentos e atribuições"
         icon={<Car className="h-5 w-5" />}
         actions={
-          <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); setForm(EMPTY_FORM); } else setOpen(true); }}>
+          <Dialog open={open} onOpenChange={(v) => { if (!v) closeForm(); else setOpen(true); }}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-2" />Novo veículo</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Cadastrar veículo</DialogTitle>
+                <DialogTitle>{editingId ? 'Editar veículo' : 'Cadastrar veículo'}</DialogTitle>
                 <DialogDescription>O veículo nasce pendente até os 4 documentos serem aprovados.</DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!form.brand || !form.model || !form.plate) { toast.error('Preencha marca, modelo e matrícula.'); return; }
-                  createVehicle();
+                  saveVehicle();
                 }}
                 className="space-y-4 mt-2"
               >
@@ -196,14 +233,33 @@ export function FleetManagement() {
                     <Input type="number" value={form.year} min={1950} max={new Date().getFullYear() + 1} onChange={(e) => setForm({ ...form, year: Number(e.target.value) })} required />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>VIN (chassi) <span className="text-muted-foreground text-xs">— opcional</span></Label>
-                  <Input placeholder="Número de chassi" value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>VIN (chassi) <span className="text-muted-foreground text-xs">— opcional</span></Label>
+                    <Input placeholder="Número de chassi" value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Encargo semanal</Label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-2.5 text-sm text-muted-foreground">€</span>
+                      <Input
+                        type="number" step="0.01" min="0" inputMode="decimal"
+                        placeholder="0,00" className="pl-7 tabular-nums"
+                        value={form.weeklyFee}
+                        onChange={(e) => setForm({ ...form, weeklyFee: e.target.value })}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Preenche o campo &quot;Viatura&quot; no fecho semanal, onde continua editável.
+                    </p>
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
-                  <Button type="button" variant="outline" onClick={() => { setOpen(false); setForm(EMPTY_FORM); }} disabled={creating}>Cancelar</Button>
+                  <Button type="button" variant="outline" onClick={closeForm} disabled={creating}>Cancelar</Button>
                   <Button type="submit" disabled={creating}>
-                    {creating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando…</> : 'Cadastrar'}
+                    {creating
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />A guardar…</>
+                      : editingId ? 'Guardar' : 'Cadastrar'}
                   </Button>
                 </div>
               </form>
@@ -251,7 +307,8 @@ export function FleetManagement() {
                   <th className="py-3 px-4 font-medium">VIN e matrícula</th>
                   <th className="py-3 px-4 font-medium">Atribuição</th>
                   <th className="py-3 px-4 font-medium">Documentos</th>
-                  <th className="py-3 px-4 font-medium w-10"></th>
+                  <th className="py-3 px-4 font-medium">Encargo</th>
+                  <th className="py-3 px-4 font-medium w-20"></th>
                 </tr>
               </thead>
               <tbody>
@@ -286,9 +343,29 @@ export function FleetManagement() {
                           <span className="text-sm text-muted-foreground">Não atribuído</span>
                         )}
                       </td>
-                      <td className="py-4 px-4"><DocsBadge docs={docsByVehicle.get(v.id) ?? []} /></td>
-                      <td className="py-4 px-4 text-muted-foreground">
-                        <ChevronRight className="h-4 w-4" />
+                      <td className="py-4 px-4">
+                        {v.weeklyFee > 0 ? (
+                          <span className="text-sm tabular-nums">
+                            {formatCurrency(v.weeklyFee)}
+                            <span className="text-xs text-muted-foreground"> /semana</span>
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4">
+                        {/* stopPropagation: a linha inteira navega para o
+                            detalhe, e sem isto editar abriria as duas coisas. */}
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <Button
+                            variant="ghost" size="sm" className="h-8 w-8 p-0"
+                            aria-label={`Editar ${v.brand} ${v.model}`}
+                            onClick={(e) => { e.stopPropagation(); openEdit(v); }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <ChevronRight className="h-4 w-4" />
+                        </div>
                       </td>
                     </tr>
                   );

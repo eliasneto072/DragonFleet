@@ -10,6 +10,8 @@ interface CreateVehicleInput {
   year:    number;
   vin?:    string;
   status?: VehicleStatus;
+  /** Encargo semanal. Só a gestão o define — o servidor recusa aos restantes. */
+  weeklyFee?: number;
 }
 
 interface UpdateVehicleInput {
@@ -19,6 +21,7 @@ interface UpdateVehicleInput {
   year?:   number;
   vin?:    string;
   status?: VehicleStatus;  // apenas admin/manager pode alterar
+  weeklyFee?: number;      // idem — devolve CANNOT_CHANGE_VEHICLE_FEE ao motorista
 }
 
 export const vehiclesService = {
