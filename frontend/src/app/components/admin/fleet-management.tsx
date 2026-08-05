@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/app/components/ui/dialog';
@@ -64,6 +65,58 @@ function DocsBadge({ docs }: { docs: ApiDocument[] }) {
     <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>
       <FileWarning className="h-4 w-4" />{s.approved}/{s.total}
     </span>
+  );
+}
+
+// Espelha a estrutura real: cabeçalho, quatro contadores, filtros e linhas.
+// Um placeholder genérico causaria salto de layout quando os dados chegam.
+function FleetSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar a frota…</span>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-4 w-52" />
+          </div>
+        </div>
+        <Skeleton className="h-9 w-full sm:w-36" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardContent className="space-y-2 pt-5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-12" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Skeleton className="h-9 flex-1" />
+        <Skeleton className="h-9 w-full sm:w-48" />
+      </div>
+
+      <Card className="shadow-card">
+        <CardContent className="space-y-4 p-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -170,13 +223,7 @@ export function FleetManagement() {
     unassigned: vehicles.filter((v) => !v.userId).length,
   };
 
-  if (vehiclesQ.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando veículos…</span>
-      </div>
-    );
-  }
+  if (vehiclesQ.isLoading) return <FleetSkeleton />;
   if (vehiclesQ.isError) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -271,8 +318,8 @@ export function FleetManagement() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Total</p><p className="text-2xl font-bold">{counts.total}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Ativos</p><p className="text-2xl font-bold text-green-600">{counts.active}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Pendentes</p><p className="text-2xl font-bold text-amber-600">{counts.pending}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Ativos</p><p className="text-2xl font-bold text-success">{counts.active}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Pendentes</p><p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{counts.pending}</p></CardContent></Card>
         <Card className="shadow-card"><CardContent className="pt-5"><p className="text-sm text-muted-foreground mb-1">Não atribuídos</p><p className="text-2xl font-bold text-muted-foreground">{counts.unassigned}</p></CardContent></Card>
       </div>
 
@@ -298,7 +345,9 @@ export function FleetManagement() {
       {/* Tabela */}
       <Card className="shadow-card">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Sete colunas não cabem num telemóvel. A partir de md a tabela
+              serve; abaixo, cada veículo vira um cartão. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
@@ -343,6 +392,7 @@ export function FleetManagement() {
                           <span className="text-sm text-muted-foreground">Não atribuído</span>
                         )}
                       </td>
+                      <td className="py-4 px-4"><DocsBadge docs={docsByVehicle.get(v.id) ?? []} /></td>
                       <td className="py-4 px-4">
                         {v.weeklyFee > 0 ? (
                           <span className="text-sm tabular-nums">
@@ -372,6 +422,49 @@ export function FleetManagement() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Cartões — telemóvel */}
+          <div className="divide-y md:hidden">
+            {filtered.map((v: ApiVehicle) => {
+              const driver = userName(v.userId);
+              return (
+                <div
+                  key={v.id}
+                  className="flex items-start gap-3 p-4 transition-colors hover:bg-secondary/40"
+                  onClick={() => navigate(`/app/admin/fleet/${v.id}`)}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-emerald-950">
+                    <Car className="h-4 w-4 text-accent dark:text-emerald-300" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-medium">{v.brand} {v.model}</p>
+                      <StatusBadge status={v.status} />
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <span className="font-mono tracking-tight">{v.plate}</span> · {v.year}
+                      {v.weeklyFee > 0 && <> · {formatCurrency(v.weeklyFee)}/semana</>}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {driver ?? 'Não atribuído'}
+                    </p>
+                    <div className="mt-2">
+                      <DocsBadge docs={docsByVehicle.get(v.id) ?? []} />
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost" size="sm" className="h-8 w-8 shrink-0 p-0"
+                    aria-label={`Editar ${v.brand} ${v.model}`}
+                    onClick={(e) => { e.stopPropagation(); openEdit(v); }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
 
           {filtered.length === 0 && (

@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import { Search, Eye, Mail, Loader2, AlertCircle, Users } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -43,6 +44,54 @@ function Avatar({ name }: { name: string }) {
   return (
     <div className="h-9 w-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-sm font-semibold shrink-0">
       {initials}
+    </div>
+  );
+}
+
+// Espelha a estrutura real: cabeçalho, quatro contadores, filtros e linhas.
+function DriversSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar motoristas…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardContent className="space-y-2 pt-5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-12" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Skeleton className="h-9 flex-1" />
+        <Skeleton className="h-9 w-full sm:w-48" />
+      </div>
+
+      <Card className="shadow-card">
+        <CardContent className="space-y-4 p-4">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-52" />
+              </div>
+              <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -77,13 +126,7 @@ export function DriversManagement() {
     navigate(`/app/admin/drivers/${user.id}`);
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando motoristas…</span>
-      </div>
-    );
-  }
+  if (isLoading) return <DriversSkeleton />;
 
   if (isError) {
     return (
@@ -115,7 +158,7 @@ export function DriversManagement() {
         </CardContent></Card>
         <Card className="shadow-card"><CardContent className="pt-5">
           <p className="text-sm text-muted-foreground mb-1">Regularização</p>
-          <p className="text-2xl font-bold text-amber-600">{counts.regularization}</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{counts.regularization}</p>
         </CardContent></Card>
         <Card className="shadow-card"><CardContent className="pt-5">
           <p className="text-sm text-muted-foreground mb-1">Bloqueados</p>
