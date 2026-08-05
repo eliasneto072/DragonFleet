@@ -349,7 +349,10 @@ export function DriverProfile() {
   });
 
   const photoDoc = documentsQuery.data?.documents.find(
-    (d) => d.type === 'FOTO_PERFIL' && !d.vehicleId,
+    // d.userId é obrigatório mesmo aqui, onde a tela é sempre do próprio:
+    // depender de quem a abre é uma garantia que se perde na primeira vez que
+    // alguém reutilizar o componente.
+    (d) => d.userId === user?.id && d.type === 'FOTO_PERFIL' && !d.vehicleId,
   );
   // Mostrada assim que enviada. Rejeitada ou expirada volta às iniciais.
   const photoVisible =

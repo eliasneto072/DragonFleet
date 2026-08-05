@@ -1,6 +1,6 @@
 // src/features/admin/components/AdminLayout.tsx
 
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText,
@@ -25,7 +25,6 @@ const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 export function AdminLayout() {
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   if (user?.role === 'DRIVER') {
@@ -33,11 +32,16 @@ export function AdminLayout() {
   }
 
   return (
+    // Sem "Ver como Motorista": o botão levava o administrador ao painel do
+    // motorista com o próprio id, mostrando dados vazios em vez dos de alguém.
+    // A ficha do motorista já reúne saldo, documentos, retiradas, veículos e
+    // histórico — que era o que se procurava ali.
+    //
+    // O caminho inverso, em DriverLayout, fica: um administrador que chegue ao
+    // painel do motorista precisa de voltar.
     <AppShell
       navItems={NAV_ITEMS}
       area="Painel Administrativo"
-      switchLabel="Ver como Motorista"
-      onSwitch={() => navigate('/app/driver')}
     />
   );
 }

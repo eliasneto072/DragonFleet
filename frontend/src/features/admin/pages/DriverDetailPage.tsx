@@ -29,7 +29,11 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
 import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
+import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
+import {
+  invalidateAfterAdjustment, invalidateAfterDocument, invalidateAfterUser,
+} from '@/shared/lib/invalidate';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
 import {
@@ -163,7 +167,7 @@ export function DriverDetailPage() {
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
     mutationFn: (status: UserStatus) => usersService.update(id, { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      invalidateAfterUser(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(id) });
       toast.success('Motorista atualizado.');
     },
@@ -177,7 +181,7 @@ export function DriverDetailPage() {
       reason: reason.trim() || undefined,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.summary(id) });
+      invalidateAfterAdjustment(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.balance.adjustments(id) });
       toast.success(adjustType === 'CREDIT' ? 'Crédito adicionado ao saldo.' : 'Débito aplicado ao saldo.');
       setAdjustOpen(false);
@@ -191,8 +195,7 @@ export function DriverDetailPage() {
     mutationFn: ({ docId, status, notes }: { docId: string; status: DocumentStatus; notes?: string }) =>
       documentsService.updateStatus(docId, { status, notes }),
     onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      invalidateAfterDocument(queryClient);
       toast.success(status === 'APPROVED' ? 'Documento aprovado.' : 'Documento rejeitado.');
       setRejectDoc(null);
       setRejectReason('');
@@ -295,11 +298,22 @@ export function DriverDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />Motoristas
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold">{user.name}</h2>
-            <p className="text-muted-foreground flex items-center gap-1">
-              <Mail className="h-3.5 w-3.5" />{user.email}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            {/* A fotografia vem do documento FOTO_PERFIL, que o motorista já
+                enviou. É mostrada mesmo por confirmar: o rosto certo por
+                aprovar diz mais do que duas iniciais. */}
+            <DriverAvatar
+              name={user.name}
+              photo={findProfilePhoto(allDocs, user.id)}
+              size={52}
+            />
+            <div className="min-w-0">
+              <h2 className="truncate text-2xl font-bold">{user.name}</h2>
+              <p className="flex items-center gap-1 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{user.email}</span>
+              </p>
+            </div>
           </div>
           <StatusPill status={user.status} />
         </div>

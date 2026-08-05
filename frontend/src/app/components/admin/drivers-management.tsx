@@ -17,6 +17,8 @@ import {
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
+import { documentsService } from '@/features/driver/services/documents.service';
 import { Search, Eye, Mail, Loader2, AlertCircle, Users } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -36,15 +38,6 @@ function StatusPill({ status }: { status: UserStatus }) {
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
       {s.label}
     </span>
-  );
-}
-
-function Avatar({ name }: { name: string }) {
-  const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
-  return (
-    <div className="h-9 w-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-sm font-semibold shrink-0">
-      {initials}
-    </div>
   );
 }
 
@@ -100,6 +93,14 @@ export function DriversManagement() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Uma consulta para toda a lista: as fotografias saem daqui, em vez de uma
+  // chamada por linha.
+  const docsQ = useQuery({
+    queryKey: queryKeys.documents.list,
+    queryFn: () => documentsService.list(),
+  });
+  const documents = docsQ.data?.documents ?? [];
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.users.list,
@@ -212,7 +213,7 @@ export function DriversManagement() {
                 >
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar name={user.name} />
+                      <DriverAvatar name={user.name} photo={findProfilePhoto(documents, user.id)} />
                       <div>
                         <p className="font-medium">{user.name}</p>
                         <p className="text-sm text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" />{user.email}</p>
@@ -247,7 +248,7 @@ export function DriversManagement() {
           <Card key={user.id} className="shadow-card cursor-pointer active:bg-muted/40" onClick={() => openDriver(user)}>
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start gap-3">
-                <Avatar name={user.name} />
+                <DriverAvatar name={user.name} photo={findProfilePhoto(documents, user.id)} />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{user.name}</p>
                   <p className="text-sm text-muted-foreground truncate">{user.email}</p>
