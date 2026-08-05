@@ -12,6 +12,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Switch } from '@/app/components/ui/switch';
 import { PageHeader } from '@/app/components/ui/page-header';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import { Settings, DollarSign, Bell, Zap, Save, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { settingsService, type SystemSettings as Settings_ } from '@/features/admin/services/settings.service';
@@ -30,6 +31,42 @@ const DEFAULTS: Settings_ = {
   autoApproveDocuments: false,
   requireTwoFactorAuth: false,
 };
+
+// Espelha a estrutura real: cabeçalho e os cartões de campos.
+function SettingsSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar configurações…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+      </div>
+
+      {[0, 1].map((card) => (
+        <Card key={card}>
+          <CardHeader><Skeleton className="h-5 w-44" /></CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+
+      <div className="flex justify-end gap-2">
+        <Skeleton className="h-9 w-32" />
+        <Skeleton className="h-9 w-28" />
+      </div>
+    </div>
+  );
+}
 
 export function SystemSettings() {
   const queryClient = useQueryClient();
@@ -70,13 +107,7 @@ export function SystemSettings() {
     toast.message('Padrões restaurados', { description: 'Clique em "Guardar" para confirmar.' });
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando configurações…</span>
-      </div>
-    );
-  }
+  if (isLoading) return <SettingsSkeleton />;
 
   if (isError) {
     return (
@@ -91,7 +122,7 @@ export function SystemSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title="Configurações do sistema"
         subtitle="Gerir parâmetros globais da plataforma"

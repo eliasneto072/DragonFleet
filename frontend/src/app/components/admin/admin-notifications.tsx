@@ -11,6 +11,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 import { Bell, Send, Users, User, Loader2, CheckCircle } from 'lucide-react';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
 import { notificationsService } from '@/features/driver/services/notifications.service';
 import { usersService }         from '@/features/admin/services/users.service';
@@ -75,11 +77,12 @@ export function AdminNotifications() {
     .slice(0, 20);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Notificações</h2>
-        <p className="text-muted-foreground">Envie notificações aos motoristas — também chegam por email</p>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Notificações"
+        subtitle="Envie avisos aos motoristas — também chegam por email"
+        icon={<Bell className="h-5 w-5" />}
+      />
 
       {/* Resumo */}
       <div className="grid grid-cols-2 gap-3">
@@ -95,10 +98,10 @@ export function AdminNotifications() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Não lidas</CardTitle>
-            <Bell className="h-4 w-4 text-yellow-500" />
+            <Bell className="h-4 w-4 text-amber-500 dark:text-amber-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
               {notifications.filter(n => !n.read).length}
             </div>
           </CardContent>
@@ -215,8 +218,8 @@ export function AdminNotifications() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium truncate">{n.title}</p>
                       {n.read
-                        ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100 shrink-0"><CheckCircle className="h-3 w-3 mr-1" />Lida</Badge>
-                        : <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 shrink-0">Não lida</Badge>}
+                        ? <Badge className="bg-brand-50 text-brand-700 hover:bg-brand-50 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-950 shrink-0"><CheckCircle className="h-3 w-3 mr-1" />Lida</Badge>
+                        : <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-950 shrink-0">Não lida</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground mt-0.5 truncate">{n.message}</p>
                   </div>
