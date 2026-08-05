@@ -86,8 +86,13 @@ export function AppShell({
     staleTime: 5 * 60 * 1000,
   });
 
+  // d.userId é obrigatório: sem ele, um administrador — que recebe os
+  // documentos de toda a gente — apanhava o primeiro FOTO_PERFIL da lista e
+  // ficava com a fotografia de um motorista. A guarda `enabled: isDriver`
+  // não bastava: ela evita disparar a consulta, mas o React Query devolve na
+  // mesma o que outra tela já pôs em cache.
   const photoDoc = docsData?.documents.find(
-    (d) => d.type === 'FOTO_PERFIL' && !d.vehicleId,
+    (d) => d.userId === user?.id && d.type === 'FOTO_PERFIL' && !d.vehicleId,
   );
   // Visível assim que enviada, tal como no Perfil. Rejeitada ou expirada
   // volta às iniciais.

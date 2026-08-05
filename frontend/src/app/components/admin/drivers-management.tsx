@@ -3,7 +3,7 @@
 // Lista de motoristas (admin). O clique em "Ver" navega para a ficha
 // completa do motorista (drivers/:id) com saldo, ajustes e documentos.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/app/components/ui/card';
@@ -19,7 +19,7 @@ import { PageHeader } from '@/app/components/ui/page-header';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { documentsService } from '@/features/driver/services/documents.service';
-import { Search, Eye, Mail, Loader2, AlertCircle, Users } from 'lucide-react';
+import { Search, Eye, Mail, Loader2, AlertCircle, Users, X } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
@@ -38,6 +38,37 @@ function StatusPill({ status }: { status: UserStatus }) {
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
       {s.label}
     </span>
+  );
+}
+
+/**
+ * Pendências de um motorista, em duas categorias.
+ *
+ * Antes, a lista mostrava nome, email, estado e data — nada que dissesse se
+ * havia algo à espera. Descobrir que um documento estava por rever exigia abrir
+ * cada ficha, uma a uma.
+ */
+function PendingCell({ pending }: { pending?: { toReview: number; toFix: number } }) {
+  const toReview = pending?.toReview ?? 0;
+  const toFix = pending?.toFix ?? 0;
+
+  if (!toReview && !toFix) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {toReview > 0 && (
+        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          {toReview} por rever
+        </span>
+      )}
+      {toFix > 0 && (
+        <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-800 dark:bg-red-950 dark:text-red-300">
+          {toFix} por regularizar
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -93,6 +124,10 @@ export function DriversManagement() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  // 'pending' filtra quem espera decisão nossa — a pergunta mais frequente de
+  // quem abre esta tela.
+  const [pendingFilter, setPendingFilter] = useState<'all' | 'pending' | 'clear'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'recent' | 'pending'>('name');
 
   // Uma consulta para toda a lista: as fotografias saem daqui, em vez de uma
   // chamada por linha.
@@ -102,19 +137,64 @@ export function DriversManagement() {
   });
   const documents = docsQ.data?.documents ?? [];
 
+  // Pendências por motorista, derivadas dos documentos já carregados para as
+  // fotografias — sem pedido adicional.
+  //
+  // "Por rever" é o que espera decisão da administração; "por regularizar" é o
+  // que espera ação do motorista. São filas diferentes e quem olha a lista
+  // precisa de distinguir: a primeira é trabalho dela, a segunda é dele.
+  const pendingByUser = useMemo(() => {
+    const map = new Map<string, { toReview: number; toFix: number }>();
+    for (const d of documents) {
+      const entry = map.get(d.userId) ?? { toReview: 0, toFix: 0 };
+      if (d.status === 'PENDING') entry.toReview += 1;
+      else if (d.status === 'REJECTED' || d.status === 'EXPIRED') entry.toFix += 1;
+      map.set(d.userId, entry);
+    }
+    return map;
+  }, [documents]);
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.users.list,
     queryFn: () => usersService.list(),
   });
 
   const drivers = (data?.users ?? []).filter((u) => u.role === 'DRIVER');
-  const filtered = drivers.filter((u) => {
-    const matchSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || u.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+
+  const filtered = useMemo(() => {
+    // Cada palavra tem de constar do nome ou do email, em qualquer ordem:
+    // "elias gmail" encontra o mesmo que "gmail elias". A busca antiga exigia
+    // que a expressão inteira aparecesse seguida.
+    const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+    const list = drivers.filter((u) => {
+      const haystack = `${u.name} ${u.email}`.toLowerCase();
+      const matchSearch = terms.every((t) => haystack.includes(t));
+      const matchStatus = statusFilter === 'all' || u.status === statusFilter;
+
+      const p = pendingByUser.get(u.id);
+      const total = (p?.toReview ?? 0) + (p?.toFix ?? 0);
+      const matchPending =
+        pendingFilter === 'all' ||
+        (pendingFilter === 'pending' ? total > 0 : total === 0);
+
+      return matchSearch && matchStatus && matchPending;
+    });
+
+    return [...list].sort((a, b) => {
+      if (sortBy === 'recent') return b.createdAt.localeCompare(a.createdAt);
+      if (sortBy === 'pending') {
+        const pa = pendingByUser.get(a.id);
+        const pb = pendingByUser.get(b.id);
+        // Por rever pesa mais que por regularizar: é a fila da administração.
+        const score = (p?: { toReview: number; toFix: number }) =>
+          (p?.toReview ?? 0) * 10 + (p?.toFix ?? 0);
+        const diff = score(pb) - score(pa);
+        if (diff !== 0) return diff;
+      }
+      return a.name.localeCompare(b.name, 'pt');
+    });
+  }, [drivers, search, statusFilter, pendingFilter, sortBy, pendingByUser]);
 
   const counts = {
     total: drivers.length,
@@ -122,6 +202,20 @@ export function DriversManagement() {
     blocked: drivers.filter((d) => d.status === 'BLOCKED').length,
     regularization: drivers.filter((d) => d.status === 'AGUARDANDO_REGULARIZACAO').length,
   };
+
+  const totalPending = [...pendingByUser.values()].reduce(
+    (sum, p) => sum + p.toReview + p.toFix, 0,
+  );
+
+  const hasFilters =
+    !!search || statusFilter !== 'all' || pendingFilter !== 'all' || sortBy !== 'name';
+
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('all');
+    setPendingFilter('all');
+    setSortBy('name');
+  }
 
   function openDriver(user: ApiUser) {
     navigate(`/app/admin/drivers/${user.id}`);
@@ -149,61 +243,148 @@ export function DriversManagement() {
 
       {/* Stat row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="shadow-card"><CardContent className="pt-5">
-          <p className="text-sm text-muted-foreground mb-1">Total</p>
-          <p className="text-2xl font-bold">{counts.total}</p>
-        </CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-5">
-          <p className="text-sm text-muted-foreground mb-1">Ativos</p>
-          <p className="text-2xl font-bold text-success">{counts.active}</p>
-        </CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-5">
-          <p className="text-sm text-muted-foreground mb-1">Regularização</p>
-          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{counts.regularization}</p>
-        </CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-5">
-          <p className="text-sm text-muted-foreground mb-1">Bloqueados</p>
-          <p className="text-2xl font-bold text-destructive">{counts.blocked}</p>
-        </CardContent></Card>
+        {/* Os contadores passam a filtrar. Eram números decorativos: via-se
+            "2 bloqueados" e ainda era preciso ir ao selector para os ver. */}
+        {([
+          { key: 'all', label: 'Total', value: counts.total, cls: '' },
+          { key: 'ACTIVE', label: 'Ativos', value: counts.active, cls: 'text-success' },
+          { key: 'AGUARDANDO_REGULARIZACAO', label: 'Regularização', value: counts.regularization, cls: 'text-amber-600 dark:text-amber-400' },
+          { key: 'BLOCKED', label: 'Bloqueados', value: counts.blocked, cls: 'text-destructive' },
+        ] as const).map(({ key, label, value, cls }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setStatusFilter(key)}
+            aria-pressed={statusFilter === key}
+            className={`rounded-xl border p-4 text-left shadow-card transition-colors sm:p-5 ${
+              statusFilter === key
+                ? 'border-foreground/30 bg-secondary'
+                : 'border-border bg-card hover:bg-secondary/50'
+            }`}
+          >
+            <p className="mb-1 text-sm text-muted-foreground">{label}</p>
+            <p className={`text-2xl font-bold tabular-nums ${cls}`}>{value}</p>
+          </button>
+        ))}
       </div>
 
-      {/* Filters */}
-      <Card className="shadow-card">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar por nome ou email…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtrar por status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="ACTIVE">Ativos</SelectItem>
-                <SelectItem value="INACTIVE">Inativos</SelectItem>
-                <SelectItem value="AGUARDANDO_REGULARIZACAO">Aguardando regularização</SelectItem>
-                <SelectItem value="BLOCKED">Bloqueados</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Filtros.
+          Sem cartão à volta: a barra tinha um Card só para conter uma linha de
+          controlos, o que a fazia competir visualmente com a lista. */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              placeholder="Procurar por nome ou email…"
+              className="pl-9 pr-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Limpar pesquisa"
+                className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        </CardContent>
-      </Card>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[190px]" aria-label="Filtrar por estado">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os estados</SelectItem>
+              <SelectItem value="ACTIVE">Ativos</SelectItem>
+              <SelectItem value="INACTIVE">Inativos</SelectItem>
+              <SelectItem value="AGUARDANDO_REGULARIZACAO">Aguardam regularização</SelectItem>
+              <SelectItem value="BLOCKED">Bloqueados</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+            <SelectTrigger className="w-full sm:w-[170px]" aria-label="Ordenar">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Nome (A-Z)</SelectItem>
+              <SelectItem value="pending">Mais pendências</SelectItem>
+              <SelectItem value="recent">Mais recentes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Atalho para a pergunta mais frequente: quem espera por mim? */}
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            { key: 'all', label: 'Todos' },
+            { key: 'pending', label: `Com pendências${totalPending > 0 ? ` (${totalPending})` : ''}` },
+            { key: 'clear', label: 'Em dia' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPendingFilter(key)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                pendingFilter === key
+                  ? 'border-transparent bg-foreground text-background'
+                  : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Table — desktop */}
-      <Card className="hidden md:block shadow-card">
+      <Card className="hidden shadow-card md:block">
         <CardContent className="pt-6">
+          <p className="mb-3 text-sm text-muted-foreground">
+            {filtered.length === drivers.length
+              ? `${drivers.length} motorista${drivers.length !== 1 ? 's' : ''}`
+              : `${filtered.length} de ${drivers.length}`}
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Motorista</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Pendências</TableHead>
                 <TableHead>Membro desde</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-10">Nenhum motorista encontrado.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="py-10 text-center">
+                    <p className="text-muted-foreground">
+                      {hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
+                    </p>
+                    {hasFilters && (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="mt-2 text-sm underline underline-offset-2"
+                      >
+                        Limpar filtros
+                      </button>
+                    )}
+                  </TableCell></TableRow>
               )}
               {filtered.map((user) => (
                 <TableRow
@@ -221,6 +402,7 @@ export function DriversManagement() {
                     </div>
                   </TableCell>
                   <TableCell><StatusPill status={user.status} /></TableCell>
+                  <TableCell><PendingCell pending={pendingByUser.get(user.id)} /></TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -242,7 +424,16 @@ export function DriversManagement() {
       <div className="md:hidden space-y-3">
         <p className="text-sm text-muted-foreground font-medium">Motoristas ({filtered.length})</p>
         {filtered.length === 0 && (
-          <Card className="shadow-card"><CardContent className="text-center text-muted-foreground py-10">Nenhum motorista encontrado.</CardContent></Card>
+          <Card className="shadow-card"><CardContent className="py-10 text-center">
+              <p className="text-muted-foreground">
+                {hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
+              </p>
+              {hasFilters && (
+                <button type="button" onClick={clearFilters} className="mt-2 text-sm underline underline-offset-2">
+                  Limpar filtros
+                </button>
+              )}
+            </CardContent></Card>
         )}
         {filtered.map((user) => (
           <Card key={user.id} className="shadow-card cursor-pointer active:bg-muted/40" onClick={() => openDriver(user)}>
@@ -253,6 +444,9 @@ export function DriversManagement() {
                   <p className="font-medium truncate">{user.name}</p>
                   <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                   <p className="text-xs text-muted-foreground mt-1">Desde {formatDate(user.createdAt)}</p>
+                  <div className="mt-2">
+                    <PendingCell pending={pendingByUser.get(user.id)} />
+                  </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <StatusPill status={user.status} />
