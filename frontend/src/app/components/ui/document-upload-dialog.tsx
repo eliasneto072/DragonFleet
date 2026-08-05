@@ -23,6 +23,7 @@ import { AlertCircle, Loader2, Paperclip, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { invalidateAfterDocument } from '@/shared/lib/invalidate';
 import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
 import type { DocumentType } from '@/shared/types/api';
 
@@ -69,8 +70,9 @@ export function DocumentUploadDialog({
       // rever, lendo do próprio documento. Ver DocumentValidityFields.
       documentsService.create(type as DocumentType, file!, undefined, vehicleId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      // O envio pode desbloquear o motorista e reativar o veículo; o painel
+      // do administrador conta os documentos por rever.
+      invalidateAfterDocument(queryClient);
       toast.success(
         isResubmit
           ? 'Documento reenviado. Aguarda nova análise.'

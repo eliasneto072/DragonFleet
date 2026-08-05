@@ -37,6 +37,7 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { usersService } from '@/features/admin/services/users.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { invalidateAfterDocument } from '@/shared/lib/invalidate';
 import {
   DocumentValidityFields, EMPTY_VALIDITY, isValidityDecided, validityFromDocument,
   type ValidityValue,
@@ -208,7 +209,10 @@ export function AdminDocuments() {
       dates?: { issuedAt: string | null; expiresAt: string | null };
     }) => documentsService.updateStatus(id, { status, notes, ...dates }),
     onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+      // Aprovar reavalia o estado do veículo no servidor e pode desbloquear o
+      // motorista; invalidar só `documents` deixava as outras telas com o
+      // estado antigo até alguém recarregar.
+      invalidateAfterDocument(queryClient);
       toast.success(status === 'APPROVED' ? 'Documento aprovado!' : 'Documento rejeitado.');
       setRejectDoc(null);
       setRejectReason('');
@@ -220,7 +224,7 @@ export function AdminDocuments() {
   const { mutate: removeDocument, isPending: removing } = useMutation({
     mutationFn: (id: string) => documentsService.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+      invalidateAfterDocument(queryClient);
       toast.success('Documento removido.');
       setReviewDoc(null);
     },

@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { invalidateAfterWithdrawal } from '@/shared/lib/invalidate';
 import { FINANCIAL } from '@/shared/constants';
 import { PayoutIllustration } from '@/app/components/ui/payout-illustration';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
@@ -160,8 +161,8 @@ export function Withdrawals() {
   const { mutate: createWithdrawal, isPending } = useMutation({
     mutationFn: (value: number) => withdrawalsService.create(value),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
+      // Também o painel do administrador: o pedido entra na fila dele.
+      invalidateAfterWithdrawal(queryClient);
       toast.success('Solicitação de saque enviada!');
       setOpen(false);
       setAmount('');
