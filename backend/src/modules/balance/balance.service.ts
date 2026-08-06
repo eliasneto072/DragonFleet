@@ -15,13 +15,15 @@
 // seria paga duas vezes. `totalEarnings` continua na resposta como informação,
 // mas fora do cálculo de `available`.
 //
-// Esta fórmula está replicada no SQL do passivo em analytics.repository —
-// alterar uma sem a outra faz o painel do admin divergir das contas individuais.
+// A fórmula vive na view `driver_balances` (ver a migração
+// add_driver_balances_view). Estava replicada aqui e três vezes em SQL no
+// analytics.repository; uma correção chegou a ser aplicada numa cópia e
+// esquecida noutra, e o painel divergiu das contas individuais.
 
 import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
-import { AdjustmentType, UserRole, WithdrawalStatus, SettlementStatus } from '../../shared/types/enums';
+import { AdjustmentType, UserRole } from '../../shared/types/enums';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -65,51 +67,58 @@ export class BalanceService {
     }
   }
 
+  /**
+   * Saldo de um motorista, lido da view `driver_balances`.
+   *
+   * Eram seis agregações somadas aqui, e a mesma fórmula estava replicada três
+   * vezes em SQL no analytics.repository. Quando os fechos semanais passaram a
+   * ser a origem do dinheiro, uma das cópias ficou para trás e o painel do
+   * administrador divergiu das contas individuais — só foi apanhado por causa
+   * de um comentário.
+   *
+   * A view é a única definição. Alterar a regra é alterar um ficheiro, e não há
+   * outra cópia para ficar desatualizada.
+   */
   async getSummary(actor: Actor, userId: string): Promise<BalanceSummary> {
     this.ensureOwnerOrManager(actor, userId);
     await this.ensureUserExists(userId);
 
     try {
-      const [earnings, settlements, credits, debits, withdrawn, pending] = await Promise.all([
-        prisma.earning.aggregate({ where: { userId }, _sum: { amount: true } }),
-        prisma.weeklySettlement.aggregate({
-          where: { userId, status: SettlementStatus.REGISTERED },
-          _sum: { netToDriver: true },
-        }),
-        prisma.balanceAdjustment.aggregate({
-          where: { userId, type: AdjustmentType.CREDIT }, _sum: { amount: true },
-        }),
-        prisma.balanceAdjustment.aggregate({
-          where: { userId, type: AdjustmentType.DEBIT }, _sum: { amount: true },
-        }),
-        prisma.withdrawal.aggregate({
-          where: { userId, status: { in: [WithdrawalStatus.APPROVED, WithdrawalStatus.PAID] } },
-          _sum: { amount: true },
-        }),
-        prisma.withdrawal.aggregate({
-          where: { userId, status: WithdrawalStatus.PENDING },
-          _sum: { amount: true },
-        }),
-      ]);
+      const rows = await prisma.$queryRaw<{
+        settlements: number;
+        credits: number;
+        debits: number;
+        withdrawn: number;
+        pending_withdrawals: number;
+        reported_earnings: number;
+        available: number;
+      }[]>`
+        SELECT
+          CAST(settlements         AS FLOAT) AS settlements,
+          CAST(credits             AS FLOAT) AS credits,
+          CAST(debits              AS FLOAT) AS debits,
+          CAST(withdrawn           AS FLOAT) AS withdrawn,
+          CAST(pending_withdrawals AS FLOAT) AS pending_withdrawals,
+          CAST(reported_earnings   AS FLOAT) AS reported_earnings,
+          CAST(available           AS FLOAT) AS available
+        FROM driver_balances
+        WHERE user_id = ${userId}
+      `;
 
-      const totalEarnings = Number(earnings._sum.amount ?? 0);
-      const totalSettlements = Number(settlements._sum.netToDriver ?? 0);
-      const totalCredits = Number(credits._sum.amount ?? 0);
-      const totalDebits = Number(debits._sum.amount ?? 0);
-      const totalWithdrawn = Number(withdrawn._sum.amount ?? 0);
-      const pendingWithdrawals = Number(pending._sum.amount ?? 0);
+      // ensureUserExists já garantiu que o utilizador existe; a linha só falta
+      // se a view não estiver criada, e aí zeros são melhores do que rebentar.
+      const r = rows[0];
 
-      const available =
-        totalSettlements + totalCredits - totalDebits - totalWithdrawn - pendingWithdrawals;
+      const round = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
       return {
-        totalEarnings,
-        totalSettlements,
-        totalCredits,
-        totalDebits,
-        totalWithdrawn,
-        pendingWithdrawals,
-        available: Math.round(available * 100) / 100,
+        totalEarnings: round(r?.reported_earnings ?? 0),
+        totalSettlements: round(r?.settlements ?? 0),
+        totalCredits: round(r?.credits ?? 0),
+        totalDebits: round(r?.debits ?? 0),
+        totalWithdrawn: round(r?.withdrawn ?? 0),
+        pendingWithdrawals: round(r?.pending_withdrawals ?? 0),
+        available: round(r?.available ?? 0),
       };
     } catch (err) {
       logger.error('Erro ao calcular saldo', err);

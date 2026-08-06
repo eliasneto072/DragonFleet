@@ -304,82 +304,26 @@ export const analyticsRepository = {
       // nada, por isso somá-los aqui inflava o passivo e ignorava o que foi
       // efetivamente fechado.
       //
-      // A fórmula por motorista é a mesma de balance.service.getSummary;
-      // alterar lá sem alterar aqui faz o painel divergir das contas
-      // individuais.
+      // A fórmula vive na view `driver_balances`. Estava escrita aqui e em
+      // mais dois sítios, e uma correção chegou a ser aplicada a uma cópia e
+      // esquecida noutra — o painel divergiu das contas individuais até alguém
+      // reparar. Com a view não há segunda definição para ficar para trás.
       prisma.$queryRaw<{ owed_to: number; owed_by: number }[]>`
-        WITH balances AS (
-          SELECT
-            COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
-              - COALESCE(w.total, 0) - COALESCE(p.total, 0) AS available
-          FROM users u
-          LEFT JOIN (
-            SELECT user_id, SUM(net_to_driver) AS total FROM weekly_settlements
-            WHERE status = 'REGISTERED' GROUP BY user_id
-          ) s ON s.user_id = u.id
-          LEFT JOIN (
-            SELECT user_id, SUM(amount) AS total FROM balance_adjustments
-            WHERE type = 'CREDIT' GROUP BY user_id
-          ) c ON c.user_id = u.id
-          LEFT JOIN (
-            SELECT user_id, SUM(amount) AS total FROM balance_adjustments
-            WHERE type = 'DEBIT' GROUP BY user_id
-          ) d ON d.user_id = u.id
-          LEFT JOIN (
-            SELECT user_id, SUM(amount) AS total FROM withdrawals
-            WHERE status IN ('APPROVED', 'PAID') GROUP BY user_id
-          ) w ON w.user_id = u.id
-          LEFT JOIN (
-            SELECT user_id, SUM(amount) AS total FROM withdrawals
-            WHERE status = 'PENDING' GROUP BY user_id
-          ) p ON p.user_id = u.id
-          WHERE u.role = 'DRIVER'
-        )
         SELECT
           CAST(COALESCE(SUM(CASE WHEN available > 0 THEN available ELSE 0 END), 0) AS FLOAT) AS owed_to,
           CAST(COALESCE(SUM(CASE WHEN available < 0 THEN -available ELSE 0 END), 0) AS FLOAT) AS owed_by
-        FROM balances
+        FROM driver_balances b
+        JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
       `,
 
       // Quem está negativo, por nome. O total já era calculado, mas sem os
       // nomes o alerta obrigaria a abrir ficha a ficha para descobrir quem é.
-      //
-      // A fórmula repete a de balance.service.getSummary — alterar lá sem
-      // alterar aqui faz o painel divergir das contas individuais.
       prisma.$queryRaw<{ id: string; name: string; available: number }[]>`
-        SELECT u.id, u.name,
-          CAST(
-            COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
-              - COALESCE(w.total, 0) - COALESCE(p.total, 0)
-          AS FLOAT) AS available
-        FROM users u
-        LEFT JOIN (
-          SELECT user_id, SUM(net_to_driver) AS total FROM weekly_settlements
-          WHERE status = 'REGISTERED' GROUP BY user_id
-        ) s ON s.user_id = u.id
-        LEFT JOIN (
-          SELECT user_id, SUM(amount) AS total FROM balance_adjustments
-          WHERE type = 'CREDIT' GROUP BY user_id
-        ) c ON c.user_id = u.id
-        LEFT JOIN (
-          SELECT user_id, SUM(amount) AS total FROM balance_adjustments
-          WHERE type = 'DEBIT' GROUP BY user_id
-        ) d ON d.user_id = u.id
-        LEFT JOIN (
-          SELECT user_id, SUM(amount) AS total FROM withdrawals
-          WHERE status IN ('APPROVED', 'PAID') GROUP BY user_id
-        ) w ON w.user_id = u.id
-        LEFT JOIN (
-          SELECT user_id, SUM(amount) AS total FROM withdrawals
-          WHERE status = 'PENDING' GROUP BY user_id
-        ) p ON p.user_id = u.id
-        WHERE u.role = 'DRIVER'
-        GROUP BY u.id, u.name, s.total, c.total, d.total, w.total, p.total
-        HAVING (
-          COALESCE(s.total, 0) + COALESCE(c.total, 0) - COALESCE(d.total, 0)
-            - COALESCE(w.total, 0) - COALESCE(p.total, 0)
-        ) < 0
-        ORDER BY available ASC
+        SELECT b.user_id AS id, b.user_name AS name, CAST(b.available AS FLOAT) AS available
+        FROM driver_balances b
+        JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
+        WHERE b.available < 0
+        ORDER BY b.available ASC
       `,
 
       // JOIN e não LEFT JOIN: só entram motoristas que JÁ faturaram alguma vez.
