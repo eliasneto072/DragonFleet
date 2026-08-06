@@ -34,7 +34,10 @@ import { withdrawalsService } from '@/features/driver/services/withdrawals.servi
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { invalidateAfterWithdrawal } from '@/shared/lib/invalidate';
-import { FINANCIAL } from '@/shared/constants';
+// Os limites vêm do servidor, não de constantes: as cravadas diziam 10.000 de
+// máximo enquanto o sistema aplicava 5.000, e a tela prometia ao motorista o
+// que seria recusado.
+import { useSettings } from '@/shared/hooks/use-settings';
 import { PayoutIllustration } from '@/app/components/ui/payout-illustration';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 
@@ -132,6 +135,8 @@ export function Withdrawals() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const { minWithdrawal, maxWithdrawal, processingDays } = useSettings();
+
   // O botão "Retirar" do hero do dashboard navega para cá com
   // state.openNew = true, já abrindo o diálogo.
   const [open, setOpen] = useState(
@@ -173,12 +178,12 @@ export function Withdrawals() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const value = parseFloat(amount);
-    if (isNaN(value) || value < FINANCIAL.minWithdrawal) {
-      toast.error(`Valor mínimo: ${formatCurrency(FINANCIAL.minWithdrawal)}`);
+    if (isNaN(value) || value < minWithdrawal) {
+      toast.error(`Valor mínimo: ${formatCurrency(minWithdrawal)}`);
       return;
     }
-    if (value > FINANCIAL.maxWithdrawal) {
-      toast.error(`Valor máximo: ${formatCurrency(FINANCIAL.maxWithdrawal)}`);
+    if (value > maxWithdrawal) {
+      toast.error(`Valor máximo: ${formatCurrency(maxWithdrawal)}`);
       return;
     }
     createWithdrawal(value);
@@ -218,8 +223,8 @@ export function Withdrawals() {
               <DialogHeader>
                 <DialogTitle>Solicitar Retirada</DialogTitle>
                 <DialogDescription>
-                  Mínimo {formatCurrency(FINANCIAL.minWithdrawal)} · Máximo{' '}
-                  {formatCurrency(FINANCIAL.maxWithdrawal)}
+                  Mínimo {formatCurrency(minWithdrawal)} · Máximo{' '}
+                  {formatCurrency(maxWithdrawal)}
                 </DialogDescription>
               </DialogHeader>
 
@@ -230,7 +235,7 @@ export function Withdrawals() {
                     <span className="absolute left-3 top-2.5 text-muted-foreground">€</span>
                     <Input
                       id="amount" type="number" step="0.01"
-                      min={FINANCIAL.minWithdrawal} max={FINANCIAL.maxWithdrawal}
+                      min={minWithdrawal} max={maxWithdrawal}
                       placeholder="0,00" className="pl-8"
                       value={amount} onChange={(e) => setAmount(e.target.value)} required
                     />
@@ -240,7 +245,7 @@ export function Withdrawals() {
                 <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <p className="text-sm text-muted-foreground">
-                    Saques são processados em até {FINANCIAL.processingDays} dias úteis.
+                    Saques são processados em até {processingDays} dias úteis.
                   </p>
                 </div>
 

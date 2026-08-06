@@ -21,6 +21,7 @@ import {
   type FinancialReportData,
   type DriverEarningsReportData,
 } from './reports.repository';
+import { settingsService } from '../settings/settings.service';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -68,7 +69,13 @@ export class ReportsService {
       throw new AppError('Intervalo de datas inválido', 400, 'INVALID_RANGE');
     }
 
-    const data = await reportsRepository.getFinancialReport(from, to);
+    // A comissão vem das configurações, não de uma constante: o valor cravado
+    // no repositório dizia 20% enquanto o sistema estava em 15, e o PDF saía
+    // com a receita da empresa um terço acima do real.
+    const settings = await settingsService.get();
+    const commissionRate = Number(settings.companyCommission ?? 0) / 100;
+
+    const data = await reportsRepository.getFinancialReport(from, to, commissionRate);
 
     const filename = `dragonfleet-financeiro-${from.toISOString().slice(0, 10)}_${to.toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
@@ -174,7 +181,9 @@ export class ReportsService {
     const startY = doc.y;
 
     const cards: { label: string; value: string; accent?: boolean }[] = [
-      { label: 'Receita da empresa (comissão 20%)', value: eur(data.totals.companyRevenue), accent: true },
+      // A percentagem vem dos dados: cravada no texto, o PDF continuaria a
+      // dizer 20% mesmo depois de o cálculo passar a usar o valor real.
+      { label: `Receita da empresa (comissão ${data.commissionPercent}%)`, value: eur(data.totals.companyRevenue), accent: true },
       { label: 'Ganhos brutos dos motoristas', value: eur(data.totals.grossEarnings) },
       { label: 'Retiradas pagas / aprovadas', value: eur(data.totals.paidWithdrawals) },
       { label: 'Retiradas pendentes', value: eur(data.totals.pendingWithdrawals) },
