@@ -287,7 +287,12 @@ function SettlementDetail({ s }: { s: ApiSettlement }) {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function AdminSettlements() {
+interface Props {
+  /** A página passa a trazer o cabeçalho quando há abas por cima. */
+  hideHeader?: boolean;
+}
+
+export function AdminSettlements({ hideHeader = false }: Props) {
   const queryClient = useQueryClient();
   const location = useLocation();
 
@@ -411,16 +416,24 @@ export function AdminSettlements() {
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <PageHeader
-        title="Registo semanal de faturação"
-        subtitle="Fechos por motorista e por semana"
-        icon={<ReceiptText className="h-5 w-5" />}
-        actions={
+      {hideHeader ? (
+        <div className="flex justify-end">
           <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
             <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
           </Button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title="Registo semanal de faturação"
+          subtitle="Fechos por motorista e por semana"
+          icon={<ReceiptText className="h-5 w-5" />}
+          actions={
+            <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
+            </Button>
+          }
+        />
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[170px] flex-1 space-y-1.5 sm:flex-none">

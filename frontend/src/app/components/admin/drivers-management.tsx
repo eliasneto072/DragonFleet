@@ -4,7 +4,7 @@
 // completa do motorista (drivers/:id) com saldo, ajustes e documentos.
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -123,7 +123,13 @@ function DriversSkeleton() {
 export function DriversManagement() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // O painel encaminha para cá com o filtro já escolhido: sem isto, a linha
+  // "2 motoristas bloqueados" levava à lista completa e obrigava a descobrir
+  // sozinho quais eram.
+  const location = useLocation();
+  const incoming = (location.state ?? {}) as { status?: string };
+
+  const [statusFilter, setStatusFilter] = useState(incoming.status ?? 'all');
   // 'pending' filtra quem espera decisão nossa — a pergunta mais frequente de
   // quem abre esta tela.
   const [pendingFilter, setPendingFilter] = useState<'all' | 'pending' | 'clear'>('all');
