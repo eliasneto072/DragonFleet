@@ -48,6 +48,8 @@ export interface ApiOverview {
     withdrawalsPending: { count: number; total: number; oldestAt: string | null };
     /** Lançamentos comunicados à espera de confirmação. Não movimentam saldo. */
     earningsPending: { count: number; oldestAt: string | null };
+    /** Tickets de suporte abertos ou em progresso. */
+    supportOpen: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
     /** Motoristas ativos sem fecho da semana passada. */

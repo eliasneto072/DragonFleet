@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma';
 import {
   UserRole, UserStatus, WithdrawalStatus, DocumentStatus, EarningPlatform,
-  EarningStatus, SettlementStatus,
+  EarningStatus, SettlementStatus, TicketStatus,
 } from '../../shared/types/enums';
 
 /**
@@ -50,6 +50,8 @@ export interface OverviewRaw {
   documentsPending: { count: number; oldestAt: Date | null };
   withdrawalsPending: { count: number; total: number; oldestAt: Date | null };
   earningsPending: { count: number; oldestAt: Date | null };
+  /** Tickets abertos ou em progresso, com a data do mais antigo. */
+  supportOpen: { count: number; oldestAt: Date | null };
   driversBlocked: number;
   documentsExpiringSoon: number;
   /** Quem ainda não tem a semana passada fechada. */
@@ -192,6 +194,8 @@ export const analyticsRepository = {
       withdrawalsPendingOldest,
       earningsPendingCount,
       earningsPendingOldest,
+      supportOpenCount,
+      supportOpenOldest,
       driversBlocked,
       documentsExpiringSoon,
       activeDriverRows,
@@ -231,6 +235,18 @@ export const analyticsRepository = {
 
       prisma.earning.findFirst({
         where: { status: EarningStatus.PENDING },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+
+      // Um ticket sem resposta é alguém à espera, e não aparecia em lado
+      // nenhum: era preciso abrir Suporte para saber que existia.
+      prisma.supportTicket.count({
+        where: { status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] } },
+      }),
+
+      prisma.supportTicket.findFirst({
+        where: { status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] } },
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true },
       }),
@@ -359,6 +375,10 @@ export const analyticsRepository = {
       earningsPending: {
         count: earningsPendingCount,
         oldestAt: earningsPendingOldest?.createdAt ?? null,
+      },
+      supportOpen: {
+        count: supportOpenCount,
+        oldestAt: supportOpenOldest?.createdAt ?? null,
       },
       missingSettlements,
       withdrawalsPending: {

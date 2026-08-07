@@ -44,6 +44,8 @@ export interface AnalyticsOverview {
     withdrawalsPending: { count: number; total: number; oldestAt: string | null };
     /** Lançamentos comunicados à espera de confirmação. */
     earningsPending: { count: number; oldestAt: string | null };
+    /** Tickets abertos ou em progresso. */
+    supportOpen: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
     /** Motoristas ativos sem fecho da semana passada. */
@@ -167,6 +169,10 @@ export class AnalyticsService {
         earningsPending: {
           count: raw.earningsPending.count,
           oldestAt: raw.earningsPending.oldestAt?.toISOString() ?? null,
+        },
+        supportOpen: {
+          count: raw.supportOpen.count,
+          oldestAt: raw.supportOpen.oldestAt?.toISOString() ?? null,
         },
         driversBlocked: raw.driversBlocked,
         documentsExpiringSoon: {

@@ -27,7 +27,7 @@ import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   AlertCircle, CalendarClock, CheckCircle2, ChevronRight, Coins,
-  FileText, HandCoins, ReceiptText, TrendingDown, TrendingUp, UserX,
+  FileText, HandCoins, MessageCircle, ReceiptText, TrendingDown, TrendingUp, UserX,
 } from 'lucide-react';
 import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -283,6 +283,21 @@ export function AdminDashboard() {
         waiting: null,
         actionLabel: 'Ver',
         to: '/app/admin/drivers',
+      });
+    }
+
+    // Um ticket sem resposta é alguém à espera. Não aparecia em lado nenhum:
+    // era preciso abrir Suporte para saber que existia.
+    if (q.supportOpen.count > 0) {
+      const days = daysSince(q.supportOpen.oldestAt);
+      items.push({
+        key: 'support',
+        icon: MessageCircle,
+        title: `${q.supportOpen.count} ticket${q.supportOpen.count !== 1 ? 's' : ''} de suporte em aberto`,
+        detail: `O mais antigo ${agoLabel(days)}`,
+        waiting: days,
+        actionLabel: 'Responder',
+        to: '/app/admin/support',
       });
     }
 
