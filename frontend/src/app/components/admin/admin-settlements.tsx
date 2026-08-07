@@ -13,7 +13,7 @@
 // Quem precisa de eliminar um registado cancela primeiro, o que reverte o valor
 // e regista o motivo, e só depois apaga.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -95,6 +95,9 @@ function stamp(iso: string): string {
     hour: '2-digit', minute: '2-digit',
   })}`;
 }
+
+/** Linhas por página. */
+const PAGE_SIZE = 25;
 
 type PeriodKey = 'all' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom';
 
@@ -343,7 +346,29 @@ export function AdminSettlements({ hideHeader = false }: Props) {
     queryFn: () => settlementsService.list(params),
     enabled: mode.view === 'list',
   });
-  const settlements = data?.settlements ?? [];
+  const all = data?.settlements ?? [];
+
+  /**
+   * Só os registados contam para o total: rascunhos ainda não creditaram nada
+   * e cancelados foram revertidos. Somar os três daria um número que não
+   * corresponde a dinheiro nenhum.
+   */
+  const registeredTotal = all
+    .filter((x) => x.status === 'REGISTERED')
+    .reduce((sum, x) => sum + x.netToDriver, 0);
+  const registeredCount = all.filter((x) => x.status === 'REGISTERED').length;
+
+  // Teto de linhas. Com cinquenta motoristas ao fim de um ano são 2.600
+  // fechos, e a tela renderizaria todos. Quem procura um específico usa os
+  // filtros — é para isso que eles existem.
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const settlements = all.slice(0, limit);
+
+  // Repõe o limite quando os filtros mudam: sem isto, filtrar mantinha
+  // abertas as linhas extra de uma pesquisa anterior.
+  useEffect(() => {
+    setLimit(PAGE_SIZE);
+  }, [driverFilter, statusFilter, period, customFrom, customTo]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.settlements.all });
@@ -529,9 +554,19 @@ export function AdminSettlements({ hideHeader = false }: Props) {
       ) : (
         <Card className="shadow-card">
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-base sm:text-lg">
-              {settlements.length} fecho{settlements.length !== 1 ? 's' : ''}
-            </CardTitle>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <CardTitle className="text-base sm:text-lg">
+                {all.length} fecho{all.length !== 1 ? 's' : ''}
+              </CardTitle>
+              {registeredCount > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  <strong className="font-semibold tabular-nums text-foreground">
+                    {formatCurrency(registeredTotal)}
+                  </strong>{' '}
+                  creditados em {registeredCount} fecho{registeredCount !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
             <p className="mt-0.5 text-sm text-muted-foreground">
               Toque numa linha para ver o detalhe
             </p>
@@ -613,6 +648,17 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                 </li>
               ))}
             </ul>
+
+            {all.length > settlements.length && (
+              <button
+                type="button"
+                onClick={() => setLimit((n) => n + PAGE_SIZE)}
+                className="mt-3 w-full border-t border-border pt-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Mostrar mais {Math.min(PAGE_SIZE, all.length - settlements.length)} de{' '}
+                {all.length - settlements.length} restantes
+              </button>
+            )}
           </CardContent>
         </Card>
       )}

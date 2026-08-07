@@ -252,6 +252,28 @@ export function SettlementForm({
   const reportedFor = (platform: string) =>
     reported.find((r) => r.platform === platform)?.total ?? 0;
 
+  // Sobreposição, verificada ao escolher a semana.
+  //
+  // O servidor recusa de qualquer forma — é ele que garante. Mas só o fazia ao
+  // gravar, depois de oito campos preenchidos, quando a informação já estava
+  // disponível no momento em que a semana foi escolhida. Avisar aqui poupa o
+  // trabalho perdido.
+  const existingQ = useQuery({
+    queryKey: [...queryKeys.settlements.list(userId), 'overlap'] as const,
+    queryFn: () => settlementsService.list({ userId }),
+    enabled: !!userId,
+  });
+
+  const overlapping = useMemo(() => {
+    if (!userId || !weekStart || !weekEnd) return null;
+    return (existingQ.data?.settlements ?? []).find((x) => {
+      if (x.id === settlementId) return false;      // o próprio, ao editar
+      if (x.status === 'CANCELLED') return false;   // liberta a semana
+      // Intervalos sobrepõem-se quando cada um começa antes de o outro acabar.
+      return x.weekStart.slice(0, 10) <= weekEnd && x.weekEnd.slice(0, 10) >= weekStart;
+    }) ?? null;
+  }, [existingQ.data, userId, weekStart, weekEnd, settlementId]);
+
   // ── Pré-visualização, calculada no servidor ─────────────────────────────────
 
   const [totals, setTotals] = useState<(SettlementTotals & { commissionRate: number }) | null>(null);
@@ -287,6 +309,22 @@ export function SettlementForm({
     if (!userId) return 'Selecione o motorista.';
     if (!weekStart || !weekEnd) return 'Indique o intervalo da semana.';
     if (weekStart > weekEnd) return 'A data de início é posterior à de fim.';
+
+    if (overlapping) {
+      const from = overlapping.weekStart.slice(0, 10).split('-').reverse().join('/');
+      const to = overlapping.weekEnd.slice(0, 10).split('-').reverse().join('/');
+      return `Este motorista já tem um fecho de ${from} a ${to}.`;
+    }
+
+    // Um fecho com tudo a zero não é um engano inofensivo: ocupa a semana e
+    // passa a bloquear o fecho verdadeiro por sobreposição, obrigando a
+    // descobrir que existe, cancelar e refazer.
+    const totalMoved =
+      (totals?.grossRevenue ?? 0) + (totals?.operatingCosts ?? 0);
+    if (totalMoved === 0) {
+      return 'Preencha pelo menos uma receita ou dedução.';
+    }
+
     return null;
   }
 
@@ -360,6 +398,10 @@ export function SettlementForm({
   });
 
   const busy = savingDraft || registering;
+  // Bloqueia o registo enquanto houver conflito ou nada preenchido: deixar o
+  // botão ativo para depois recusar é convidar ao erro.
+  const nothingFilled = !totals || (totals.grossRevenue + totals.operatingCosts) === 0;
+  const blocked = !!overlapping || nothingFilled;
   const selectedDriver = drivers.find((d) => d.id === userId);
   const effectiveRate = totals?.commissionRate ?? 0;
 
@@ -471,6 +513,28 @@ export function SettlementForm({
                   Esta semana
                 </Button>
               </div>
+
+              {/* Aviso ao escolher a semana, e não ao gravar: a informação já
+                  está disponível aqui, e descobrir o conflito depois de oito
+                  campos preenchidos deita o trabalho fora. */}
+              {overlapping && (
+                <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950 sm:col-span-2">
+                  <AlertCircle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    aria-hidden="true"
+                  />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    Este motorista já tem um fecho de{' '}
+                    <strong className="font-medium">
+                      {br(overlapping.weekStart.slice(0, 10))} a {br(overlapping.weekEnd.slice(0, 10))}
+                    </strong>
+                    {' '}({formatCurrency(overlapping.netToDriver)},{' '}
+                    {overlapping.status === 'DRAFT' ? 'rascunho' : 'registado'}).
+                    Semanas sobrepostas creditariam os mesmos dias duas vezes — escolha outro
+                    intervalo ou continue o fecho existente.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -687,13 +751,13 @@ export function SettlementForm({
           </Card>
 
           <div className="flex flex-col gap-2">
-            <Button onClick={handleRegisterClick} disabled={busy || !totals} className="w-full">
+            <Button onClick={handleRegisterClick} disabled={busy || blocked} className="w-full">
               {registering
                 ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A registar…</>)
                 : (<><Wallet className="mr-2 h-4 w-4" />Registar e creditar</>)}
             </Button>
             <Button
-              variant="outline" onClick={handleDraftClick} disabled={busy}
+              variant="outline" onClick={handleDraftClick} disabled={busy || blocked}
               className="w-full"
             >
               {savingDraft
