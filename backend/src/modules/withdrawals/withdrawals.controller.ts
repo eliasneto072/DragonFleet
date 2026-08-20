@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
+import { uploadToCloudinary } from '../upload/upload.service';
 import { withdrawalsService } from './withdrawals.service';
 import {
   createWithdrawalSchema,
@@ -36,11 +37,32 @@ export class WithdrawalsController {
     return ok(res, { withdrawal });
   };
 
+  /**
+   * POST /withdrawals — multipart, com o recibo verde.
+   *
+   * O ficheiro vem no mesmo pedido de propósito: exigi-lo depois da aprovação
+   * deixaria pedidos aprovados à espera de um documento que ninguém lembra de
+   * pedir, e a empresa não paga sem fatura.
+   */
   create = async (req: AuthRequest, res: Response) => {
     const parsed = createWithdrawalSchema.parse({ body: req.body });
     const actor = getActor(req);
 
-    const withdrawal = await withdrawalsService.create(actor, actor.id, parsed.body);
+    if (!req.file) {
+      throw new AppError('Anexe o recibo verde.', 400, 'MISSING_RECEIPT');
+    }
+
+    const { fileUrl, fileKey } = await uploadToCloudinary(
+      req.file.buffer,
+      req.file.mimetype,
+      'withdrawal-receipts',
+    );
+
+    const withdrawal = await withdrawalsService.create(actor, actor.id, {
+      amount: parsed.body.amount,
+      receiptUrl: fileUrl,
+      receiptKey: fileKey,
+    });
 
     return ok(res, { withdrawal }, 201);
   };

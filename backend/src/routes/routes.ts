@@ -13,6 +13,7 @@ import { reportsRouter } from '../modules/reports/reports.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
 import { balanceRouter } from '../modules/balance/balance.routes';
 import { settlementsRouter } from '../modules/settlements/settlements.routes';
+import { bankRouter } from '../modules/bank/bank.routes';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/reports', reportsRouter());
 router.use('/settings', settingsRouter());
 router.use('/balance', balanceRouter());
 router.use('/settlements', settlementsRouter());
+router.use('/bank', bankRouter());
 
 export { router };

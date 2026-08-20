@@ -33,6 +33,8 @@ enum DocumentType {
   CARTA_CONDUCAO
   CERTIFICADO_TVDE
   FOTO_PERFIL
+  /// Comprovativo de titularidade da conta bancária.
+  COMPROVATIVO_IBAN
 
   // Documentos do veículo
   DUA
@@ -125,6 +127,8 @@ model User {
   settlements        WeeklySettlement[]  @relation("settlementsReceived")
   settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
+  bankAccount        BankAccount?
+  bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
 
   @@map("users")
 }
@@ -258,11 +262,62 @@ model Withdrawal {
   processedAt DateTime?        @map("processed_at")
   userId      String           @map("user_id")
 
+  /// Recibo verde, anexado no momento do pedido. Obrigatório: a empresa não
+  /// paga sem fatura, e exigir depois da aprovação deixaria pedidos aprovados
+  /// à espera de um documento que ninguém lembra de pedir.
+  receiptUrl String @map("receipt_url")
+  receiptKey String @map("receipt_key")
+
+  /// IBAN para onde o valor foi enviado, copiado no momento da APROVAÇÃO.
+  ///
+  /// Congelado de propósito, como a percentagem no fecho semanal: se o
+  /// motorista alterar os dados bancários depois, uma retirada já decidida não
+  /// pode mudar de destino sem ninguém reparar.
+  paidToIban   String?   @map("paid_to_iban")
+  paidToHolder String?   @map("paid_to_holder")
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@map("withdrawals")
+}
+
+/// Dados bancários do motorista.
+///
+/// Alterações passam por aprovação: trocar o IBAN é o vetor clássico de
+/// fraude — quem ganhe acesso à conta muda o número e desvia o pagamento
+/// seguinte. Enquanto a alteração está pendente, o IBAN anterior continua a
+/// valer, por isso os dois pares de campos coexistem.
+model BankAccount {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  /// Em vigor. Vazio até a primeira aprovação.
+  iban       String?
+  holderName String? @map("holder_name")
+
+  /// Submetido e à espera de decisão.
+  pendingIban       String? @map("pending_iban")
+  pendingHolderName String? @map("pending_holder_name")
+  /// Comprovativo que acompanha a alteração pendente.
+  pendingProofUrl   String? @map("pending_proof_url")
+  pendingProofKey   String? @map("pending_proof_key")
+  pendingAt         DateTime? @map("pending_at")
+
+  /// Motivo, quando a alteração é recusada.
+  rejectionReason String? @map("rejection_reason")
+
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("bankAccountsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@map("bank_accounts")
 }
 
 model BalanceAdjustment {

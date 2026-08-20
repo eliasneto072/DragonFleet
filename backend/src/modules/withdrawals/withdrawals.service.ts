@@ -9,6 +9,7 @@ import { CreateWithdrawalInput, UpdateWithdrawalStatusInput } from './withdrawal
 import { emailService }         from '../../shared/services/email.service';
 import { balanceService }       from '../balance/balance.service';
 import { settingsService }      from '../settings/settings.service';
+import { bankService }          from '../bank/bank.service';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -116,7 +117,23 @@ export class WithdrawalsService {
       );
     }
 
-    const data: CreateWithdrawalData = { amount, userId };
+    // Sem IBAN aprovado não há como pagar. Recusar aqui é melhor do que
+    // aceitar o pedido e descobrir na hora da transferência que não há destino.
+    const bank = await bankService.getActiveIban(userId);
+    if (!bank) {
+      throw new AppError(
+        'Registe os seus dados bancários e aguarde a aprovação antes de pedir uma retirada.',
+        400,
+        'BANK_ACCOUNT_REQUIRED',
+      );
+    }
+
+    const data: CreateWithdrawalData = {
+      amount,
+      userId,
+      receiptUrl: input.receiptUrl,
+      receiptKey: input.receiptKey,
+    };
     return withdrawalsRepository.create(data);
   }
 
@@ -158,6 +175,22 @@ export class WithdrawalsService {
       status: input.status,
       notes:  input.notes ?? null,
     };
+
+    // Congela o destino no momento da aprovação: se o motorista alterar os
+    // dados bancários depois, uma transferência já decidida não muda de conta
+    // sem ninguém reparar.
+    if (input.status === WithdrawalStatus.APPROVED && !withdrawal.paidToIban) {
+      const bank = await bankService.getActiveIban(withdrawal.userId);
+      if (!bank) {
+        throw new AppError(
+          'Este motorista não tem dados bancários aprovados. Não há destino para a transferência.',
+          400,
+          'BANK_ACCOUNT_REQUIRED',
+        );
+      }
+      data.paidToIban = bank.iban;
+      data.paidToHolder = bank.holderName;
+    }
 
     const updated = await withdrawalsRepository.update(id, data);
 

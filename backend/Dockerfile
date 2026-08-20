@@ -5,11 +5,19 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# Copia o schema ANTES do npm ci — o postinstall roda "prisma generate"
-# e precisa do schema.prisma presente no momento do install
-COPY prisma ./prisma/
+# Só o schema, e não a pasta prisma inteira.
+#
+# O postinstall corre "prisma generate", que precisa do schema presente no
+# momento do install — daí ele vir antes do npm ci. Mas o generate NÃO precisa
+# das migrações, e copiá-las aqui fazia com que criar uma migração invalidasse
+# a camada do npm ci e obrigasse a reinstalar centenas de pacotes.
+COPY prisma/schema.prisma ./prisma/
+COPY prisma.config.ts ./
 
 RUN npm ci
+
+# As migrações entram depois: mexer nelas já não custa uma reinstalação.
+COPY prisma ./prisma/
 
 COPY tsconfig.json ./
 COPY src ./src/
@@ -22,10 +30,14 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# Mesma coisa no estágio de produção
-COPY prisma ./prisma/
+# Mesma separação do estágio de build, pela mesma razão.
+COPY prisma/schema.prisma ./prisma/
+COPY prisma.config.ts ./
 
 RUN npm ci --omit=dev
+
+# migrate deploy corre no arranque e precisa dos ficheiros de migração.
+COPY prisma ./prisma/
 
 COPY --from=builder /app/dist ./dist
 

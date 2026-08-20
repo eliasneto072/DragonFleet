@@ -5,7 +5,7 @@ CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'DRIVER', 'MANAGER');
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'BLOCKED', 'AGUARDANDO_REGULARIZACAO');
 
 -- CreateEnum
-CREATE TYPE "DocumentType" AS ENUM ('CARTAO_CIDADAO', 'REGISTO_CRIMINAL', 'CARTA_CONDUCAO', 'CERTIFICADO_TVDE', 'FOTO_PERFIL', 'DUA', 'SEGURO_CARTA_VERDE', 'SEGURO_CONDICOES_ESPECIAIS', 'INSPECAO_PERIODICA', 'OTHER');
+CREATE TYPE "DocumentType" AS ENUM ('CARTAO_CIDADAO', 'REGISTO_CRIMINAL', 'CARTA_CONDUCAO', 'CERTIFICADO_TVDE', 'FOTO_PERFIL', 'COMPROVATIVO_IBAN', 'DUA', 'SEGURO_CARTA_VERDE', 'SEGURO_CONDICOES_ESPECIAIS', 'INSPECAO_PERIODICA', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "DocumentStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED');
@@ -17,6 +17,9 @@ CREATE TYPE "WithdrawalStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'PAID
 CREATE TYPE "VehicleStatus" AS ENUM ('PENDING', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'SOLD');
 
 -- CreateEnum
+CREATE TYPE "EarningStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+
+-- CreateEnum
 CREATE TYPE "EarningPlatform" AS ENUM ('UBER', 'BOLT', 'FREE_NOW', 'OTHER');
 
 -- CreateEnum
@@ -24,6 +27,12 @@ CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')
 
 -- CreateEnum
 CREATE TYPE "TicketCategory" AS ENUM ('TECHNICAL', 'FINANCIAL', 'DOCUMENTS', 'ACCOUNT', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "AdjustmentType" AS ENUM ('CREDIT', 'DEBIT');
+
+-- CreateEnum
+CREATE TYPE "SettlementStatus" AS ENUM ('DRAFT', 'REGISTERED', 'CANCELLED');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -45,8 +54,13 @@ CREATE TABLE "earnings" (
     "amount" DECIMAL(12,2) NOT NULL,
     "date" DATE NOT NULL,
     "platform" "EarningPlatform" NOT NULL,
+    "status" "EarningStatus" NOT NULL DEFAULT 'PENDING',
+    "notes" TEXT,
     "user_id" TEXT NOT NULL,
+    "reviewed_by_id" TEXT,
+    "reviewed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "earnings_pkey" PRIMARY KEY ("id")
 );
@@ -61,6 +75,7 @@ CREATE TABLE "vehicles" (
     "vin" TEXT,
     "status" "VehicleStatus" NOT NULL DEFAULT 'PENDING',
     "activation_forced" BOOLEAN NOT NULL DEFAULT false,
+    "weekly_fee" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "user_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -118,8 +133,45 @@ CREATE TABLE "withdrawals" (
     "requested_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "processed_at" TIMESTAMP(3),
     "user_id" TEXT NOT NULL,
+    "receipt_url" TEXT NOT NULL,
+    "receipt_key" TEXT NOT NULL,
+    "paid_to_iban" TEXT,
+    "paid_to_holder" TEXT,
 
     CONSTRAINT "withdrawals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "bank_accounts" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "iban" TEXT,
+    "holder_name" TEXT,
+    "pending_iban" TEXT,
+    "pending_holder_name" TEXT,
+    "pending_proof_url" TEXT,
+    "pending_proof_key" TEXT,
+    "pending_at" TIMESTAMP(3),
+    "rejection_reason" TEXT,
+    "reviewed_by_id" TEXT,
+    "reviewed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "bank_accounts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "balance_adjustments" (
+    "id" TEXT NOT NULL,
+    "amount" DECIMAL(12,2) NOT NULL,
+    "type" "AdjustmentType" NOT NULL,
+    "reason" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "created_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "balance_adjustments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -167,6 +219,37 @@ CREATE TABLE "system_settings" (
     CONSTRAINT "system_settings_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "weekly_settlements" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "vehicle_id" TEXT,
+    "week_start" DATE NOT NULL,
+    "week_end" DATE NOT NULL,
+    "uber_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "bolt_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "other_revenue" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "tolls_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "fuel_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "vehicle_fee" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "other_deductions" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "commission_rate" DECIMAL(5,2) NOT NULL DEFAULT 0,
+    "gross_revenue" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "total_deductions" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "profit_base" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "commission_amount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "net_to_driver" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "status" "SettlementStatus" NOT NULL DEFAULT 'DRAFT',
+    "notes" TEXT,
+    "internal_notes" TEXT,
+    "created_by_id" TEXT NOT NULL,
+    "registered_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "weekly_settlements_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -175,6 +258,9 @@ CREATE INDEX "earnings_user_id_idx" ON "earnings"("user_id");
 
 -- CreateIndex
 CREATE INDEX "earnings_date_idx" ON "earnings"("date");
+
+-- CreateIndex
+CREATE INDEX "earnings_status_idx" ON "earnings"("status");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "vehicles_plate_key" ON "vehicles"("plate");
@@ -219,6 +305,12 @@ CREATE INDEX "withdrawals_user_id_idx" ON "withdrawals"("user_id");
 CREATE INDEX "withdrawals_status_idx" ON "withdrawals"("status");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "bank_accounts_user_id_key" ON "bank_accounts"("user_id");
+
+-- CreateIndex
+CREATE INDEX "balance_adjustments_user_id_idx" ON "balance_adjustments"("user_id");
+
+-- CreateIndex
 CREATE INDEX "support_tickets_user_id_idx" ON "support_tickets"("user_id");
 
 -- CreateIndex
@@ -227,8 +319,23 @@ CREATE INDEX "support_tickets_status_idx" ON "support_tickets"("status");
 -- CreateIndex
 CREATE INDEX "ticket_replies_ticket_id_idx" ON "ticket_replies"("ticket_id");
 
+-- CreateIndex
+CREATE INDEX "weekly_settlements_user_id_idx" ON "weekly_settlements"("user_id");
+
+-- CreateIndex
+CREATE INDEX "weekly_settlements_week_start_idx" ON "weekly_settlements"("week_start");
+
+-- CreateIndex
+CREATE INDEX "weekly_settlements_status_idx" ON "weekly_settlements"("status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "weekly_settlements_user_id_week_start_key" ON "weekly_settlements"("user_id", "week_start");
+
 -- AddForeignKey
 ALTER TABLE "earnings" ADD CONSTRAINT "earnings_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "earnings" ADD CONSTRAINT "earnings_reviewed_by_id_fkey" FOREIGN KEY ("reviewed_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -252,6 +359,18 @@ ALTER TABLE "documents" ADD CONSTRAINT "documents_vehicle_id_fkey" FOREIGN KEY (
 ALTER TABLE "withdrawals" ADD CONSTRAINT "withdrawals_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "bank_accounts" ADD CONSTRAINT "bank_accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "bank_accounts" ADD CONSTRAINT "bank_accounts_reviewed_by_id_fkey" FOREIGN KEY ("reviewed_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "balance_adjustments" ADD CONSTRAINT "balance_adjustments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "balance_adjustments" ADD CONSTRAINT "balance_adjustments_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -259,3 +378,12 @@ ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_ticket_id_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "weekly_settlements" ADD CONSTRAINT "weekly_settlements_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "weekly_settlements" ADD CONSTRAINT "weekly_settlements_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "weekly_settlements" ADD CONSTRAINT "weekly_settlements_vehicle_id_fkey" FOREIGN KEY ("vehicle_id") REFERENCES "vehicles"("id") ON DELETE SET NULL ON UPDATE CASCADE;

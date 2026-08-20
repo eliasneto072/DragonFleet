@@ -1,20 +1,13 @@
 -- Saldo do motorista: uma definição, um sítio.
 --
--- A fórmula estava replicada em quatro lugares: uma vez em Prisma, no
--- balance.service, e três vezes em SQL cru no analytics.repository — o passivo,
--- a lista de negativos, e o HAVING que a repetia inteira para filtrar.
+-- A fórmula esteve replicada em quatro lugares — uma vez em Prisma, no
+-- balance.service, e três vezes em SQL cru no analytics.repository. Uma
+-- correção chegou a ser aplicada a uma cópia e esquecida noutra, e o painel
+-- divergiu das contas individuais até alguém reparar.
 --
--- Já houve uma correção aplicada a uma cópia e esquecida na outra: quando os
--- fechos semanais passaram a ser a origem do dinheiro, o painel continuou a
--- somar a tabela de ganhos durante algum tempo, e o "Devido aos motoristas"
--- divergia das contas individuais. Só foi apanhado porque havia um comentário
--- a avisar.
---
--- Com a view, alterar a regra é alterar um ficheiro. Quem consulta não pode
--- ficar para trás porque não existe outra definição para ficar desatualizada.
---
--- NOTA SOBRE O PRISMA: views não entram no schema.prisma; são consultadas com
--- $queryRaw. Isso é aceitável aqui — a alternativa era manter a duplicação.
+-- Views não vivem no schema.prisma; são criadas por migração e consultadas com
+-- $queryRaw. É por isso que esta migração existe à parte: apagar as migrações
+-- e regenerar a partir do schema não a traz de volta.
 
 CREATE OR REPLACE VIEW driver_balances AS
 SELECT

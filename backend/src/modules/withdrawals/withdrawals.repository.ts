@@ -13,6 +13,10 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
     requestedAt: true,
     processedAt: true,
     userId: true,
+    receiptUrl: true,
+    receiptKey: true,
+    paidToIban: true,
+    paidToHolder: true,
   } as const;
 
   async findAll(): Promise<IWithdrawalPublic[]> {
@@ -66,6 +70,8 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
         data: {
           amount: data.amount,
           userId: data.userId,
+          receiptUrl: data.receiptUrl,
+          receiptKey: data.receiptKey,
           // status omitido — Prisma aplica PENDING por default
         },
         select: this.publicSelect,
@@ -87,6 +93,9 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
           ...(data.notes !== undefined ? { notes: data.notes } : {}),
           // processedAt preenchido automaticamente quando status muda para APPROVED, REJECTED ou PAID
           ...(data.status !== undefined ? { processedAt: new Date() } : {}),
+          // IBAN congelado na aprovação — ver withdrawals.service.updateStatus.
+          ...(data.paidToIban !== undefined ? { paidToIban: data.paidToIban } : {}),
+          ...(data.paidToHolder !== undefined ? { paidToHolder: data.paidToHolder } : {}),
         },
         select: this.publicSelect,
       });

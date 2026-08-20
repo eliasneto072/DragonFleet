@@ -9,6 +9,20 @@ export interface IWithdrawal {
   requestedAt: Date;
   processedAt?: Date | null;
   userId: string;
+
+  /** Recibo verde, anexado no momento do pedido. */
+  receiptUrl: string;
+  receiptKey: string;
+
+  /**
+   * IBAN de destino, copiado na APROVAÇÃO.
+   *
+   * Congelado de propósito: se o motorista alterar os dados bancários depois,
+   * uma transferência já decidida não pode mudar de destino sem ninguém
+   * reparar. Mesma lógica da percentagem no fecho semanal.
+   */
+  paidToIban?: string | null;
+  paidToHolder?: string | null;
 }
 
 export type IWithdrawalPublic = IWithdrawal;
