@@ -4,6 +4,9 @@ dist
 .env.*
 *.log
 npm-debug.log*
+# A cache incremental do `tsc -b`. Se entrar na imagem, o typecheck vê-se como
+# já feito e não verifica nada — o build passaria a verde sem ter olhado.
+*.tsbuildinfo
 .git
 .gitignore
 README.md

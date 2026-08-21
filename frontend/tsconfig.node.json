@@ -12,7 +12,11 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    // O vite.config.ts corre em Node: usa `path` e `__dirname`, que não
+    // existem sem estes tipos. Sem eles o typecheck falhava no próprio
+    // ficheiro de configuração.
+    "types": ["node"]
   },
   "include": ["vite.config.ts"]
 }

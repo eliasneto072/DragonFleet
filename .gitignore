@@ -1,2 +1,13 @@
 .env
 **/.env
+
+# Nunca versionar dependências nem artefactos de build.
+#
+# Não estavam aqui, e só por sorte nunca foram commitados: um `git add -A`
+# distraído arrastava 400 MB de node_modules para o repositório, e desfazer
+# isso obriga a reescrever o histórico.
+node_modules/
+dist/
+
+# Cache incremental do `tsc -b`.
+*.tsbuildinfo
