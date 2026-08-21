@@ -15,7 +15,7 @@ function getActor(req: AuthRequest) {
 function getCsv(req: AuthRequest): string {
   // multer memoryStorage → req.file.buffer
   const file = (req as AuthRequest & { file?: Express.Multer.File }).file;
-  if (!file) throw new AppError('Nenhum arquivo enviado.', 400, 'NO_FILE');
+  if (!file) throw new AppError('Nenhum ficheiro enviado.', 400, 'NO_FILE');
   return file.buffer.toString('utf-8');
 }
 
