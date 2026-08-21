@@ -33,7 +33,12 @@ export interface Adjustment {
 interface CreateAdjustmentInput {
   type: AdjustmentType;
   amount: number;
-  reason: string;
+  /**
+   * Opcional, como no backend: `createAdjustmentSchema` marca-o `.optional()` e
+   * o service grava string vazia quando falta. O tipo dizia obrigatório e
+   * obrigava quem chama a inventar um valor para o compilador aceitar.
+   */
+  reason?: string;
 }
 
 export const balanceService = {

@@ -11,7 +11,7 @@
 // saber que estava a impedir a própria ativação. Documentos e Veículos usam o
 // tom de alerta; Notificações fica em neutro, porque é novidade e não pendência.
 
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Wallet, FileText, User, Bell, MessageCircle, Car,

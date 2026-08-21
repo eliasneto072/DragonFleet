@@ -21,8 +21,8 @@ import {
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
-  Car, Plus, Loader2, AlertCircle, Search, CheckCircle, Clock, XCircle,
-  FileWarning, FileCheck, ChevronRight, ArrowRight, Pencil,
+  Car, Plus, Loader2, AlertCircle, Search,
+  FileWarning, FileCheck, ChevronRight, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
@@ -42,7 +42,6 @@ const EMPTY_FORM = {
 function StatusBadge({ status }: { status: VehicleStatus }) {
   const label = VEHICLE_STATUS_LABELS[status] ?? status;
   const cls = VEHICLE_STATUS_STYLES[status] ?? VEHICLE_STATUS_STYLES.INACTIVE;
-  const Icon = status === 'ACTIVE' ? CheckCircle : status === 'PENDING' ? Clock : XCircle;
   return (
     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${status === 'ACTIVE' ? 'bg-green-600' : status === 'PENDING' ? 'bg-amber-600' : 'bg-gray-400'}`} />

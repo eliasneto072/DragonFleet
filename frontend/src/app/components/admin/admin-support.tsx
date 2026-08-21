@@ -17,7 +17,6 @@ import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
 import { supportService } from '@/features/driver/services/support.service';
-import { useAuth } from '@/features/auth/context/AuthContext';
 import type { ApiTicket, TicketStatus } from '@/features/driver/services/support.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,7 +48,6 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 // ── Modal de detalhe ──────────────────────────────────────────────────────────
 
 function TicketModal({ ticket, onClose }: { ticket: ApiTicket; onClose: () => void }) {
-  const { user }          = useAuth();
   const queryClient       = useQueryClient();
   const [reply, setReply] = useState('');
 

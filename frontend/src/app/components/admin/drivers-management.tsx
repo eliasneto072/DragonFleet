@@ -19,7 +19,7 @@ import { PageHeader } from '@/app/components/ui/page-header';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { documentsService } from '@/features/driver/services/documents.service';
-import { Search, Eye, Mail, Loader2, AlertCircle, Users, X } from 'lucide-react';
+import { Search, Eye, Mail, AlertCircle, Users, X } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';

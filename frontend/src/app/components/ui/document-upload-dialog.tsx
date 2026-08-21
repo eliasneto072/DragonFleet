@@ -22,7 +22,6 @@ import { Label } from '@/app/components/ui/label';
 import { AlertCircle, Loader2, Paperclip, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { documentsService } from '@/features/driver/services/documents.service';
-import { queryKeys } from '@/shared/lib/query-keys';
 import { invalidateAfterDocument } from '@/shared/lib/invalidate';
 import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
 import type { DocumentType } from '@/shared/types/api';

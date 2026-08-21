@@ -1,6 +1,5 @@
 // src/app/router/index.tsx
 
-import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RootLayout } from '@/app/providers/RootLayout';
 import { LandingPage } from '@/features/landing/pages/LandingPage';

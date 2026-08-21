@@ -9,7 +9,7 @@
 // - Erro estável, com ícone + animação (slide + shake), limpo só ao digitar.
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { useNavigate, Navigate, Link } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { usersService } from '@/features/admin/services/users.service';
@@ -18,7 +18,6 @@ import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 
 export function RegisterPage() {
   const { isAuthenticated, user, loading, login } = useAuth();
-  const navigate = useNavigate();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

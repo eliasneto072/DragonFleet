@@ -11,10 +11,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 import { Bell, Send, Users, User, Loader2, CheckCircle } from 'lucide-react';
-import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
 import { notificationsService } from '@/features/driver/services/notifications.service';
+import type { ApiNotification } from '@/shared/types/api';
 import { usersService }         from '@/features/admin/services/users.service';
 import { queryKeys }            from '@/shared/lib/query-keys';
 
@@ -36,8 +36,11 @@ export function AdminNotifications() {
     queryFn:  () => notificationsService.list(),
   });
 
+  // O tipo de retorno é declarado porque os dois ramos devolvem formas
+  // diferentes — { notification } para um motorista, { count } para todos. Sem
+  // a anotação o TypeScript escolhe o primeiro e o outro passa a erro.
   const sendMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (): Promise<{ notification: ApiNotification } | { count: number }> => {
       if (target === 'all') {
         return notificationsService.broadcast(title, message);
       }
@@ -45,7 +48,7 @@ export function AdminNotifications() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
-      const count = (data as any)?.count;
+      const count = 'count' in data ? data.count : undefined;
       toast.success(
         count !== undefined
           ? `Notificação enviada para ${count} motorista(s)!`

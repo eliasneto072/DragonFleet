@@ -335,7 +335,7 @@ export function DriverProfile() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const { data: profile, isLoading, isError } = useQuery<ApiUser>({
-    queryKey: queryKeys.users.detail(user?.id),
+    queryKey: queryKeys.users.detail(user?.id ?? ''),
     queryFn: async () => {
       const res = await usersService.getById(user!.id);
       return (res as any).user ?? res;
@@ -408,7 +408,7 @@ export function DriverProfile() {
         <p className="text-muted-foreground">Erro ao carregar o perfil.</p>
         <Button
           variant="outline"
-          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(user?.id) })}
+          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(user?.id ?? '') })}
         >
           Tentar novamente
         </Button>
