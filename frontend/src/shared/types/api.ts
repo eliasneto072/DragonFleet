@@ -68,6 +68,61 @@ export interface ApiWithdrawal {
   requestedAt: string;
   processedAt?: string | null;
   userId:      string;
+
+  /** Recibo verde, anexado no momento do pedido. Obrigatório — nunca nulo. */
+  receiptUrl: string;
+  receiptKey: string;
+
+  /**
+   * IBAN de destino, copiado no momento da APROVAÇÃO e congelado aí.
+   *
+   * Nulo enquanto a retirada está por decidir. Se o motorista alterar os dados
+   * bancários depois, uma transferência já decidida não muda de destino sem
+   * ninguém reparar — mesma lógica da percentagem no fecho semanal.
+   */
+  paidToIban?:   string | null;
+  paidToHolder?: string | null;
+}
+
+/**
+ * Dados bancários de um motorista.
+ *
+ * Dois pares de campos, os em vigor e os pendentes. É essa separação que
+ * permite o IBAN anterior continuar a valer enquanto uma alteração espera
+ * decisão: se submeter apagasse já o valor bom, um engano de digitação deixava
+ * a conta sem destino de pagamento até alguém corrigir.
+ */
+export interface ApiBankAccount {
+  userId: string;
+
+  /** Em vigor. Nulo até à primeira aprovação. */
+  iban:       string | null;
+  holderName: string | null;
+
+  /** Submetido, à espera de decisão. */
+  pendingIban:       string | null;
+  pendingHolderName: string | null;
+  pendingAt:         string | null;
+
+  /** Motivo da última recusa. Uma submissão nova limpa-o. */
+  rejectionReason: string | null;
+
+  reviewedAt: string | null;
+  updatedAt:  string | null;
+
+  /** Derivado no servidor: há alteração à espera de decisão. */
+  hasPending: boolean;
+  /** Derivado no servidor: há IBAN em vigor — o motorista pode pedir retiradas. */
+  isUsable: boolean;
+}
+
+/**
+ * Uma linha da fila de aprovação: a conta, o comprovativo e quem submeteu.
+ * Só o `GET /bank/pending` devolve o comprovativo.
+ */
+export interface ApiPendingBankAccount extends ApiBankAccount {
+  proofUrl: string | null;
+  user: { id: string; name: string; email: string };
 }
 
 export interface ApiDocument {

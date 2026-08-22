@@ -46,6 +46,19 @@ export function invalidateAfterWithdrawal(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
 }
 
+/**
+ * Dados bancários submetidos, aprovados ou recusados.
+ *
+ * Invalida também as retiradas, e não por arrasto: sem IBAN aprovado o
+ * motorista não consegue pedir nada, e o botão dele só destranca quando a
+ * aprovação chega. Sem isto, ele seria aprovado e continuaria a ver o botão
+ * bloqueado até recarregar a página — concluindo que a aprovação não pegou.
+ */
+export function invalidateAfterBank(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: queryKeys.bank.all });
+  qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+}
+
 /** Fecho registado ou cancelado — a única origem de dinheiro na conta. */
 export function invalidateAfterSettlement(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.settlements.all });

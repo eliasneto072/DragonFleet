@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { BankAccountSection } from '@/app/components/driver/bank-account';
 import { usersService } from '@/features/admin/services/users.service';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -498,6 +499,10 @@ export function DriverProfile() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Dados bancários — antes da Segurança porque é o que o motorista vem
+          cá fazer quando o pedido de retirada o manda para o Perfil. */}
+      <BankAccountSection />
 
       {/* Segurança */}
       <Card className="shadow-card">

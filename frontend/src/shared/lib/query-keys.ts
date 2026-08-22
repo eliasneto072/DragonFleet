@@ -67,6 +67,19 @@ export const queryKeys = {
     adjustments: (userId: string) => ['balance', 'adjustments', userId] as const,
   },
 
+  // Dados bancários
+  //
+  // `mine` e `pending` são vistas distintas do mesmo recurso e não derivam uma
+  // da outra: o motorista vê a própria conta, a administração vê a fila de
+  // quem espera decisão. Ambas descendem de `all`, para uma aprovação poder
+  // invalidar as duas de uma vez.
+  bank: {
+    all: ['bank'] as const,
+    mine: ['bank', 'mine'] as const,
+    pending: ['bank', 'pending'] as const,
+    byUser: (userId: string) => ['bank', 'user', userId] as const,
+  },
+
   // Analytics (admin)
   //
   // Em stats o período entra na chave: trocar o selector muda a chave e o
