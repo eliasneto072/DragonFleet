@@ -59,8 +59,22 @@ async function doRefresh(): Promise<string> {
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const token = tokenStorage.getAccess();
 
+  // Num envio multipart o Content-Type tem de ser definido pelo browser: ele
+  // acrescenta-lhe o `boundary` que separa as partes do corpo, e esse valor só
+  // ele conhece. Cravar application/json em todos os pedidos, como era feito
+  // aqui, fazia o servidor tentar ler o corpo como JSON e não encontrar nem os
+  // campos nem o ficheiro.
+  //
+  // Era por causa disto que cada tela de envio nascia com o seu próprio fetch
+  // cru (ver documents.service.ts e earnings-import.service.ts). Esses fetch
+  // repetem o token e o tratamento de erro, e nenhum passa pela renovação
+  // silenciosa abaixo — um token que expire a meio de um envio dá 401 em vez
+  // de renovar. Detetar o FormData aqui traz os envios de ficheiro para o
+  // mesmo caminho de todos os outros pedidos.
+  const isFormData = options.body instanceof FormData;
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -111,4 +125,18 @@ export const apiClient = {
   put:    <T>(path: string, body: unknown)  => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
   patch:  <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH',  body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string)                => request<T>(path, { method: 'DELETE' }),
+
+  /**
+   * Envio multipart: campos e ficheiro no mesmo pedido.
+   *
+   * Existe para as telas de envio deixarem de precisar de fetch cru. Herdam
+   * daqui o token, os erros em ApiError — com o `code` que o backend devolve,
+   * que é o que permite distinguir BANK_ACCOUNT_REQUIRED de MISSING_RECEIPT —
+   * e a renovação silenciosa da sessão.
+   *
+   * Repetir o pedido depois de renovar o token é seguro com FormData: ao
+   * contrário de um stream, não é consumido pelo primeiro envio.
+   */
+  upload: <T>(path: string, form: FormData, method: 'POST' | 'PUT' | 'PATCH' = 'POST') =>
+    request<T>(path, { method, body: form }),
 };
