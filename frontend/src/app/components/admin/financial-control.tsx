@@ -30,13 +30,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, CheckCircle, Clock, DollarSign, Loader2, TrendingDown,
+  AlertCircle, CheckCircle, Clock, DollarSign, Loader2, Receipt, TrendingDown,
   TrendingUp, Wallet, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
 import { usersService } from '@/features/admin/services/users.service';
 import { analyticsService } from '@/features/admin/services/analytics.service';
+import { CopyIbanButton } from '@/app/components/ui/copy-iban-button';
+import { formatIban } from '@/shared/lib/iban';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
@@ -168,7 +170,15 @@ function FinancialSkeleton() {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function FinancialControl() {
+interface Props {
+  /**
+   * Com abas, o cabeçalho sobe para a página e esta tela renderiza só o
+   * conteúdo — mesmo arranjo do AdminSettlements dentro da SettlementsPage.
+   */
+  hideHeader?: boolean;
+}
+
+export function FinancialControl({ hideHeader = false }: Props) {
   const queryClient = useQueryClient();
   const [rejectTarget, setRejectTarget] = useState<ApiWithdrawal | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
@@ -250,11 +260,13 @@ export function FinancialControl() {
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <PageHeader
-        title="Financeiro"
-        subtitle="Retiradas dos motoristas e posição da empresa"
-        icon={<DollarSign className="h-5 w-5" />}
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="Financeiro"
+          subtitle="Retiradas dos motoristas e posição da empresa"
+          icon={<DollarSign className="h-5 w-5" />}
+        />
+      )}
 
       {/* Indicadores */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -343,6 +355,18 @@ export function FinancialControl() {
                       </p>
 
                       <div className="flex shrink-0 gap-2">
+                        {/* O recibo é a razão de o pedido ser multipart: a
+                            empresa não transfere sem fatura. Quem decide tem
+                            de o poder ver antes de aprovar, senão a exigência
+                            serve só para guardar ficheiros. */}
+                        {w.receiptUrl && (
+                          <Button asChild size="sm" variant="outline" className="h-8">
+                            <a href={w.receiptUrl} target="_blank" rel="noopener noreferrer">
+                              <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Recibo
+                            </a>
+                          </Button>
+                        )}
                         <Button
                           size="sm" className="h-8" disabled={updating}
                           onClick={() => updateStatus({ id: w.id, status: 'APPROVED' })}
@@ -419,6 +443,26 @@ export function FinancialControl() {
                         {formatCurrency(Number(w.amount))}
                       </p>
                     </div>
+
+                    {/* O IBAN é copiado na APROVAÇÃO e fica congelado. É este
+                        que se cola no homebanking, e não o atual do motorista:
+                        se ele mudou de conta entretanto, a transferência já
+                        decidida continua a ir para onde foi acordado. */}
+                    {w.paidToIban && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-secondary p-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-all font-mono text-xs tabular-nums">
+                            {formatIban(w.paidToIban)}
+                          </p>
+                          {w.paidToHolder && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {w.paidToHolder}
+                            </p>
+                          )}
+                        </div>
+                        <CopyIbanButton iban={w.paidToIban} label="Copiar" />
+                      </div>
+                    )}
 
                     {note && (
                       <p

@@ -24,9 +24,22 @@ export const withdrawalsService = {
     return apiClient.get(`/withdrawals/${id}`);
   },
 
-  /** POST /withdrawals — driver solicita saque com o próprio id via token */
-  create(amount: number): Promise<{ withdrawal: ApiWithdrawal }> {
-    return apiClient.post('/withdrawals', { amount });
+  /**
+   * POST /withdrawals — multipart, com o recibo verde.
+   *
+   * O motorista vem do token; o corpo leva só o valor e o ficheiro. O campo
+   * chama-se `receipt` porque é o que o `upload.single('receipt')` da rota
+   * espera — qualquer outro nome faz o multer ignorá-lo e o servidor responder
+   * MISSING_RECEIPT.
+   *
+   * O valor vai como texto e não como número: num FormData tudo é texto, e o
+   * backend já o converte com `z.coerce.number()`.
+   */
+  create(amount: number, receipt: File): Promise<{ withdrawal: ApiWithdrawal }> {
+    const form = new FormData();
+    form.append('amount', String(amount));
+    form.append('receipt', receipt);
+    return apiClient.upload('/withdrawals', form);
   },
 
   /** PATCH /withdrawals/:id/status — apenas admin/manager */
