@@ -50,6 +50,13 @@ function toPublic(r: Row, includeInternal = false): SettlementPublic {
 
     commissionRate: Number(r.commissionRate),
 
+    // Nulo nos fechos anteriores ao imposto. A conversão tem de passar pelo
+    // teste explícito: Number(null) é 0, e isso apagaria a distinção entre
+    // "não teve imposto" e "taxa posta a zero".
+    taxRate: r.taxRate === null || r.taxRate === undefined ? null : Number(r.taxRate),
+    taxBase: r.taxBase === null || r.taxBase === undefined ? 0 : Number(r.taxBase),
+    taxAmount: r.taxAmount === null || r.taxAmount === undefined ? 0 : Number(r.taxAmount),
+
     grossRevenue,
     // operatingCosts não tem coluna própria: é o total de deduções menos a
     // comissão. Guardar os dois seria informação redundante a poder divergir.

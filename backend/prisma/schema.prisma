@@ -371,6 +371,11 @@ model TicketReply {
 model SystemSettings {
   id                        String   @id @default("global")
   companyCommission         Int      @default(15) // %
+  /// Imposto do Estado sobre a faturação TVDE, em pontos percentuais.
+  /// Configurável e não cravado no código: o Estado altera taxas, e no dia em
+  /// que isso acontecer os fechos passados têm de continuar a mostrar a que
+  /// foi aplicada — por isso cada fecho grava a sua própria cópia.
+  settlementTaxRate         Decimal  @default(6) @map("settlement_tax_rate") @db.Decimal(5, 2)
   minWithdrawalAmount       Int      @default(50) // €
   maxWithdrawalAmount       Int      @default(5000) // €
   withdrawalProcessingDays  Int      @default(1)
@@ -426,6 +431,26 @@ model WeeklySettlement {
   fuelAmount      Decimal @default(0) @map("fuel_amount")      @db.Decimal(12, 2) // Prio
   vehicleFee      Decimal @default(0) @map("vehicle_fee")      @db.Decimal(12, 2)
   otherDeductions Decimal @default(0) @map("other_deductions") @db.Decimal(12, 2)
+
+  // ── Imposto sobre a faturação ──────────────────────────────────────────────
+  //
+  // Pedido do cliente: "esse campo eu preciso que ele cobre 6% do valor bruto
+  // da Uber e Bolt". A base é uber + bolt e NÃO inclui otherRevenue — foi o que
+  // ele escreveu, e usar o grossRevenue tributaria receita que ele não mandou
+  // tributar.
+  //
+  // TRÊS campos e não um. Guardar só o resultado deixaria impossível saber,
+  // daqui a um ano, sobre que valor a taxa incidiu. Está por confirmar com o
+  // contabilista dele se os campos Uber e Bolt guardam o bruto pago pelo
+  // passageiro ou o líquido que a plataforma transfere — o IVA de 6% é devido
+  // sobre o primeiro. Se a resposta mudar a interpretação, muda o cálculo da
+  // base e o histórico fica intacto.
+  //
+  // NULO nos fechos anteriores a este campo, e não zero: as telas têm de poder
+  // distinguir "não teve imposto" de "é anterior à existência do imposto".
+  taxBase   Decimal? @map("tax_base")   @db.Decimal(12, 2)
+  taxRate   Decimal? @map("tax_rate")   @db.Decimal(5, 2)
+  taxAmount Decimal? @map("tax_amount") @db.Decimal(12, 2)
 
   // Percentagem aplicada, em pontos percentuais (15 = 15%).
   //

@@ -26,6 +26,15 @@ const amountsShape = {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das configurações. */
   commissionRate: z.coerce.number().min(0).max(100).optional(),
+  /**
+   * Imposto, em pontos percentuais. Omitido, usa o valor das configurações.
+   *
+   * Aceite no schema mas o formulário não o envia: o campo é calculado e de
+   * leitura. Existe para a pré-visualização poder simular outra taxa sem que
+   * ninguém tenha de alterar as configurações para experimentar. Sem isto, o
+   * zod recusava o campo e a simulação era impossível.
+   */
+  taxRate: z.coerce.number().min(0).max(100).optional(),
   /** Visível ao motorista, no detalhe da semana. */
   notes: z.string().max(2000).optional().nullable(),
   /** Só a gestão vê. Filtrado na origem, no repositório. */

@@ -27,6 +27,16 @@ export interface SettlementAmounts {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das configurações. */
   commissionRate?: number;
+  /**
+   * Imposto sobre a faturação, em pontos percentuais. Omitido, usa o valor das
+   * configurações.
+   *
+   * Não é um campo que o administrador preencha: o valor é calculado sobre as
+   * receitas da Uber e da Bolt e mostrado só de leitura. Existe aqui para a
+   * pré-visualização poder simular uma taxa diferente, e para o fecho gravar a
+   * que foi efetivamente aplicada.
+   */
+  taxRate?: number;
   /** Observações visíveis ao motorista. */
   notes?: string | null;
   /** Observações internas. Só a gestão as vê. */
@@ -48,7 +58,15 @@ export interface SettlementInput extends SettlementUpdateInput {
 /** Resultado do cálculo, guardado no fecho ao registar. */
 export interface SettlementTotals {
   grossRevenue: number;
-  /** Despesas operacionais, sem a comissão. */
+  /**
+   * Valor sobre o qual o imposto incidiu: Uber + Bolt.
+   *
+   * Guardado à parte do resultado porque, sem ele, ninguém consegue reconstruir
+   * daqui a um ano sobre que valor a taxa foi aplicada.
+   */
+  taxBase: number;
+  taxAmount: number;
+  /** Despesas operacionais, incluindo o imposto — sem a comissão. */
   operatingCosts: number;
   /** Base da percentagem: receitas menos despesas operacionais. */
   profitBase: number;
@@ -78,6 +96,11 @@ export interface SettlementPublic extends SettlementTotals {
   otherDeductions: number;
 
   commissionRate: number;
+  /**
+   * Taxa aplicada. NULO nos fechos anteriores à existência do imposto — o que
+   * é diferente de zero, que significa taxa posta a zero de propósito.
+   */
+  taxRate: number | null;
   status: SettlementStatus;
   notes: string | null;
   /**
@@ -112,17 +135,52 @@ function cents(n: number): number {
  * Sobre uma semana em prejuízo (despesas acima das receitas), a comissão é
  * zero: não se cobra percentagem de um resultado negativo. O líquido fica
  * negativo, e é isso mesmo — a despesa foi real e alguém a pagou.
+ *
+ * ── O IMPOSTO ────────────────────────────────────────────────────────────────
+ *
+ * Pedido do cliente, textualmente: "esse campo eu preciso que ele cobre 6% do
+ * valor bruto da Uber e Bolt (...) Formula: Valor do campo Uber + Valor do
+ * Campo Bolt x 6% (...) Isto deve alterar tmb a fórmula do último campo (valor
+ * a receber) pois tem de adicionar este nova despesa de motorista".
+ *
+ * Duas consequências, e nenhuma é acidental:
+ *
+ * 1. A BASE É uber + bolt, e não o grossRevenue. O otherRevenue fica de fora
+ *    porque foi o que ele escreveu. Usar o bruto total tributaria receita que
+ *    ele não mandou tributar, e a diferença sai do bolso do motorista.
+ *
+ * 2. O IMPOSTO ENTRA NAS DESPESAS, antes da comissão. Ele chamou-lhe "despesa
+ *    de motorista", e neste sistema "despesa" já tem significado fixo: é o que
+ *    entra no operatingCosts ao lado da Via Verde e do combustível. Isto faz a
+ *    comissão incidir sobre o lucro DEPOIS do imposto — que é o correto se
+ *    este valor for mesmo devido ao Estado, porque então nunca foi receita de
+ *    ninguém e cobrar percentagem sobre ele seria cobrar percentagem sobre
+ *    dinheiro alheio. Com 1000 € de bruto, 200 € de outras despesas e 15%, dá
+ *    60 € de imposto e 629 € ao motorista; a alternativa de descontar depois da
+ *    comissão daria 620 €.
+ *
+ * POR CONFIRMAR com o contabilista do cliente: se os campos Uber e Bolt
+ * guardarem o líquido que a plataforma transfere, e não o bruto pago pelo
+ * passageiro, 6% sobre eles não é o IVA devido — o IVA incide sobre o preço da
+ * viagem, antes da comissão da plataforma. É por isso que taxBase é gravado
+ * separadamente: se a resposta mudar a interpretação, muda o cálculo da base e
+ * o histórico permanece.
  */
 export function computeTotals(
-  input: SettlementAmounts & { commissionRate: number },
+  input: SettlementAmounts & { commissionRate: number; taxRate: number },
 ): SettlementTotals {
   const grossRevenue = cents(
     (input.uberAmount ?? 0) + (input.boltAmount ?? 0) + (input.otherRevenue ?? 0),
   );
 
+  // Só Uber e Bolt. Ver o ponto 1 acima.
+  const taxBase = cents((input.uberAmount ?? 0) + (input.boltAmount ?? 0));
+  const taxAmount = cents(taxBase * (input.taxRate / 100));
+
   const operatingCosts = cents(
     (input.tollsAmount ?? 0) + (input.fuelAmount ?? 0) +
-    (input.vehicleFee ?? 0) + (input.otherDeductions ?? 0),
+    (input.vehicleFee ?? 0) + (input.otherDeductions ?? 0) +
+    taxAmount,
   );
 
   const profitBase = cents(grossRevenue - operatingCosts);
@@ -136,6 +194,8 @@ export function computeTotals(
 
   return {
     grossRevenue,
+    taxBase,
+    taxAmount,
     operatingCosts,
     profitBase,
     commissionAmount,

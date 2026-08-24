@@ -70,6 +70,25 @@ export class SettlementsService {
     return Number(settings.companyCommission ?? 0);
   }
 
+  /**
+   * Taxa do imposto, em pontos percentuais.
+   *
+   * Mesmo padrão do resolveRate: o que vier no pedido manda, senão vale o das
+   * configurações. Assim a pré-visualização pode simular outra taxa sem que
+   * ninguém tenha de alterar as configurações para experimentar.
+   */
+  private async resolveTaxRate(input: { taxRate?: number }): Promise<number> {
+    if (input.taxRate !== undefined && input.taxRate !== null) {
+      const rate = Number(input.taxRate);
+      if (isNaN(rate) || rate < 0 || rate > 100) {
+        throw new AppError('Imposto deve estar entre 0 e 100', 400, 'INVALID_TAX_RATE');
+      }
+      return rate;
+    }
+    const settings = await settingsService.get();
+    return Number(settings.settlementTaxRate ?? 0);
+  }
+
   /** Valida o intervalo e garante que não se sobrepõe a outro fecho. */
   private async validateWeek(
     userId: string,
@@ -104,8 +123,8 @@ export class SettlementsService {
     }
   }
 
-  private buildData(input: SettlementAmounts, rate: number) {
-    const totals = computeTotals({ ...input, commissionRate: rate });
+  private buildData(input: SettlementAmounts, rate: number, taxRate: number) {
+    const totals = computeTotals({ ...input, commissionRate: rate, taxRate });
     return {
       uberAmount: input.uberAmount ?? 0,
       boltAmount: input.boltAmount ?? 0,
@@ -115,6 +134,9 @@ export class SettlementsService {
       vehicleFee: input.vehicleFee ?? 0,
       otherDeductions: input.otherDeductions ?? 0,
       commissionRate: rate,
+      taxRate,
+      taxBase: totals.taxBase,
+      taxAmount: totals.taxAmount,
       grossRevenue: totals.grossRevenue,
       totalDeductions: totals.totalDeductions,
       profitBase: totals.profitBase,
@@ -165,6 +187,7 @@ export class SettlementsService {
     await this.validateWeek(input.userId, weekStart, weekEnd);
 
     const rate = await this.resolveRate(input);
+    const taxRate = await this.resolveTaxRate(input);
 
     return settlementsRepository.create({
       userId: input.userId,
@@ -173,7 +196,7 @@ export class SettlementsService {
       weekEnd,
       status: SettlementStatus.DRAFT,
       createdById: actor.id,
-      ...this.buildData(input, rate),
+      ...this.buildData(input, rate, taxRate),
     });
   }
 
@@ -206,12 +229,13 @@ export class SettlementsService {
     await this.validateWeek(existing.userId, weekStart, weekEnd, id);
 
     const rate = await this.resolveRate(input);
+    const taxRate = await this.resolveTaxRate(input);
 
     return settlementsRepository.update(id, {
       vehicleId: input.vehicleId ?? null,
       weekStart,
       weekEnd,
-      ...this.buildData(input, rate),
+      ...this.buildData(input, rate, taxRate),
     });
   }
 
@@ -336,7 +360,12 @@ export class SettlementsService {
   async preview(actor: Actor, input: SettlementAmounts) {
     this.ensureManager(actor);
     const rate = await this.resolveRate(input);
-    return { commissionRate: rate, ...computeTotals({ ...input, commissionRate: rate }) };
+    const taxRate = await this.resolveTaxRate(input);
+    return {
+      commissionRate: rate,
+      taxRate,
+      ...computeTotals({ ...input, commissionRate: rate, taxRate }),
+    };
   }
 }
 
