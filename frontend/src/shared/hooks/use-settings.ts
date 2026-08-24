@@ -19,6 +19,14 @@ import { FINANCIAL_FALLBACK } from '@/shared/constants';
 export interface FinancialLimits {
   /** Fração: 0.15 = 15%. SystemSettings guarda em pontos, aqui já vem dividido. */
   commission: number;
+  /**
+   * Pontos percentuais (6 = 6%), NÃO dividido — ao contrário da comissão.
+   *
+   * A diferença é deliberada e vem de como cada um é usado: a comissão entra em
+   * multiplicações, o imposto aparece em rótulos ("Imposto (6%)"). Dividir aqui
+   * obrigaria cada tela a voltar a multiplicar por 100 para o mostrar.
+   */
+  taxRate: number;
   minWithdrawal: number;
   maxWithdrawal: number;
   processingDays: number;
@@ -44,6 +52,9 @@ export function useSettings() {
 
   const limits: FinancialLimits = {
     commission: s ? Number(s.companyCommission) / 100 : FINANCIAL_FALLBACK.companyCommission,
+    // Sem configurações carregadas, zero: mostrar uma taxa inventada seria pior
+    // do que não mostrar nenhuma, porque o número apareceria num rótulo.
+    taxRate: s ? Number(s.settlementTaxRate) : 0,
     minWithdrawal: s ? Number(s.minWithdrawalAmount) : FINANCIAL_FALLBACK.minWithdrawal,
     maxWithdrawal: s ? Number(s.maxWithdrawalAmount) : FINANCIAL_FALLBACK.maxWithdrawal,
     processingDays: s ? Number(s.withdrawalProcessingDays) : FINANCIAL_FALLBACK.processingDays,

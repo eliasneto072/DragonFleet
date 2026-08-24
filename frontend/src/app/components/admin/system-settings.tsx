@@ -20,6 +20,7 @@ import { queryKeys } from '@/shared/lib/query-keys';
 
 const DEFAULTS: Settings_ = {
   companyCommission: 15,
+  settlementTaxRate: 6,
   minWithdrawalAmount: 50,
   maxWithdrawalAmount: 5000,
   withdrawalProcessingDays: 1,
@@ -141,7 +142,20 @@ export function SystemSettings() {
               <Input id="commission" type="number" min={0} max={100} className="mt-2"
                 value={settings.companyCommission}
                 onChange={(e) => update('companyCommission', parseFloat(e.target.value) || 0)} />
-              <p className="text-xs text-muted-foreground mt-1">Percentagem cobrada em cada viagem</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Incide sobre o lucro da semana, depois das despesas e do imposto
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="tax">Imposto sobre a faturação (%)</Label>
+              <Input id="tax" type="number" min={0} max={100} step={0.01} className="mt-2"
+                value={settings.settlementTaxRate}
+                onChange={(e) => update('settlementTaxRate', parseFloat(e.target.value) || 0)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Calculado sobre as receitas da Uber e da Bolt no fecho semanal.
+                Vale a partir do próximo fecho — os já registados guardam a taxa
+                que lhes foi aplicada.
+              </p>
             </div>
             <div>
               <Label htmlFor="processing">Dias de processamento de retiradas</Label>

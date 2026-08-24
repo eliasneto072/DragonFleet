@@ -276,7 +276,9 @@ export function SettlementForm({
 
   // ── Pré-visualização, calculada no servidor ─────────────────────────────────
 
-  const [totals, setTotals] = useState<(SettlementTotals & { commissionRate: number }) | null>(null);
+  const [totals, setTotals] = useState<
+    (SettlementTotals & { commissionRate: number; taxRate: number }) | null
+  >(null);
   const [calculating, setCalculating] = useState(false);
 
   const payload = useMemo<SettlementAmounts>(
@@ -622,6 +624,37 @@ export function SettlementForm({
                 value={amounts.otherDeductions} onChange={setAmount('otherDeductions')}
               />
 
+              {/* Imposto — calculado, não escrito.
+                  
+                  É um campo de leitura de propósito. Se fosse editável, alguém
+                  acabaria por o corrigir à mão e o valor divergiria dos 6% que
+                  o motorista consegue verificar sozinho a partir das receitas.
+                  Uma semana que precise de correção tem o cancelamento com
+                  estorno, que deixa rasto. */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="taxAmount">
+                  Imposto{totals?.taxRate ? ` (${totals.taxRate}%)` : ''}
+                </Label>
+                <div className="relative max-w-[240px]">
+                  <span className="pointer-events-none absolute left-3 top-2.5 text-sm text-muted-foreground">
+                    €
+                  </span>
+                  <Input
+                    id="taxAmount"
+                    readOnly
+                    tabIndex={-1}
+                    value={totals ? totals.taxAmount.toFixed(2) : ''}
+                    placeholder="0.00"
+                    className="cursor-default bg-muted pl-8 tabular-nums"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {totals && totals.taxBase > 0
+                    ? `${totals.taxRate}% sobre ${formatCurrency(totals.taxBase)} de Uber e Bolt. Outras receitas não entram na base.`
+                    : 'Calculado sobre as receitas da Uber e da Bolt. A taxa vem das Configurações.'}
+                </p>
+              </div>
+
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="rate">Percentagem da empresa</Label>
                 <div className="relative max-w-[200px]">
@@ -671,10 +704,26 @@ export function SettlementForm({
                     + {formatCurrency(totals.grossRevenue)}
                   </dd>
                 </div>
+                {/* O imposto aparece separado das outras despesas, embora entre
+                    nelas na conta: é a linha nova e o administrador precisa de
+                    a ver isolada para conferir. Diluído no total de despesas,
+                    ninguém consegue verificar se os 6% estão certos. */}
+                {totals.taxAmount > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-white/70">
+                      Imposto ({totals.taxRate}% de {formatCurrency(totals.taxBase)})
+                    </dt>
+                    <dd className="tabular-nums text-white/90">
+                      − {formatCurrency(totals.taxAmount)}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/70">Despesas</dt>
+                  <dt className="text-white/70">
+                    {totals.taxAmount > 0 ? 'Outras despesas' : 'Despesas'}
+                  </dt>
                   <dd className="tabular-nums text-white/90">
-                    − {formatCurrency(totals.operatingCosts)}
+                    − {formatCurrency(totals.operatingCosts - totals.taxAmount)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4 border-t border-white/15 pt-1">

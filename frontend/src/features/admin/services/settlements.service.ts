@@ -22,6 +22,12 @@ export interface SettlementAmounts {
 
   /** Pontos percentuais (15 = 15%). Omitido, usa o valor das Configurações. */
   commissionRate?: number;
+  /**
+   * Imposto sobre a faturação, em pontos percentuais. Omitido, usa o valor das
+   * Configurações. O formulário não o envia: o campo é calculado e só de
+   * leitura. Existe para a pré-visualização poder simular outra taxa.
+   */
+  taxRate?: number;
   /** Observações visíveis ao motorista. */
   notes?: string | null;
   /** Observações internas. Só a gestão as recebe da API. */
@@ -31,7 +37,10 @@ export interface SettlementAmounts {
 /** Resultado do cálculo. Devolvido pelo servidor, nunca calculado aqui. */
 export interface SettlementTotals {
   grossRevenue: number;
-  /** Despesas operacionais, sem a comissão. */
+  /** Valor sobre o qual o imposto incide: Uber + Bolt, sem outras receitas. */
+  taxBase: number;
+  taxAmount: number;
+  /** Despesas operacionais, incluindo o imposto — sem a comissão. */
   operatingCosts: number;
   /** Base da percentagem: receitas menos despesas operacionais. */
   profitBase: number;
@@ -61,6 +70,12 @@ export interface ApiSettlement extends SettlementTotals {
   otherDeductions: number;
 
   commissionRate: number;
+  /**
+   * NULO nos fechos anteriores ao imposto, que é diferente de zero: zero é uma
+   * taxa posta a zero de propósito. As telas usam isto para decidir se mostram
+   * a linha do imposto.
+   */
+  taxRate: number | null;
   status: SettlementStatus;
   notes: string | null;
   /** Ausente quando quem consulta é o motorista — filtrado no servidor. */
@@ -124,7 +139,7 @@ export const settlementsService = {
    * num lado só.
    */
   preview(input: SettlementAmounts): Promise<{
-    totals: SettlementTotals & { commissionRate: number };
+    totals: SettlementTotals & { commissionRate: number; taxRate: number };
   }> {
     return apiClient.post('/settlements/preview', input);
   },

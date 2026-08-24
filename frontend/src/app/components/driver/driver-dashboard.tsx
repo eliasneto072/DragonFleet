@@ -262,6 +262,17 @@ function WeekDetail({ s }: { s: ApiSettlement }) {
           {s.otherDeductions > 0 && (
             <WeekRow label="Outros" value={`− ${formatCurrency(s.otherDeductions)}`} />
           )}
+          {/* O motorista tem de conseguir conferir esta linha sozinho, por isso
+              o rótulo traz a taxa e a base: 6% sobre o que ele fez na Uber e na
+              Bolt. Um valor sem a conta ao lado é um desconto que ele não sabe
+              verificar — e é sobre esses que aparecem as reclamações.
+              Nulo significa fecho anterior ao imposto; a linha não aparece. */}
+          {s.taxRate !== null && (
+            <WeekRow
+              label={`Imposto (${s.taxRate}% de ${formatCurrency(s.taxBase)})`}
+              value={`− ${formatCurrency(s.taxAmount)}`}
+            />
+          )}
           <div className="border-t border-border">
             <WeekRow label="Despesas" value={`− ${formatCurrency(s.operatingCosts)}`} strong />
           </div>

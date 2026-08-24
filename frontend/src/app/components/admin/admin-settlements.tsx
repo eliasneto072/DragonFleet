@@ -229,6 +229,15 @@ function SettlementDetail({ s }: { s: ApiSettlement }) {
           {s.otherDeductions > 0 && (
             <Row label="Outros" value={`− ${formatCurrency(s.otherDeductions)}`} />
           )}
+          {/* taxRate nulo = fecho anterior à existência do imposto. Mostrar
+              "Imposto 0,00 €" nessas semanas sugeriria que a taxa era zero,
+              quando na verdade o campo não existia. */}
+          {s.taxRate !== null && (
+            <Row
+              label={`Imposto (${s.taxRate}% de ${formatCurrency(s.taxBase)})`}
+              value={`− ${formatCurrency(s.taxAmount)}`}
+            />
+          )}
           <div className="border-t border-border">
             <Row label="Despesas" value={`− ${formatCurrency(s.operatingCosts)}`} strong />
           </div>
@@ -280,8 +289,9 @@ function SettlementDetail({ s }: { s: ApiSettlement }) {
         <p>Criado por {s.createdByName ?? '—'} em {stamp(s.createdAt)}</p>
         {s.registeredAt && <p>Registado em {stamp(s.registeredAt)}</p>}
         <p>
-          A percentagem de {s.commissionRate}% ficou gravada neste fecho: alterá-la nas
-          Configurações não muda esta conta.
+          A percentagem de {s.commissionRate}%
+          {s.taxRate !== null && ` e o imposto de ${s.taxRate}%`} ficaram gravados neste
+          fecho: alterá-los nas Configurações não muda esta conta.
         </p>
       </div>
     </div>
