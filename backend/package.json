@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "prisma": "prisma",
     "seed:admin": "tsx prisma/seed-admin.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
