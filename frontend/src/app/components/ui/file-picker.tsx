@@ -14,6 +14,14 @@
 //
 // O document-upload-dialog continua com a versão dele: passa a usar esta
 // quando se fizer a migração dos fetch crus, que é assunto de outro commit.
+//
+// OS min-w-0 NÃO SÃO SUPÉRFLUOS. O DialogContent deste projeto é um grid, e
+// itens de grid nascem com min-width:auto — não encolhem abaixo da largura
+// mínima do conteúdo. O truncate do nome aplica white-space:nowrap, portanto
+// essa largura mínima é o nome INTEIRO. Um ficheiro com um nome comprido e
+// sem espaços empurrava o formulário para fora do painel do diálogo: o fundo
+// branco e os cantos ficavam na largura antiga e os campos saíam por fora.
+// Cada min-w-0 abaixo é um elo dessa cadeia; tirar um traz o problema de volta.
 
 import { useRef } from 'react';
 import { Label } from '@/app/components/ui/label';
@@ -86,12 +94,12 @@ export function FilePicker({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <Label htmlFor={id}>{label}</Label>
 
       <div
         onClick={() => !disabled && inputRef.current?.click()}
-        className={`relative flex select-none flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors ${
+        className={`relative flex min-w-0 select-none flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed p-6 transition-colors ${
           disabled
             ? 'cursor-not-allowed border-muted-foreground/20 opacity-60'
             : 'cursor-pointer'
@@ -102,7 +110,7 @@ export function FilePicker({
         }`}
       >
         {file ? (
-          <div className="flex w-full items-center gap-3">
+          <div className="flex w-full min-w-0 items-center gap-3">
             <Paperclip className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{file.name}</p>

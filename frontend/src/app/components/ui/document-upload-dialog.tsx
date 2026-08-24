@@ -130,7 +130,7 @@ export function DocumentUploadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="mt-2 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-2 min-w-0 space-y-4">
           <div className="space-y-2">
             <Label>Ficheiro</Label>
             <div

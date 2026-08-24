@@ -362,7 +362,7 @@ export function Withdrawals() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-4 min-w-0 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Valor da retirada</Label>
               <div className="relative">

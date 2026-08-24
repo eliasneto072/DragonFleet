@@ -160,7 +160,7 @@ function SubmitBankDialog({ open, onClose, account }: {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="mt-2 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-2 min-w-0 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="iban">IBAN</Label>
             <Input
