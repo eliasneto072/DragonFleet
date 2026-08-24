@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
 import { PageHeader } from '@/app/components/ui/page-header';
@@ -30,7 +31,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, CheckCircle, Clock, DollarSign, Loader2, Receipt, TrendingDown,
+  AlertCircle, Banknote, CheckCircle, Clock, DollarSign, Loader2, Receipt, TrendingDown,
   TrendingUp, Wallet, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -181,6 +182,8 @@ interface Props {
 export function FinancialControl({ hideHeader = false }: Props) {
   const queryClient = useQueryClient();
   const [rejectTarget, setRejectTarget] = useState<ApiWithdrawal | null>(null);
+  const [payTarget, setPayTarget] = useState<ApiWithdrawal | null>(null);
+  const [payReference, setPayReference] = useState('');
   const [rejectNotes, setRejectNotes] = useState('');
   const [historyFilter, setHistoryFilter] = useState<'all' | WithdrawalStatus>('all');
 
@@ -223,7 +226,21 @@ export function FinancialControl({ hideHeader = false }: Props) {
     [withdrawals, historyFilter],
   );
 
+  // Aprovadas e por transferir.
+  //
+  // Merecem lista própria e não uma linha do histórico: são a lista de tarefas
+  // de quem paga. Enquanto estavam misturadas com as pagas e as rejeitadas,
+  // saber a quem ainda se devia dinheiro obrigava a filtrar por Aprovado e a
+  // ler a lista à procura do que faltava.
+  const toTransfer = useMemo(
+    () => withdrawals
+      .filter((w) => w.status === 'APPROVED')
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
+    [withdrawals],
+  );
+
   const pendingTotal = pending.reduce((s, w) => s + Number(w.amount), 0);
+  const toTransferTotal = toTransfer.reduce((s, w) => s + Number(w.amount), 0);
 
   const { mutate: updateStatus, isPending: updating } = useMutation({
     mutationFn: ({ id, status, notes }: {
@@ -233,9 +250,15 @@ export function FinancialControl({ hideHeader = false }: Props) {
       queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
-      toast.success(vars.status === 'REJECTED' ? 'Retirada rejeitada.' : 'Retirada aprovada.');
+      toast.success(
+        vars.status === 'REJECTED' ? 'Retirada rejeitada.'
+          : vars.status === 'PAID' ? 'Retirada marcada como paga.'
+            : 'Retirada aprovada.',
+      );
       setRejectTarget(null);
       setRejectNotes('');
+      setPayTarget(null);
+      setPayReference('');
     },
     onError: (err: any) => toast.error(err?.message ?? 'Não foi possível atualizar a retirada.'),
   });
@@ -391,6 +414,109 @@ export function FinancialControl({ hideHeader = false }: Props) {
         </CardContent>
       </Card>
 
+      {/* Por transferir — aprovadas que ainda não saíram do banco.
+          
+          O dinheiro já saiu do saldo do motorista na APROVAÇÃO: a vista de
+          saldos conta APPROVED e PAID da mesma maneira. Marcar como paga não
+          mexe em nenhum número; regista que a transferência foi mesmo feita.
+          Sem esta lista, essa distinção não existia em lado nenhum e não havia
+          como saber o que já tinha sido enviado para o banco. */}
+      {toTransfer.length > 0 && (
+        <Card className="shadow-card">
+          <CardHeader className="flex flex-col gap-1 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <Banknote className="h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
+                Por transferir
+              </CardTitle>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Aprovadas — falta fazer a transferência no banco
+              </p>
+            </div>
+            <p className="shrink-0 text-lg font-semibold tabular-nums sm:text-xl">
+              {formatCurrency(toTransferTotal)}
+            </p>
+          </CardHeader>
+
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <ul className="divide-y divide-border">
+              {toTransfer.map((w) => (
+                <li key={w.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{driverName(w.userId)}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Aprovada {agoLabel(daysSince(w.processedAt ?? w.requestedAt))}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-base font-semibold tabular-nums">
+                      {formatCurrency(Number(w.amount))}
+                    </p>
+                  </div>
+
+                  {/* O IBAN congelado na aprovação, pronto a colar no
+                      homebanking. É este e não o atual do motorista: se ele
+                      mudou de conta entretanto, a transferência já decidida
+                      continua a ir para onde foi acordado. */}
+                  {w.paidToIban ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-secondary p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="break-all font-mono text-xs tabular-nums">
+                          {formatIban(w.paidToIban)}
+                        </p>
+                        {w.paidToHolder && (
+                          <p className="truncate text-xs text-muted-foreground">{w.paidToHolder}</p>
+                        )}
+                      </div>
+                      <CopyIbanButton iban={w.paidToIban} label="Copiar" />
+                    </div>
+                  ) : (
+                    // Só acontece se a retirada tiver passado a PAID sem passar
+                    // por APPROVED, o que esta tela não permite. Se aparecer,
+                    // alguém chamou a API diretamente.
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      Sem IBAN registado nesta retirada — confirme o destino antes de transferir.
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      size="sm" className="h-8" disabled={updating}
+                      onClick={() => {
+                        setPayTarget(w);
+                        // Trazer a nota existente evita apagá-la sem querer: o
+                        // backend faz `notes: input.notes ?? null`, ou seja,
+                        // enviar sem nota limpa a que lá estiver.
+                        setPayReference(w.notes?.trim() ?? '');
+                      }}
+                    >
+                      <Banknote className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Marcar como paga
+                    </Button>
+                    {w.receiptUrl && (
+                      <Button asChild size="sm" variant="outline" className="h-8">
+                        <a href={w.receiptUrl} target="_blank" rel="noopener noreferrer">
+                          <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Recibo
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm" variant="outline" className="h-8" disabled={updating}
+                      onClick={() => { setRejectTarget(w); setRejectNotes(''); }}
+                    >
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Rejeitar
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Histórico */}
       <Card className="shadow-card">
         <CardHeader className="flex flex-col gap-3 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
@@ -485,6 +611,88 @@ export function FinancialControl({ hideHeader = false }: Props) {
       </Card>
 
       {/* Rejeição — o backend devolve NOTES_REQUIRED sem motivo */}
+      {/* Marcar como paga.
+          
+          Um diálogo e não um botão direto, por duas razões. PAID é estado
+          final no backend — não há como voltar atrás depois de confirmar. E a
+          ação regista uma transferência que já foi feita no banco; não é o
+          sistema a enviar dinheiro. Quem clica tem de perceber a diferença,
+          senão marca tudo como pago à espera de que o dinheiro saia sozinho. */}
+      <Dialog
+        open={!!payTarget}
+        onOpenChange={(o) => { if (!o) { setPayTarget(null); setPayReference(''); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Marcar como paga</DialogTitle>
+            <DialogDescription>
+              {payTarget && (
+                <>
+                  {formatCurrency(Number(payTarget.amount))} de {driverName(payTarget.userId)}.
+                  Confirme apenas depois de a transferência estar feita no banco.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-w-0 space-y-4">
+            {payTarget?.paidToIban && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">Destino</p>
+                  <p className="break-all font-mono text-xs tabular-nums">
+                    {formatIban(payTarget.paidToIban)}
+                  </p>
+                </div>
+                <CopyIbanButton iban={payTarget.paidToIban} label="Copiar" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="pay-reference">Referência da transferência (opcional)</Label>
+              <Input
+                id="pay-reference"
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                placeholder="Nº da operação, data, o que ajudar a reconciliar depois"
+              />
+              <p className="text-xs text-muted-foreground">
+                Fica visível para o motorista no histórico dele.
+              </p>
+            </div>
+
+            <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
+              O saldo do motorista não muda com esta ação: o valor saiu da conta
+              dele quando a retirada foi aprovada. Isto regista que o dinheiro
+              chegou ao banco — e não pode ser desfeito.
+            </p>
+          </div>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline" disabled={updating} className="w-full sm:w-auto"
+              onClick={() => { setPayTarget(null); setPayReference(''); }}
+            >
+              Voltar
+            </Button>
+            <Button
+              disabled={updating}
+              className="w-full sm:w-auto"
+              onClick={() => updateStatus({
+                id: payTarget!.id,
+                status: 'PAID',
+                // Sem referência não enviamos campo nenhum: enviar vazio
+                // limparia a nota que já lá estivesse.
+                notes: payReference.trim() || undefined,
+              })}
+            >
+              {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Confirmar pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={!!rejectTarget}
         onOpenChange={(o) => { if (!o) { setRejectTarget(null); setRejectNotes(''); } }}
