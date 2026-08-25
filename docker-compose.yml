@@ -29,6 +29,39 @@ services:
       retries: 5
 
   # ──────────────────────────────────────────
+  # PostgreSQL só para testes
+  # ──────────────────────────────────────────
+  #
+  # Separado do de desenvolvimento de propósito. Os testes de integração
+  # APAGAM todas as tabelas entre casos; apontados à base de trabalho,
+  # levariam à frente o seed e tudo o que estivesse a ser experimentado.
+  #
+  # Porta diferente (5434) e SEM volume: o estado vive na memória do
+  # contentor e desaparece quando ele para. Um teste que dependa de dados
+  # deixados por outro passa a falhar já na primeira execução, em vez de
+  # falhar meses depois quando alguém trocar a ordem — que é o pior modo de
+  # falha possível numa suite.
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: dragonfleet-postgres-test
+    # Sem restart: só está de pé quando se corre testes.
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dragonfleet_test
+    ports:
+      - "5434:5432"
+    # tmpfs: a base inteira em memória. Deixa a suite muito mais rápida,
+    # porque o Postgres deixa de esperar pelo disco a cada TRUNCATE.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dragonfleet_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # ──────────────────────────────────────────
   # API — Node.js / Express / Prisma
   # ──────────────────────────────────────────
   backend:
