@@ -158,6 +158,35 @@ export class WithdrawalsService {
       throw new AppError('Notes are required when rejecting a withdrawal', 400, 'NOTES_REQUIRED');
     }
 
+    // ── Não se paga o que não foi aprovado ────────────────────────────────────
+    //
+    // A API aceitava PENDING → PAID diretamente, e essa passagem saltava por
+    // cima de tudo o que a aprovação existe para registar: o IBAN não era
+    // congelado e o recibo verde não era classificado. O resultado era uma
+    // retirada marcada como paga sem registo nenhum de para onde o dinheiro
+    // foi — o pior estado possível para o único fluxo do sistema que move
+    // dinheiro a sério.
+    //
+    // A interface nunca ofereceu este caminho; a porta estava aberta só para
+    // quem chamasse a rota diretamente. Fechá-la torna a máquina de estados
+    // linear: PENDING → APPROVED → PAID, com REJECTED possível dos dois
+    // primeiros.
+    //
+    // Se um dia fizer sentido um botão de "aprovar e pagar" num passo, o sítio
+    // para o construir é a interface, encadeando as duas transições — assim o
+    // registo de ambas continua a existir.
+    if (
+      input.status === WithdrawalStatus.PAID &&
+      withdrawal.status !== WithdrawalStatus.APPROVED
+    ) {
+      throw new AppError(
+        'Aprove a retirada antes de a marcar como paga. A aprovação é o que fixa ' +
+        'o IBAN de destino e a sociedade do recibo verde.',
+        400,
+        'APPROVAL_REQUIRED',
+      );
+    }
+
     // ── Classificação do recibo verde, na aprovação ───────────────────────────
     //
     // Obrigatória, com "Nenhum" como escolha explícita. Um campo opcional fica
@@ -245,8 +274,20 @@ export class WithdrawalsService {
       const amount = Number(withdrawal.amount);
 
       if (user?.email) {
-        if (input.status === WithdrawalStatus.APPROVED || input.status === WithdrawalStatus.PAID) {
+        // Um email por transição, e não o mesmo em duas.
+        //
+        // APPROVED e PAID partilhavam o sendWithdrawalApproved, portanto quem
+        // aprovava e depois marcava como paga mandava ao motorista duas vezes
+        // a mesma mensagem — "foi aprovado, será processado em breve" — e a
+        // segunda chegava quando o dinheiro já estava na conta dele.
+        if (input.status === WithdrawalStatus.APPROVED) {
           await emailService.sendWithdrawalApproved(user.email, user.name, amount);
+        } else if (input.status === WithdrawalStatus.PAID) {
+          // O IBAN e a referência vêm do registo atualizado, não do que estava
+          // antes: são os valores que ficaram gravados nesta transição.
+          await emailService.sendWithdrawalPaid(
+            user.email, user.name, amount, updated.paidToIban, updated.notes,
+          );
         } else if (input.status === WithdrawalStatus.REJECTED) {
           await emailService.sendWithdrawalRejected(user.email, user.name, amount, input.notes);
         }

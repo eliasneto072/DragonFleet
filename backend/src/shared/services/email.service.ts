@@ -119,6 +119,37 @@ export const emailService = {
     ));
   },
 
+  /**
+   * Transferência feita.
+   *
+   * É um email separado do de aprovação, e não uma repetição dele. As duas
+   * transições diziam a mesma coisa ao motorista — "o seu pedido foi aprovado,
+   * o valor será processado em breve" — portanto quem aprovava e depois marcava
+   * como paga mandava-lhe duas vezes a mesma mensagem, e a segunda chegava
+   * precisamente no momento em que ele já tinha o dinheiro na conta.
+   *
+   * O IBAN vai no corpo por dois motivos: confirma ao motorista para onde o
+   * dinheiro seguiu, e é o que ele precisa de comparar se a transferência não
+   * aparecer. Mostro só os últimos quatro dígitos — o email atravessa
+   * servidores que não controlamos e o IBAN completo já está no portal dele.
+   */
+  async sendWithdrawalPaid(
+    to: string, driverName: string, amount: number,
+    iban?: string | null, reference?: string | null,
+  ) {
+    const tail = iban ? iban.replace(/\s+/g, '').slice(-4) : null;
+
+    return dispatch(to, '💸 Transferência efetuada — DragonFleet', shell(
+      driverName,
+      `<p style="color:#444;line-height:1.6">A transferência de <strong style="color:#108865">${euro(amount)}</strong> foi <strong style="color:#108865">efetuada</strong>.</p>
+       ${tail ? `<p style="color:#444;line-height:1.6">Enviada para a conta terminada em <strong>${tail}</strong>.</p>` : ''}
+       ${reference ? `<div style="background:#f4f8f6;border-left:4px solid #108865;padding:12px 16px;border-radius:4px;margin:16px 0">
+         <p style="margin:0;color:#444;font-size:14px"><strong>Referência:</strong> ${reference}</p></div>` : ''}
+       <p style="color:#444;line-height:1.6">Consoante o banco, o valor pode demorar até dois dias úteis a aparecer na sua conta.</p>`,
+      { href: `${APP_URL}/app/driver/withdrawals`, label: 'Ver Retiradas' },
+    ));
+  },
+
   async sendWithdrawalRejected(to: string, driverName: string, amount: number, notes?: string) {
     return dispatch(to, '❌ Saque rejeitado — DragonFleet', shell(
       driverName,
