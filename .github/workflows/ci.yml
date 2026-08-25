@@ -23,6 +23,25 @@ jobs:
     name: Backend — tipos e testes
     runs-on: ubuntu-latest
 
+    # Postgres descartável para os testes de integração. O nome da base termina
+    # em _test de propósito: o harness recusa correr contra qualquer outra, e
+    # essa verificação é o que separa "correu a suite" de "apagou dados a
+    # sério" no dia em que uma variável de ambiente estiver mal apontada.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dragonfleet_test
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,9 +62,18 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
-      - name: Testes
+      - name: Testes unitários
         working-directory: backend
         run: npm test
+
+      # As migrações são aplicadas pelo globalSetup da própria suite, com o
+      # mesmo `migrate deploy` que corre em produção — portanto uma migração
+      # escrita à mão com erro falha aqui.
+      - name: Testes de integração
+        working-directory: backend
+        run: npm run test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5434/dragonfleet_test
 
   frontend:
     name: Frontend — tipos e build

@@ -20,6 +20,11 @@ export default defineConfig({
     // diretório, e um `settlements.types.ts` sem `settlements.types.test.ts` ao
     // lado é uma ausência visível.
     include: ['src/**/*.test.ts'],
+    // Os de integração ficam de fora: precisam de Postgres de pé e vivem numa
+    // configuração própria. Sem esta exclusão, o `npm test` do dia a dia
+    // passava a exigir Docker, e um comando que exige preparação acaba por não
+    // ser corrido.
+    exclude: ['**/node_modules/**', 'src/**/*.integration.test.ts'],
 
     // Node e não jsdom: isto é backend, não há DOM nenhum para simular.
     environment: 'node',

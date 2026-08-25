@@ -4,9 +4,15 @@ Como este projeto é testado, porquê assim, e como acrescentar testes novos.
 
 ```bash
 cd backend
-npm test              # corre tudo uma vez
-npm run test:watch    # fica a correr enquanto se programa
-npm run test:coverage # relatório de cobertura
+npm test                  # unitários — rápidos, sem base de dados
+npm run test:watch        # fica a correr enquanto se programa
+npm run test:coverage     # relatório de cobertura
+
+# Integração — precisa do Postgres de testes de pé:
+docker compose up -d postgres-test
+npm run test:integration
+
+npm run test:all          # os dois
 ```
 
 **Pré-requisito:** o `prisma generate` tem de ter corrido. Os enums do domínio
@@ -36,23 +42,57 @@ Entra um valor, sai outro. Sem rede, sem base de dados, sem relógio. Nunca
 falham por razões que não sejam o código estar errado, e por isso são as que se
 escrevem primeiro.
 
-### 2. Integração — com Postgres a sério *(por fazer)*
+### 2. Integração — com Postgres a sério
 
-Através do HTTP, com `supertest`, contra uma base de dados real levantada para
-o efeito. É aqui que vivem as regras que custam dinheiro se partirem:
+`src/test/money-rules.integration.test.ts`. O pedido entra pelo Express, passa
+pela autenticação, pelo zod, pelo service e pelo Prisma, e chega ao Postgres.
+Nada é substituído por imitações — é por isso que estes apanham uma coluna que
+falta numa migração ou um middleware de permissões esquecido.
 
-- o lançamento comunicado pelo motorista **não** credita saldo
-- só o fecho registado credita
-- o saldo pode ficar negativo
+As regras protegidas:
+
+- o lançamento comunicado pelo motorista **não** credita saldo (nem aprovado)
+- só o fecho **registado** credita; um rascunho não
+- o saldo pode ficar **negativo**
 - retirada acima do disponível é recusada
-- sem IBAN aprovado dá `BANK_ACCOUNT_REQUIRED`
 - sem recibo dá `MISSING_RECEIPT`
-- o IBAN **congela** na aprovação e não muda depois
+- sem IBAN aprovado dá `BANK_ACCOUNT_REQUIRED` — uma conta só pendente não serve
+- o IBAN **congela** na aprovação e não muda quando o motorista troca de conta
 - a comissão e o imposto **congelam** no fecho
-- um motorista não vê os dados bancários de outro
+- não se paga o que não foi aprovado
+- um motorista não vê os dados bancários nem o saldo de outro, nem aprova a
+  própria retirada
 
-Precisa de um serviço de Postgres no `docker-compose` só para testes, ou de
-Testcontainers, e de truncar as tabelas entre testes.
+**Isolamento:** cada teste começa com a base vazia. O `TRUNCATE` corre *antes*
+de cada caso, não depois — se um teste rebentar a meio, o seguinte arranca limpo
+em vez de herdar os destroços. A lista de tabelas vem do catálogo do Postgres,
+portanto uma tabela nova passa a ser limpa sozinha.
+
+Não se usa transação-revertida-no-fim, que seria mais rápida: o
+`settlements.service` abre as suas próprias transações com `$transaction`, e
+encaixá-las faria os testes exercitar um caminho que a produção nunca percorre.
+
+**Proteção:** o harness recusa arrancar contra uma base cujo nome não termine em
+`_test`. Estes testes apagam tabelas inteiras; um `.env` copiado da produção ou
+um terminal na janela errada não devem chegar para perder dados.
+
+**Em série, não em paralelo:** partilham uma base e cada um limpa-a ao começar.
+Em paralelo, um apagaria as tabelas debaixo de outro a meio.
+
+**A mesma base dos dois lados.** O `setup-env.ts` define o `DATABASE_URL` antes
+de a aplicação ser carregada, porque o `config/prisma.ts` constrói o cliente no
+momento em que é importado. Sem isso, as fábricas escrevem numa base e a
+aplicação lê de outra.
+
+Foi assim que esta suite falhou na primeira execução. Doze testes deram 404 — e
+seis **passaram**, os que verificavam que nada tinha mudado ou que aceitavam
+qualquer erro. Passar pela razão errada é o pior modo de falha de uma suite: dá
+confiança sem dar cobertura.
+
+Duas lições ficaram no código. O primeiro teste do ficheiro é uma verificação de
+sanidade que falha alto se as duas metades se desencontrarem. E as asserções
+passaram a ser exatas: `toBe(403)` e não `toBeGreaterThanOrEqual(403)`, porque
+um 404 satisfazia o segundo e dizia "não encontrei" onde o teste lia "recusado".
 
 ### 3. Componente, no frontend *(por fazer)*
 
