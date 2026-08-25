@@ -22,6 +22,7 @@ import { DriversPage } from '@/features/admin/pages/DriversPage';
 import { DriverDetailPage } from '@/features/admin/pages/DriverDetailPage'; // ← novo
 import { SettlementsPage } from '@/features/admin/pages/SettlementsPage';
 import { FinancialPage } from '@/features/admin/pages/FinancialPage';
+import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
 import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
           { path: 'documents', element: <DocumentsAdminPage /> },
           { path: 'settlements', element: <SettlementsPage /> },
           { path: 'financial', element: <FinancialPage /> },
+          { path: 'green-receipts', element: <GreenReceiptsPage /> },
           { path: 'fleet', element: <FleetPage /> },
           { path: 'fleet/:id', element: <VehicleDetailPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
