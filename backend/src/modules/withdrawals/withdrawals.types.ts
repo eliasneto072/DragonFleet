@@ -23,6 +23,21 @@ export interface IWithdrawal {
    */
   paidToIban?: string | null;
   paidToHolder?: string | null;
+
+  /**
+   * A quem foi emitido o recibo verde. Registado na aprovação.
+   *
+   * Quatro estados, e a diferença entre os dois últimos importa:
+   *   companyId preenchido                → uma sociedade da lista
+   *   companyOther preenchido             → outra, escrita à mão
+   *   ambos nulos, companySetAt NÃO nulo  → "Nenhum", escolha deliberada
+   *   ambos nulos, companySetAt nulo      → por classificar
+   */
+  companyId?: string | null;
+  companyName?: string | null;
+  companyOther?: string | null;
+  companySetById?: string | null;
+  companySetAt?: Date | null;
 }
 
 export type IWithdrawalPublic = IWithdrawal;

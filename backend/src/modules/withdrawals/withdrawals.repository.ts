@@ -17,7 +17,23 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
     receiptKey: true,
     paidToIban: true,
     paidToHolder: true,
+    companyId: true,
+    companyOther: true,
+    companySetById: true,
+    companySetAt: true,
+    // O nome vem junto para as telas não terem de cruzar duas listas. Vem da
+    // relação e não de uma cópia: renomear a sociedade atualiza o histórico
+    // todo, porque é a mesma entidade jurídica com outro nome.
+    company: { select: { name: true } },
   } as const;
+
+  /** Achata a relação: as telas recebem companyName e não um objeto aninhado. */
+  private toPublic<T extends { amount: { toNumber(): number }; company?: { name: string } | null }>(
+    row: T,
+  ) {
+    const { company, ...rest } = row as T & { company?: { name: string } | null };
+    return { ...rest, amount: row.amount.toNumber(), companyName: company?.name ?? null };
+  }
 
   async findAll(): Promise<IWithdrawalPublic[]> {
     try {
@@ -26,7 +42,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
         orderBy: { requestedAt: 'desc' },
       });
 
-      return withdrawals.map((w) => ({ ...w, amount: w.amount.toNumber() }));
+      return withdrawals.map((w) => this.toPublic(w) as IWithdrawalPublic);
     } catch (err) {
       logger.error('Erro ao buscar saques', err);
       throw err;
@@ -42,7 +58,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       if (!withdrawal) return null;
 
-      return { ...withdrawal, amount: withdrawal.amount.toNumber() };
+      return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
       logger.error('Erro ao buscar saque por id', err);
       throw err;
@@ -57,7 +73,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
         orderBy: { requestedAt: 'desc' },
       });
 
-      return withdrawals.map((w) => ({ ...w, amount: w.amount.toNumber() }));
+      return withdrawals.map((w) => this.toPublic(w) as IWithdrawalPublic);
     } catch (err) {
       logger.error('Erro ao buscar saques por utilizador', err);
       throw err;
@@ -77,7 +93,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
         select: this.publicSelect,
       });
 
-      return { ...withdrawal, amount: withdrawal.amount.toNumber() };
+      return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
       logger.error('Erro ao criar saque', err);
       throw err;
@@ -96,11 +112,16 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
           // IBAN congelado na aprovação — ver withdrawals.service.updateStatus.
           ...(data.paidToIban !== undefined ? { paidToIban: data.paidToIban } : {}),
           ...(data.paidToHolder !== undefined ? { paidToHolder: data.paidToHolder } : {}),
+          // Classificação do recibo verde. Ver withdrawals.service.updateStatus.
+          ...(data.companyId !== undefined ? { companyId: data.companyId } : {}),
+          ...(data.companyOther !== undefined ? { companyOther: data.companyOther } : {}),
+          ...(data.companySetById !== undefined ? { companySetById: data.companySetById } : {}),
+          ...(data.companySetAt !== undefined ? { companySetAt: data.companySetAt } : {}),
         },
         select: this.publicSelect,
       });
 
-      return { ...withdrawal, amount: withdrawal.amount.toNumber() };
+      return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
       logger.error('Erro ao atualizar saque', err);
       throw err;

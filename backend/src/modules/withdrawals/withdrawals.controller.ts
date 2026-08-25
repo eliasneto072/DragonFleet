@@ -6,6 +6,7 @@ import { uploadToCloudinary } from '../upload/upload.service';
 import { withdrawalsService } from './withdrawals.service';
 import {
   createWithdrawalSchema,
+  setWithdrawalCompanySchema,
   updateWithdrawalStatusSchema,
   withdrawalIdParamSchema,
   userIdParamSchema,
@@ -79,6 +80,14 @@ export class WithdrawalsController {
       parsed.body
     );
 
+    return ok(res, { withdrawal });
+  };
+
+  setCompany = async (req: AuthRequest, res: Response) => {
+    const parsed = setWithdrawalCompanySchema.parse({ params: req.params, body: req.body });
+    const withdrawal = await withdrawalsService.setCompany(
+      getActor(req), parsed.params.id, parsed.body,
+    );
     return ok(res, { withdrawal });
   };
 

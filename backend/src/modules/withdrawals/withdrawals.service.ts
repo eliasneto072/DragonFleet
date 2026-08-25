@@ -1,4 +1,6 @@
 // src/modules/withdrawals/withdrawals.service.ts
+import { prisma }               from '../../config/prisma';
+import { logger }               from '../../shared/utils/logger';
 import { AppError }             from '../../shared/errors/AppError';
 import { UserRole, WithdrawalStatus } from '../../shared/types/enums';
 import { usersRepository }      from '../users/users.repository';
@@ -156,6 +158,38 @@ export class WithdrawalsService {
       throw new AppError('Notes are required when rejecting a withdrawal', 400, 'NOTES_REQUIRED');
     }
 
+    // ── Classificação do recibo verde, na aprovação ───────────────────────────
+    //
+    // Obrigatória, com "Nenhum" como escolha explícita. Um campo opcional fica
+    // por preencher nas primeiras semanas e depois ninguém volta atrás — o
+    // registo nasceria com buracos precisamente onde interessava.
+    //
+    // "Nenhum" chega como companyId e companyOther ambos ausentes. É diferente
+    // de não classificar: a data fica gravada, e é ela que distingue a escolha
+    // deliberada das retiradas anteriores a este campo.
+    if (input.status === WithdrawalStatus.APPROVED) {
+      if (input.companyId && input.companyOther) {
+        throw new AppError(
+          'Escolha uma sociedade da lista ou escreva outra, não as duas.',
+          400,
+          'COMPANY_AMBIGUOUS',
+        );
+      }
+      if (input.companyId) {
+        const company = await prisma.company.findUnique({ where: { id: input.companyId } });
+        if (!company) {
+          throw new AppError('Sociedade não encontrada.', 404, 'COMPANY_NOT_FOUND');
+        }
+        if (!company.active) {
+          throw new AppError(
+            'Essa sociedade está desativada. Reative-a ou escolha outra.',
+            400,
+            'COMPANY_INACTIVE',
+          );
+        }
+      }
+    }
+
     // Reconferência ao aprovar ou pagar. O saldo pode ter caído entre o pedido
     // e a decisão — por exemplo, um débito lançado pela gestão nesse intervalo.
     // O disponível já contempla esta retirada (pendente ou aprovada), logo um
@@ -175,6 +209,17 @@ export class WithdrawalsService {
       status: input.status,
       notes:  input.notes ?? null,
     };
+
+    // A classificação grava-se com autor e data. Ao contrário do IBAN, este
+    // campo é corrigível depois: não entra em cálculo nenhum e um clique
+    // errado no seletor não deve obrigar a rejeitar a retirada. O rasto de
+    // quem escolheu é o que torna a correção aceitável.
+    if (input.status === WithdrawalStatus.APPROVED) {
+      data.companyId = input.companyId ?? null;
+      data.companyOther = input.companyOther?.trim() || null;
+      data.companySetById = actor.id;
+      data.companySetAt = new Date();
+    }
 
     // Congela o destino no momento da aprovação: se o motorista alterar os
     // dados bancários depois, uma transferência já decidida não muda de conta
@@ -210,6 +255,72 @@ export class WithdrawalsService {
       console.error('[email] Failed to send withdrawal status email:', emailErr);
     }
 
+    return updated;
+  }
+
+  /**
+   * Corrigir a que sociedade o recibo foi emitido, depois da aprovação.
+   *
+   * Existe porque este campo é uma anotação contabilística e não uma decisão
+   * financeira: não entra em cálculo nenhum, não move dinheiro, e um clique
+   * errado no seletor não deve obrigar a rejeitar a retirada e a pedir ao
+   * motorista que a submeta outra vez.
+   *
+   * É também o caminho para classificar as retiradas anteriores a este campo,
+   * que estão com companySetAt nulo e aparecem como "por classificar".
+   *
+   * O rasto — quem alterou e quando — é o que torna a correção aceitável. Sem
+   * ele, um registo que se pode reescrever em silêncio não vale como registo.
+   */
+  async setCompany(
+    actor: Actor,
+    id: string,
+    input: { companyId?: string | null; companyOther?: string | null },
+  ): Promise<IWithdrawalPublic> {
+    if (!canManageWithdrawals(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const withdrawal = await this.ensureWithdrawalExists(id);
+
+    // Só faz sentido em retiradas decididas: uma pendente ainda pode ser
+    // rejeitada, e classificar um recibo que talvez nunca seja pago sujaria o
+    // registo com linhas que depois teriam de ser retiradas.
+    if (withdrawal.status === WithdrawalStatus.PENDING) {
+      throw new AppError(
+        'Classifique o recibo ao aprovar a retirada.',
+        400,
+        'WITHDRAWAL_NOT_DECIDED',
+      );
+    }
+    if (withdrawal.status === WithdrawalStatus.REJECTED) {
+      throw new AppError(
+        'Uma retirada rejeitada não gera recibo a classificar.',
+        400,
+        'WITHDRAWAL_REJECTED',
+      );
+    }
+
+    if (input.companyId && input.companyOther) {
+      throw new AppError(
+        'Escolha uma sociedade da lista ou escreva outra, não as duas.',
+        400,
+        'COMPANY_AMBIGUOUS',
+      );
+    }
+    if (input.companyId) {
+      const company = await prisma.company.findUnique({ where: { id: input.companyId } });
+      if (!company) throw new AppError('Sociedade não encontrada.', 404, 'COMPANY_NOT_FOUND');
+    }
+
+    const updated = await withdrawalsRepository.update(id, {
+      companyId: input.companyId ?? null,
+      companyOther: input.companyOther?.trim() || null,
+      companySetById: actor.id,
+      companySetAt: new Date(),
+    });
+
+    logger.info(`[withdrawals] ${actor.id} classificou o recibo de ${id}`);
     return updated;
   }
 

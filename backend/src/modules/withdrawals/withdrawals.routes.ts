@@ -15,6 +15,9 @@ export function withdrawalsRouter(): Router {
   // fatura, que é o que a exigência existe para impedir.
   router.post('/', upload.single('receipt'), withdrawalsController.create);
   router.patch('/:id/status', withdrawalsController.updateStatus);
+  // Corrigir a sociedade do recibo depois de decidida a retirada, e classificar
+  // as anteriores a este campo. Ver withdrawals.service.setCompany.
+  router.patch('/:id/company', withdrawalsController.setCompany);
   router.delete('/:id', withdrawalsController.remove);
 
   return router;
