@@ -80,6 +80,17 @@ export const queryKeys = {
     byUser: (userId: string) => ['bank', 'user', userId] as const,
   },
 
+  // Sociedades do recibo verde
+  //
+  // `all` inclui as inativas e serve a gestão da lista; `active` é o que o
+  // seletor da aprovação mostra. São chaves distintas porque respondem a
+  // perguntas distintas e uma não deriva da outra.
+  companies: {
+    root: ['companies'] as const,
+    active: ['companies', 'active'] as const,
+    all: ['companies', 'all'] as const,
+  },
+
   // Analytics (admin)
   //
   // Em stats o período entra na chave: trocar o selector muda a chave e o

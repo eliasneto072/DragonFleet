@@ -39,6 +39,9 @@ import { withdrawalsService } from '@/features/driver/services/withdrawals.servi
 import { usersService } from '@/features/admin/services/users.service';
 import { analyticsService } from '@/features/admin/services/analytics.service';
 import { CopyIbanButton } from '@/app/components/ui/copy-iban-button';
+import {
+  CompanyPicker, isChoiceComplete, type CompanyChoice,
+} from '@/app/components/admin/company-picker';
 import { formatIban } from '@/shared/lib/iban';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -184,6 +187,10 @@ export function FinancialControl({ hideHeader = false }: Props) {
   const [rejectTarget, setRejectTarget] = useState<ApiWithdrawal | null>(null);
   const [payTarget, setPayTarget] = useState<ApiWithdrawal | null>(null);
   const [payReference, setPayReference] = useState('');
+  // Aprovar deixou de ser um clique: passa por um diálogo, porque é aqui que o
+  // recibo verde é classificado e a escolha é obrigatória.
+  const [approveTarget, setApproveTarget] = useState<ApiWithdrawal | null>(null);
+  const [companyChoice, setCompanyChoice] = useState<CompanyChoice | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
   const [historyFilter, setHistoryFilter] = useState<'all' | WithdrawalStatus>('all');
 
@@ -243,9 +250,10 @@ export function FinancialControl({ hideHeader = false }: Props) {
   const toTransferTotal = toTransfer.reduce((s, w) => s + Number(w.amount), 0);
 
   const { mutate: updateStatus, isPending: updating } = useMutation({
-    mutationFn: ({ id, status, notes }: {
+    mutationFn: ({ id, status, notes, companyId, companyOther }: {
       id: string; status: WithdrawalStatus; notes?: string;
-    }) => withdrawalsService.updateStatus(id, { status, notes }),
+      companyId?: string | null; companyOther?: string | null;
+    }) => withdrawalsService.updateStatus(id, { status, notes, companyId, companyOther }),
     onSuccess: (_r, vars) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
@@ -259,6 +267,8 @@ export function FinancialControl({ hideHeader = false }: Props) {
       setRejectNotes('');
       setPayTarget(null);
       setPayReference('');
+      setApproveTarget(null);
+      setCompanyChoice(null);
     },
     onError: (err: any) => toast.error(err?.message ?? 'Não foi possível atualizar a retirada.'),
   });
@@ -392,7 +402,7 @@ export function FinancialControl({ hideHeader = false }: Props) {
                         )}
                         <Button
                           size="sm" className="h-8" disabled={updating}
-                          onClick={() => updateStatus({ id: w.id, status: 'APPROVED' })}
+                          onClick={() => { setApproveTarget(w); setCompanyChoice(null); }}
                         >
                           <CheckCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                           Aprovar
@@ -611,6 +621,74 @@ export function FinancialControl({ hideHeader = false }: Props) {
       </Card>
 
       {/* Rejeição — o backend devolve NOTES_REQUIRED sem motivo */}
+      {/* Aprovar — e classificar o recibo verde no mesmo passo.
+          
+          A classificação é obrigatória aqui, com "Nenhum" como escolha
+          explícita. Se fosse um campo opcional a preencher depois, ficaria por
+          preencher nas primeiras semanas e ninguém voltaria atrás: o registo
+          nasceria com buracos exatamente onde interessava.
+          
+          É também o momento em que o IBAN congela, portanto a aprovação passou
+          a ser a decisão que fixa tudo o que esta retirada precisa de saber. */}
+      <Dialog
+        open={!!approveTarget}
+        onOpenChange={(o) => { if (!o) { setApproveTarget(null); setCompanyChoice(null); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aprovar retirada</DialogTitle>
+            <DialogDescription>
+              {approveTarget && (
+                <>
+                  {formatCurrency(Number(approveTarget.amount))} de{' '}
+                  {driverName(approveTarget.userId)}. Ao aprovar, o IBAN do
+                  motorista fica fixado nesta retirada.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-w-0 space-y-4">
+            {approveTarget?.receiptUrl && (
+              <Button asChild variant="outline" size="sm" className="h-8 w-full sm:w-auto">
+                <a href={approveTarget.receiptUrl} target="_blank" rel="noopener noreferrer">
+                  <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Ver recibo verde antes de decidir
+                </a>
+              </Button>
+            )}
+
+            <CompanyPicker
+              value={companyChoice}
+              onChange={setCompanyChoice}
+              disabled={updating}
+            />
+          </div>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline" disabled={updating} className="w-full sm:w-auto"
+              onClick={() => { setApproveTarget(null); setCompanyChoice(null); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={updating || !isChoiceComplete(companyChoice)}
+              className="w-full sm:w-auto"
+              onClick={() => updateStatus({
+                id: approveTarget!.id,
+                status: 'APPROVED',
+                companyId: companyChoice?.companyId ?? null,
+                companyOther: companyChoice?.companyOther?.trim() || null,
+              })}
+            >
+              {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Aprovar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Marcar como paga.
           
           Um diálogo e não um botão direto, por duas razões. PAID é estado

@@ -82,6 +82,32 @@ export interface ApiWithdrawal {
    */
   paidToIban?:   string | null;
   paidToHolder?: string | null;
+
+  /**
+   * A quem foi emitido o recibo verde. Registado na aprovação.
+   *
+   * Quatro estados, e a diferença entre os dois últimos é a que interessa à
+   * tela de Recibos Verdes:
+   *   companyId preenchido                → sociedade da lista
+   *   companyOther preenchido             → outra, escrita à mão
+   *   ambos nulos, companySetAt NÃO nulo  → "Nenhum", escolha deliberada
+   *   ambos nulos, companySetAt nulo      → por classificar
+   */
+  companyId?:      string | null;
+  companyName?:    string | null;
+  companyOther?:   string | null;
+  companySetById?: string | null;
+  companySetAt?:   string | null;
+}
+
+/** Sociedade do grupo a quem os motoristas emitem recibo verde. */
+export interface ApiCompany {
+  id: string;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+  /** Só vem na listagem. Impede apagar uma sociedade que já tem recibos. */
+  withdrawalCount?: number;
 }
 
 /**

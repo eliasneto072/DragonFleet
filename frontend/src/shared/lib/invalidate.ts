@@ -59,6 +59,18 @@ export function invalidateAfterBank(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
 }
 
+/**
+ * Lista de sociedades alterada.
+ *
+ * Invalida também as retiradas: o nome da sociedade viaja com cada retirada,
+ * portanto renomear uma sem isto deixaria o nome antigo na tela de Recibos
+ * Verdes até alguém recarregar.
+ */
+export function invalidateAfterCompany(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: queryKeys.companies.root });
+  qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+}
+
 /** Fecho registado ou cancelado — a única origem de dinheiro na conta. */
 export function invalidateAfterSettlement(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.settlements.all });

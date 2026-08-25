@@ -6,6 +6,13 @@ import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 interface UpdateWithdrawalStatusInput {
   status: WithdrawalStatus;
   notes?: string;
+  /**
+   * Sociedade a quem o recibo verde foi emitido. Só lido pelo servidor quando
+   * o estado é APPROVED. Ambos nulos significam "Nenhum" — uma escolha, e não
+   * a ausência de escolha.
+   */
+  companyId?: string | null;
+  companyOther?: string | null;
 }
 
 export const withdrawalsService = {
