@@ -276,6 +276,28 @@ model Withdrawal {
   paidToIban   String?   @map("paid_to_iban")
   paidToHolder String?   @map("paid_to_holder")
 
+  // ── A quem foi emitido o recibo verde ──────────────────────────────────────
+  //
+  // Registado no momento da aprovação. Serve a contabilidade: um operador com
+  // várias sociedades tem de saber que entidade recebeu que fatura.
+  //
+  // DUAS colunas porque a escolha tem duas naturezas: uma sociedade da lista,
+  // ou texto livre para o que não esteja lá. "Nenhum" é ambas nulas — e é
+  // diferente de "por classificar", que são as retiradas anteriores a este
+  // campo, distinguidas por companySetAt nulo.
+  //
+  // SetNull e não Cascade: apagar uma sociedade não pode apagar retiradas.
+  companyId    String?   @map("company_id")
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyOther String?   @map("company_other")
+
+  // Quem classificou e quando. Ao contrário do IBAN, este campo é corrigível:
+  // não entra em cálculo nenhum, é uma anotação contabilística, e um clique
+  // errado no dropdown não deve obrigar a rejeitar a retirada. Corrigível com
+  // rasto é melhor do que imutável.
+  companySetById String?   @map("company_set_by_id")
+  companySetAt   DateTime? @map("company_set_at")
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -366,6 +388,31 @@ model TicketReply {
 
   @@index([ticketId])
   @@map("ticket_replies")
+}
+
+/// Sociedades do grupo a quem os motoristas emitem recibo verde.
+///
+/// TABELA e não enum: o cliente opera várias sociedades e a lista muda —
+/// criam-se, mudam de nome, dissolvem-se. Um enum obrigaria a uma migração de
+/// cada vez, e a terceira sociedade dele nem nome tem ainda.
+///
+/// Renomear uma sociedade NÃO reescreve o histórico: as retiradas apontam para
+/// o id, portanto continuam ligadas à mesma entidade jurídica.
+model Company {
+  id     String  @id @default(uuid())
+  name   String
+  /// Inativa desaparece das escolhas novas mas continua a explicar o passado.
+  /// Apagar arrancaria a sociedade dos recibos já emitidos.
+  active Boolean @default(true)
+  /// Ordem de apresentação — o cliente listou-as numeradas.
+  sortOrder Int @default(0) @map("sort_order")
+
+  withdrawals Withdrawal[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("companies")
 }
 
 model SystemSettings {
