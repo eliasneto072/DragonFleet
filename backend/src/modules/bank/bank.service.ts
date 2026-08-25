@@ -15,43 +15,16 @@ import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
+// Extraidas para shared/utils/iban.ts: sao funcoes puras, e viviam dentro
+// deste modulo que importa o Prisma — o que as tornava impossiveis de testar
+// sem levantar uma base de dados para verificar aritmetica de strings.
+import { isValidIban, normalizeIban } from '../../shared/utils/iban';
 import type {
   Actor, BankAccountPublic, ReviewBankInput, SubmitBankInput,
 } from './bank.types';
 
 function canManage(role?: UserRole) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
-}
-
-/**
- * Normaliza para comparação e armazenamento: sem espaços, em maiúsculas.
- * Os bancos imprimem o IBAN em grupos de quatro, e quem copia traz os espaços.
- */
-function normalizeIban(raw: string): string {
-  return raw.replace(/\s+/g, '').toUpperCase();
-}
-
-/**
- * Validação de IBAN pelo resto 97, o mesmo algoritmo que os bancos usam.
- *
- * Apanha dígitos trocados, que é o erro real — um IBAN com um número a mais ou
- * a menos passaria numa validação de comprimento e enviaria o dinheiro para
- * lado nenhum, ou pior, para outra pessoa.
- */
-function isValidIban(iban: string): boolean {
-  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/.test(iban)) return false;
-
-  // Move os quatro primeiros caracteres para o fim e converte letras em números
-  // (A=10 … Z=35), como manda a norma.
-  const rearranged = iban.slice(4) + iban.slice(0, 4);
-  const numeric = rearranged.replace(/[A-Z]/g, (ch) => String(ch.charCodeAt(0) - 55));
-
-  // O número é longo demais para caber num inteiro: resto calculado por partes.
-  let remainder = 0;
-  for (const digit of numeric) {
-    remainder = (remainder * 10 + Number(digit)) % 97;
-  }
-  return remainder === 1;
 }
 
 function toPublic(row: {
