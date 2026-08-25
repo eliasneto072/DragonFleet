@@ -33,9 +33,29 @@ export interface ParseResult {
 // with both (e.g. Uber's "Fare" + "Net Earnings") imports what the driver is
 // actually paid, not the gross fare.
 const AMOUNT_HEADERS = [
-  'net earnings', 'net_amount', 'valor líquido', 'valor liquido', 'payout',
+  // Os nomes que identificam o líquido SEM ambiguidade vêm primeiro. Um extrato
+  // português tem "Rendimentos brutos" e "Rendimentos líquidos", e ambos contêm
+  // "rendimento" — sem estas entradas explícitas, o alias genérico apanhava o
+  // bruto por estar numa coluna anterior.
+  'net earnings', 'net_amount', 'net amount',
+  'rendimentos líquidos', 'rendimentos liquidos',
+  'valor líquido', 'valor liquido', 'payout',
+  // A partir daqui são genéricos: só valem quando não há coluna líquida.
   'rendimento', 'ganhos', 'earnings', 'amount', 'valor', 'total', 'value', 'fare',
 ];
+
+/**
+ * Marcas de que uma coluna é o valor BRUTO, antes da comissão da plataforma.
+ *
+ * Servem de desempate: quando o mesmo alias casa com mais do que uma coluna,
+ * fica a que não tem nenhuma destas marcas. É o que apanha as variantes de
+ * cabeçalho que ainda não vimos, sem ser preciso listá-las uma a uma.
+ */
+const GROSS_MARKERS = ['bruto', 'brutos', 'gross', 'fare', 'tarifa'];
+
+function looksGross(header: string): boolean {
+  return GROSS_MARKERS.some((m) => header.includes(m));
+}
 const DATE_HEADERS = [
   'date', 'data', 'trip date', 'data da viagem', 'datetime', 'request_date',
   'request time', 'data/hora', 'período', 'periodo', 'day', 'dia',
@@ -83,8 +103,20 @@ function findHeaderIndex(headers: string[], aliases: string[]): number {
     if (exact !== -1) return exact;
   }
   for (const alias of aliases) {
-    const partial = lower.findIndex((h) => h.includes(alias));
-    if (partial !== -1) return partial;
+    // TODAS as colunas que casam, e não a primeira.
+    //
+    // Com "Rendimentos brutos" e "Rendimentos líquidos" no mesmo ficheiro, o
+    // alias "rendimento" casa com as duas, e ficar pela primeira importava o
+    // bruto — o valor antes da comissão da plataforma, sempre maior do que o
+    // motorista recebeu. Ver o teste de regressão em csv-parser.test.ts.
+    const matches = lower
+      .map((h, i) => ({ h, i }))
+      .filter(({ h }) => h.includes(alias));
+
+    if (matches.length === 0) continue;
+
+    const liquid = matches.find(({ h }) => !looksGross(h));
+    return (liquid ?? matches[0]).i;
   }
   return -1;
 }
