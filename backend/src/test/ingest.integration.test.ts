@@ -28,7 +28,8 @@ afterAll(async () => {
  *  supertest exige um objeto, e `unknown` não lhe serve. */
 interface FolhaDoPortal {
   platform: string;
-  date: string;
+  periodStart: string;
+  periodEnd: string;
   rows: { driverName: string; amount: number }[];
 }
 
@@ -53,7 +54,7 @@ describe('ingest — emparelhamento', () => {
     // Nomes sem acentos, como a Uber os escreve.
     const res = await envia(admin.id, UserRole.ADMIN, {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [
         { driverName: 'Monica Luis Antunes', amount: 612.40 },
         { driverName: 'Bruno Silva', amount: 455.90 },
@@ -78,7 +79,7 @@ describe('ingest — emparelhamento', () => {
 
     const res = await envia(admin.id, UserRole.ADMIN, {
       platform: 'BOLT',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [
         { driverName: 'Bruno Silva', amount: 100 },
         { driverName: 'Alguem Que Nao Existe', amount: 250 },
@@ -100,7 +101,7 @@ describe('ingest — emparelhamento', () => {
 
     const res = await envia(admin.id, UserRole.ADMIN, {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Joao Silva', amount: 300 }],
     });
 
@@ -116,7 +117,7 @@ describe('ingest — emparelhamento', () => {
 
     const res = await envia(admin.id, UserRole.ADMIN, {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 100 }],
     });
 
@@ -132,7 +133,7 @@ describe('ingest — o que entra na base', () => {
 
     await envia(admin.id, UserRole.ADMIN, {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 5000 }],
     });
 
@@ -152,7 +153,7 @@ describe('ingest — o que entra na base', () => {
     const motorista = await criaMotorista({ name: 'Bruno Silva' });
     const folha = {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 300 }],
     };
 
@@ -167,6 +168,26 @@ describe('ingest — o que entra na base', () => {
     expect(total).toBe(1);
   });
 
+  it('grava o periodo na nota do lancamento', async () => {
+    // Sem isto, quem confere vê um valor carimbado num domingo sem saber
+    // quantos dias ele cobre — um total de dois dias é indistinguível de um
+    // de sete.
+    const motorista = await criaMotorista({ name: 'Bruno Silva' });
+
+    await envia(admin.id, UserRole.ADMIN, {
+      platform: 'UBER',
+      periodStart: '2026-08-10',
+      periodEnd: '2026-08-16',
+      rows: [{ driverName: 'Bruno Silva', amount: 300 }],
+    });
+
+    const lancamento = await testDb.earning.findFirst({ where: { userId: motorista.id } });
+    expect(lancamento!.notes).toContain('2026-08-10');
+    expect(lancamento!.notes).toContain('2026-08-16');
+    // E a data fica no FIM do período, que é quando ele fechou.
+    expect(lancamento!.date.toISOString().slice(0, 10)).toBe('2026-08-16');
+  });
+
   it('a pre-visualizacao NAO grava nada', async () => {
     const motorista = await criaMotorista({ name: 'Bruno Silva' });
 
@@ -174,7 +195,7 @@ describe('ingest — o que entra na base', () => {
       .post('/earnings/ingest/preview')
       .set(authHeader(admin.id, UserRole.ADMIN))
       .send({
-        platform: 'UBER', date: '2026-03-15',
+        platform: 'UBER', periodStart: '2026-08-10', periodEnd: '2026-08-16',
         rows: [{ driverName: 'Bruno Silva', amount: 300 }],
       });
 
@@ -193,7 +214,7 @@ describe('ingest — quem pode enviar', () => {
 
     const res = await envia(motorista.id, UserRole.DRIVER, {
       platform: 'UBER',
-      date: '2026-03-15',
+      periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 9999 }],
     });
 
@@ -203,7 +224,7 @@ describe('ingest — quem pode enviar', () => {
 
   it('recusa um envio sem linhas', async () => {
     const res = await envia(admin.id, UserRole.ADMIN, {
-      platform: 'UBER', date: '2026-03-15', rows: [],
+      platform: 'UBER', periodStart: '2026-08-10', periodEnd: '2026-08-16', rows: [],
     });
 
     // 400 e não 500. Um corpo mal formado é culpa de quem envia; devolver 500
@@ -215,7 +236,7 @@ describe('ingest — quem pode enviar', () => {
 
   it('recusa uma data mal formada e diz qual e o campo', async () => {
     const res = await envia(admin.id, UserRole.ADMIN, {
-      platform: 'UBER', date: '15/03/2026',
+      platform: 'UBER', periodStart: '10/08/2026', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 100 }],
     });
 
@@ -223,12 +244,46 @@ describe('ingest — quem pode enviar', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
     // O campo tem de vir identificado, senão quem recebe o erro não sabe o que
     // corrigir. O prefixo "body" é removido: interessa "date".
-    expect(res.body.issues[0].field).toBe('date');
+    expect(res.body.issues[0].field).toBe('periodStart');
+  });
+
+  it('RECUSA o "Last 7 days" da Bolt, que atravessa duas semanas de fecho', async () => {
+    // O período exato da captura que o cliente enviou: 11 a 17 de agosto de
+    // 2026, terça a segunda. Seis dias numa semana de fecho e um noutra.
+    // Atribuir o total a qualquer uma delas mete lá um dia que não lhe
+    // pertence, e nada no fecho indicaria isso.
+    await criaMotorista({ name: 'Bruno Silva' });
+
+    const res = await envia(admin.id, UserRole.ADMIN, {
+      platform: 'BOLT',
+      periodStart: '2026-08-11',
+      periodEnd: '2026-08-17',
+      rows: [{ driverName: 'Bruno Silva', amount: 100 }],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('PERIOD_SPANS_WEEKS');
+    // A mensagem tem de dizer QUAL o intervalo a escolher, senão quem a lê
+    // fica a saber que errou sem saber como acertar.
+    expect(res.body.message).toContain('2026-08-17');
+    expect(await testDb.earning.count()).toBe(0);
+  });
+
+  it('recusa um periodo invertido', async () => {
+    const res = await envia(admin.id, UserRole.ADMIN, {
+      platform: 'UBER',
+      periodStart: '2026-08-16',
+      periodEnd: '2026-08-10',
+      rows: [{ driverName: 'Bruno Silva', amount: 100 }],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_PERIOD');
   });
 
   it('recusa uma plataforma desconhecida', async () => {
     const res = await envia(admin.id, UserRole.ADMIN, {
-      platform: 'CABIFY', date: '2026-03-15',
+      platform: 'CABIFY', periodStart: '2026-08-10', periodEnd: '2026-08-16',
       rows: [{ driverName: 'Bruno Silva', amount: 100 }],
     });
 

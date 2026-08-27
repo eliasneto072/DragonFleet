@@ -38,6 +38,7 @@ import { AppError } from '../../../shared/errors/AppError';
 import { EarningPlatform, UserRole } from '../../../shared/types/enums';
 import { logger } from '../../../shared/utils/logger';
 import { matchDriver, type MatchCandidate } from './name-matching';
+import { sameWeek, suggestWeek, toDayString } from '../../../shared/utils/week';
 
 export interface IngestRow {
   /** O nome como o portal o escreve. */
@@ -47,8 +48,10 @@ export interface IngestRow {
 
 export interface IngestInput {
   platform: EarningPlatform;
-  /** Dia a que os valores dizem respeito, em AAAA-MM-DD. */
-  date: string;
+  /** Início do período reportado pelo portal, em AAAA-MM-DD. */
+  periodStart: string;
+  /** Fim do período, inclusive. */
+  periodEnd: string;
   rows: IngestRow[];
 }
 
@@ -95,10 +98,9 @@ class IngestService {
       );
     }
 
-    const date = new Date(`${input.date}T00:00:00.000Z`);
-    if (isNaN(date.getTime())) {
-      throw new AppError('Data inválida.', 400, 'INVALID_DATE');
-    }
+    const { periodStart, periodEnd } = this.parsePeriod(input);
+    // O lançamento fica carimbado no fim do período, que é quando ele fechou.
+    const date = periodEnd;
 
     // Motoristas ativos apenas: um inativo não devia receber lançamentos novos,
     // e mantê-lo na lista de candidatos só serve para gerar ambiguidades.
@@ -116,7 +118,10 @@ class IngestService {
     });
     const jaLa = new Set(existentes.map((e) => `${e.userId}|${Number(e.amount).toFixed(2)}`));
 
-    const paraInserir: { userId: string; amount: number; date: Date; platform: EarningPlatform }[] = [];
+    const paraInserir: {
+      userId: string; amount: number; date: Date;
+      platform: EarningPlatform; notes: string;
+    }[] = [];
     const unmatched: IngestResult['unmatched'] = [];
     let duplicados = 0;
 
@@ -148,6 +153,10 @@ class IngestService {
         amount: valor,
         date,
         platform: input.platform,
+        // O período fica escrito, e não só implícito na data. Sem isto, quem
+        // confere vê um valor carimbado num domingo sem saber quantos dias ele
+        // cobre — e um total de dois dias é indistinguível de um de sete.
+        notes: `Recolhido do portal · ${toDayString(periodStart)} a ${toDayString(periodEnd)}`,
       });
     }
 
@@ -158,8 +167,8 @@ class IngestService {
 
     logger.info(
       `[ingest] ${actor.id} enviou ${input.rows.length} linhas de ${input.platform} ` +
-      `(${input.date}): ${paraInserir.length} criadas, ${duplicados} repetidas, ` +
-      `${unmatched.length} por emparelhar`,
+      `(${toDayString(periodStart)} a ${toDayString(periodEnd)}): ${paraInserir.length} criadas, ` +
+      `${duplicados} repetidas, ${unmatched.length} por emparelhar`,
     );
 
     return {
@@ -168,6 +177,48 @@ class IngestService {
       totalAmount: paraInserir.reduce((s, r) => s + r.amount, 0),
       unmatched,
     };
+  }
+
+  /**
+   * Valida o período reportado pelo portal.
+   *
+   * RECUSA períodos que atravessem duas semanas de fecho, e essa é a decisão
+   * que interessa neste ficheiro.
+   *
+   * A vista por omissão da Bolt — "Last 7 days" — é uma janela deslizante. Na
+   * captura que o cliente enviou, cobria 11 a 17 de agosto: de terça a segunda,
+   * seis dias numa semana de fecho e um noutra. Aceitar esse total obrigava a
+   * escolher uma das duas semanas, e a escolhida ficava com um dia que não lhe
+   * pertence enquanto a outra ficava a menos.
+   *
+   * O erro seria invisível — o número entra no fecho e nada indica que traz
+   * dias de fora. Por isso recusa, e a mensagem diz qual o intervalo a escolher
+   * no portal: quem lê resolve num clique em vez de ficar a pensar no que fez
+   * de errado.
+   */
+  private parsePeriod(input: IngestInput): { periodStart: Date; periodEnd: Date } {
+    const periodStart = new Date(`${input.periodStart}T00:00:00.000Z`);
+    const periodEnd = new Date(`${input.periodEnd}T00:00:00.000Z`);
+
+    if (isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
+      throw new AppError('Datas do período inválidas.', 400, 'INVALID_PERIOD');
+    }
+    if (periodStart > periodEnd) {
+      throw new AppError('O início do período é posterior ao fim.', 400, 'INVALID_PERIOD');
+    }
+
+    if (!sameWeek(periodStart, periodEnd)) {
+      const sugestao = suggestWeek(periodEnd);
+      throw new AppError(
+        `O período de ${input.periodStart} a ${input.periodEnd} atravessa duas semanas de ` +
+        `fecho e não pode ser atribuído a nenhuma delas. No portal, escolha ` +
+        `${sugestao.from} a ${sugestao.to}.`,
+        400,
+        'PERIOD_SPANS_WEEKS',
+      );
+    }
+
+    return { periodStart, periodEnd };
   }
 
   /**
@@ -182,6 +233,11 @@ class IngestService {
     if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
+
+    // Valida o período aqui também. Se só o ingest o recusasse, a
+    // pré-visualização mostrava tudo verde e o erro aparecia ao gravar — o
+    // pior momento para descobrir que o intervalo estava mal escolhido.
+    this.parsePeriod(input);
 
     const drivers = await prisma.user.findMany({
       where: { role: UserRole.DRIVER, status: 'ACTIVE' },

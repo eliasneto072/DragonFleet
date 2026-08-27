@@ -18,9 +18,17 @@ const ingestRow = z.object({
 export const ingestSchema = z.object({
   body: z.object({
     platform: z.nativeEnum(EarningPlatform),
-    // AAAA-MM-DD. A conversão para Date é feita no service, que também recusa
-    // datas impossíveis como 2026-02-31.
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve ser AAAA-MM-DD'),
+
+    // PERÍODO e não um dia só.
+    //
+    // Os portais reportam intervalos: a Bolt mostra "11 Aug - 17 Aug", a Uber
+    // mostra "17/08 04:01 até 18/08 19:42". Aceitar uma data única obrigava
+    // quem chama a escolher um dia para representar a semana toda, e o número
+    // ficava carimbado num dia em que não foi ganho.
+    //
+    // O service recusa períodos que atravessem duas semanas de fecho.
+    periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Deve ser AAAA-MM-DD'),
+    periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Deve ser AAAA-MM-DD'),
     rows: z.array(ingestRow).min(1).max(500),
   }),
 });

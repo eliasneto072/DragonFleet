@@ -30,7 +30,7 @@ ninguém corre.
 
 ### 1. Unitários — funções puras, sem base de dados
 
-**É onde estamos.** 64 testes, correm em menos de um segundo.
+**É onde estamos.** 75 testes, correm em menos de um segundo.
 
 | Ficheiro | O que protege |
 |---|---|
@@ -38,6 +38,7 @@ ninguém corre.
 | `csv-parser.test.ts` | a leitura dos extratos da Uber e da Bolt |
 | `shared/utils/iban.test.ts` | a validação de IBAN pelo resto 97 |
 | `name-matching.test.ts` | casar o nome do portal com o motorista da base |
+| `shared/utils/week.test.ts` | semanas de fecho, com os períodos reais dos portais |
 
 Entra um valor, sai outro. Sem rede, sem base de dados, sem relógio. Nunca
 falham por razões que não sejam o código estar errado, e por isso são as que se
