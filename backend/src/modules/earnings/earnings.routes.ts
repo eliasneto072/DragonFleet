@@ -8,6 +8,7 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { csvUpload } from '../../middlewares/csv-upload.middleware';
 import { earningsController } from './earnings.controller';
 import { earningsImportController } from './import/import.controller';
+import { ingestController } from './import/ingest.controller';
 
 export function earningsRouter(): Router {
   const router = Router();
@@ -31,6 +32,24 @@ export function earningsRouter(): Router {
   // semanas antigas, e para testar a receção enquanto a extensão não existe.
   router.post('/import/preview', csvUpload.single('file'), earningsImportController.preview);
   router.post('/import', csvUpload.single('file'), earningsImportController.commit);
+
+  // ── Receção da extensão de browser ──
+  //
+  // JSON e não multipart: a extensão lê o DOM do portal e tem uma lista em
+  // memória, não um ficheiro. Obrigá-la a fabricar um CSV para o voltar a
+  // desmontar aqui era trabalho a dobrar para perder informação pelo caminho.
+  //
+  // Rota própria e não um alargamento de /import porque o dono é outro: o
+  // /import é o motorista a carregar o próprio extrato, este é o administrador
+  // a enviar a folha da frota inteira, onde cada linha traz um nome que decide
+  // a quem pertence o valor. Permissões diferentes, modos de falha diferentes.
+  //
+  // Autenticação pelo token normal do administrador, que já está autenticado no
+  // browser onde a extensão corre. Uma chave de aplicação separada seria mais
+  // segura — revoga-se sem lhe tirar a conta — e passa a valer a pena quando
+  // houver mais do que um utilizador a usá-la.
+  router.post('/ingest/preview', ingestController.preview);
+  router.post('/ingest', ingestController.ingest);
 
   // Conferência cruzada do fecho: o que o motorista comunicou no intervalo.
   // Antes de '/:id' de propósito — senão "reported" seria lido como um id.

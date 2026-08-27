@@ -29,3 +29,19 @@ assertTestDatabase(TEST_DATABASE_URL);
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.NODE_ENV = 'test';
+
+// ─── SEM EMAILS ──────────────────────────────────────────────────────────────
+//
+// A suite estava a chamar a API da Resend a sério em cada aprovação de
+// retirada. Três problemas, e nenhum deles é pequeno:
+//
+//   - lentidão e dependência de rede num teste que devia ser local;
+//   - gasto de quota de um serviço pago para não verificar nada;
+//   - e o risco que interessa: um teste com um endereço real enviava-lhe mesmo
+//     um email. Hoje só não aconteceu porque a Resend está em modo de teste e
+//     recusou os destinatários fictícios.
+//
+// Apagar a chave desliga o envio na origem: o dispatch() do email.service
+// deteta a ausência e regista em vez de enviar. Não é preciso substituir o
+// serviço por uma imitação.
+process.env.RESEND_API_KEY = '';
