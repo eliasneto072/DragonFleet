@@ -99,7 +99,19 @@ export interface CreateSettlementInput extends SettlementAmounts {
 
 export type UpdateSettlementInput = Omit<CreateSettlementInput, 'userId'>;
 
+export interface PageInfo {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
 export interface ListSettlementsParams {
+  /** 1 é a primeira. Omitido, o servidor devolve a primeira. */
+  page?: number;
+  /** O servidor aplica um teto de 200, por muito que se peça mais. */
+  pageSize?: number;
   userId?: string;
   status?: SettlementStatus;
   from?: string;
@@ -121,9 +133,33 @@ function query(params: Record<string, string | undefined>): string {
 }
 
 export const settlementsService = {
-  /** GET /settlements — motorista vê os próprios; gestão vê todos. */
-  list(params: ListSettlementsParams = {}): Promise<{ settlements: ApiSettlement[] }> {
-    return apiClient.get(`/settlements${query(params as Record<string, string | undefined>)}`);
+  /**
+   * GET /settlements — motorista vê os próprios; gestão vê todos.
+   *
+   * Uma PÁGINA de fechos, mais os totais do filtro inteiro.
+   *
+   * Antes devolvia tudo. Com um ano de dados e 2000 motoristas isso eram
+   * 70,4 MB e 22 segundos num pedido, para desenhar as 25 linhas que a tela
+   * já limitava — o custo de desenhar tinha sido pensado, o de transferir não.
+   *
+   * Os `totals` vêm do servidor e cobrem TODO o filtro, não só a página: o
+   * cartão do topo continua a dizer o total real, sem precisar dos 88 mil
+   * objetos no browser para o somar.
+   */
+  list(params: ListSettlementsParams = {}): Promise<{
+    settlements: ApiSettlement[];
+    page: PageInfo;
+    totals: { credited: number; registeredCount: number };
+  }> {
+    // page e pageSize são números; o query() monta texto. A conversão é
+    // explícita para o `if (v)` do query() não descartar a página 0 — que não
+    // existe, mas o mesmo padrão com um zero legítimo passaria despercebido.
+    const { page, pageSize, ...resto } = params;
+    return apiClient.get(`/settlements${query({
+      ...resto as Record<string, string | undefined>,
+      page: page !== undefined ? String(page) : undefined,
+      pageSize: pageSize !== undefined ? String(pageSize) : undefined,
+    })}`);
   },
 
   /** GET /settlements/:id */

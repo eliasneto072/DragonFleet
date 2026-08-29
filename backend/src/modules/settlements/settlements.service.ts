@@ -24,6 +24,7 @@ import type {
   SettlementUpdateInput,
   SettlementPublic,
 } from './settlements.types';
+import { parsePage } from '../../shared/http/pagination';
 
 /** Limite superior para o intervalo de um fecho, como guarda contra enganos. */
 const MAX_WEEK_DAYS = 31;
@@ -151,18 +152,25 @@ export class SettlementsService {
 
   async list(
     actor: Actor,
-    filter: { userId?: string; status?: SettlementStatus; from?: string; to?: string } = {},
-  ): Promise<SettlementPublic[]> {
+    filter: {
+      userId?: string; status?: SettlementStatus; from?: string; to?: string;
+      page?: unknown; pageSize?: unknown;
+    } = {},
+  ) {
     // Motorista vê apenas os próprios; a gestão vê todos, ou filtra por pessoa.
     const isManager = canManage(actor.role);
     const userId = isManager ? filter.userId : actor.id;
 
-    return settlementsRepository.findMany({
+    // O parsePage aplica o teto. Nenhum valor vindo do URL consegue pedir mais
+    // do que MAX_PAGE_SIZE, por muito que insista.
+    const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
+
+    return settlementsRepository.findManyPaged({
       userId,
       status: filter.status,
       from: filter.from ? parseDay(filter.from, 'from') : undefined,
       to: filter.to ? parseDay(filter.to, 'to') : undefined,
-    }, isManager);
+    }, page, isManager);
   }
 
   async getById(actor: Actor, id: string): Promise<SettlementPublic> {

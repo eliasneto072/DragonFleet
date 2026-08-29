@@ -51,6 +51,10 @@ export const listSettlementsSchema = z.object({
     status: z.nativeEnum(SettlementStatus).optional(),
     from: dayString.optional(),
     to: dayString.optional(),
+    // Chegam como texto na query string. O parsePage trata dos valores
+    // absurdos e aplica o teto; aqui basta deixá-los passar.
+    page: z.string().optional(),
+    pageSize: z.string().optional(),
   }),
 });
 

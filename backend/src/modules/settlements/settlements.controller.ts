@@ -23,8 +23,12 @@ export class SettlementsController {
   // GET /settlements?userId=&status=&from=&to=
   list = async (req: AuthRequest, res: Response) => {
     const parsed = listSettlementsSchema.parse({ query: req.query });
-    const settlements = await settlementsService.list(getActor(req), parsed.query);
-    return ok(res, { settlements });
+    const { items, page, totals } = await settlementsService.list(getActor(req), parsed.query);
+
+    // `settlements` mantém o nome de sempre: o que muda é passar a ser uma
+    // página. `page` diz quantas há ao todo e `totals` traz as somas do filtro
+    // inteiro, que a tela mostrava somando tudo no browser.
+    return ok(res, { settlements: items, page, totals });
   };
 
   // GET /settlements/:id

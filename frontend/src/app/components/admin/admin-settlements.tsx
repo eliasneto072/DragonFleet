@@ -34,8 +34,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronRight, Eye, EyeOff,
-  FileText, Loader2, Pencil, Plus, ReceiptText, Trash2,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileText, Loader2, Pencil, Plus, ReceiptText, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
@@ -97,6 +96,15 @@ function stamp(iso: string): string {
 }
 
 /** Linhas por página. */
+/**
+ * Registos por página.
+ *
+ * 25 era o teto de RENDERIZAÇÃO — a tela desenhava 25 e descarregava tudo.
+ * Agora é o que se pede ao servidor, e é por isso que o número passou a
+ * importar: define o tamanho do pedido, não só o do ecrã.
+ *
+ * O servidor tem um teto próprio de 200 e ignora qualquer pedido acima disso.
+ */
 const PAGE_SIZE = 25;
 
 type PeriodKey = 'all' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom';
@@ -346,38 +354,49 @@ export function AdminSettlements({ hideHeader = false }: Props) {
     };
   }, [driverFilter, statusFilter, period, customFrom, customTo]);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  // A página vive no estado da tela e entra na chave da consulta, para o
+  // React Query tratar cada página como um resultado próprio e conseguir
+  // servir a anterior da cache quando se volta atrás.
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     // O período entra na chave, senão trocar de filtro devolveria a cache do
     // intervalo anterior.
     queryKey: [
       ...queryKeys.settlements.list(params.userId, params.status),
-      params.from ?? 'any', params.to ?? 'any',
+      params.from ?? 'any', params.to ?? 'any', page,
     ] as const,
-    queryFn: () => settlementsService.list(params),
+    queryFn: () => settlementsService.list({ ...params, page, pageSize: PAGE_SIZE }),
+    // Sem isto, mudar de página piscava o esqueleto entre as duas. Manter o
+    // resultado anterior enquanto o novo chega faz a tabela ficar quieta.
+    placeholderData: (anterior) => anterior,
     enabled: mode.view === 'list',
   });
   const all = data?.settlements ?? [];
 
   /**
-   * Só os registados contam para o total: rascunhos ainda não creditaram nada
-   * e cancelados foram revertidos. Somar os três daria um número que não
-   * corresponde a dinheiro nenhum.
+   * Os totais vêm do SERVIDOR e cobrem o filtro inteiro, não a página.
+   *
+   * Eram somados aqui, percorrendo a lista toda — e era essa soma que obrigava
+   * o servidor a mandar os 88 mil fechos. O Postgres faz a mesma conta em 32ms.
+   *
+   * A regra mantém-se: só os registados contam. Rascunhos ainda não creditaram
+   * nada e cancelados foram revertidos.
    */
-  const registeredTotal = all
-    .filter((x) => x.status === 'REGISTERED')
-    .reduce((sum, x) => sum + x.netToDriver, 0);
-  const registeredCount = all.filter((x) => x.status === 'REGISTERED').length;
+  const registeredTotal = data?.totals.credited ?? 0;
+  const registeredCount = data?.totals.registeredCount ?? 0;
+  const totalFechos = data?.page.total ?? 0;
+  const pageInfo = data?.page;
 
   // Teto de linhas. Com cinquenta motoristas ao fim de um ano são 2.600
   // fechos, e a tela renderizaria todos. Quem procura um específico usa os
   // filtros — é para isso que eles existem.
-  const [limit, setLimit] = useState(PAGE_SIZE);
-  const settlements = all.slice(0, limit);
+  const settlements = all;
 
   // Repõe o limite quando os filtros mudam: sem isto, filtrar mantinha
   // abertas as linhas extra de uma pesquisa anterior.
   useEffect(() => {
-    setLimit(PAGE_SIZE);
+    setPage(1);
   }, [driverFilter, statusFilter, period, customFrom, customTo]);
 
   const invalidate = () => {
@@ -566,7 +585,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
           <CardHeader className="p-4 sm:p-6">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <CardTitle className="text-base sm:text-lg">
-                {all.length} fecho{all.length !== 1 ? 's' : ''}
+                {totalFechos} fecho{totalFechos !== 1 ? 's' : ''}
               </CardTitle>
               {registeredCount > 0 && (
                 <p className="text-sm text-muted-foreground">
@@ -659,15 +678,51 @@ export function AdminSettlements({ hideHeader = false }: Props) {
               ))}
             </ul>
 
-            {all.length > settlements.length && (
-              <button
-                type="button"
-                onClick={() => setLimit((n) => n + PAGE_SIZE)}
-                className="mt-3 w-full border-t border-border pt-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Mostrar mais {Math.min(PAGE_SIZE, all.length - settlements.length)} de{' '}
-                {all.length - settlements.length} restantes
-              </button>
+            {/* Páginas numeradas e não "mostrar mais": esta é uma tela de
+                trabalho onde se procura um fecho, e com 88 mil registos
+                ninguém chega ao fim a carregar num botão. Saber em que página
+                se está, e poder saltar para o fim, é o que se espera de uma
+                listagem de contabilidade. */}
+            {pageInfo && pageInfo.totalPages > 1 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  Página {pageInfo.page} de {pageInfo.totalPages} · {pageInfo.total} no total
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm" variant="outline" className="h-8 px-2"
+                    disabled={pageInfo.page <= 1 || isFetching}
+                    onClick={() => setPage(1)}
+                    aria-label="Primeira página"
+                  >
+                    <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-8 px-2"
+                    disabled={pageInfo.page <= 1 || isFetching}
+                    onClick={() => setPage((p) => p - 1)}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-8 px-2"
+                    disabled={!pageInfo.hasMore || isFetching}
+                    onClick={() => setPage((p) => p + 1)}
+                    aria-label="Página seguinte"
+                  >
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-8 px-2"
+                    disabled={!pageInfo.hasMore || isFetching}
+                    onClick={() => setPage(pageInfo.totalPages)}
+                    aria-label="Última página"
+                  >
+                    <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

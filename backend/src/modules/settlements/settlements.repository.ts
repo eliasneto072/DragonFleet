@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { SettlementStatus } from '../../shared/types/enums';
 import type { SettlementPublic } from './settlements.types';
+import { buildPageInfo, type PageParams, type Paged } from '../../shared/http/pagination';
 
 const include = {
   user: { select: { name: true } },
@@ -84,29 +85,69 @@ export const settlementsRepository = {
     return row ? toPublic(row as Row, includeInternal) : null;
   },
 
-  async findMany(filter: {
+  /**
+   * Uma página de fechos, mais os totais do filtro INTEIRO.
+   *
+   * ─── POR QUE OS TOTAIS VÊM DAQUI ───────────────────────────────────────────
+   *
+   * A tela mostrava "31 390 409,71 € creditados em 88207 fechos" e chegava lá
+   * somando os 88 mil objetos no browser. Era essa soma que obrigava a mandar
+   * tudo — e o Postgres faz a mesma conta em 32 milissegundos.
+   *
+   * Por isso os totais NÃO são da página: são de tudo o que o filtro apanha.
+   * Sem isso, paginar teria partido o cartão do topo, que passaria a dizer o
+   * total dos cinquenta visíveis em vez do total real.
+   */
+  async findManyPaged(filter: {
     userId?: string;
     status?: SettlementStatus;
     from?: Date;
     to?: Date;
-  }, includeInternal = false): Promise<SettlementPublic[]> {
-    const rows = await prisma.weeklySettlement.findMany({
-      where: {
-        ...(filter.userId ? { userId: filter.userId } : {}),
-        ...(filter.status ? { status: filter.status } : {}),
-        ...(filter.from || filter.to
-          ? {
-              weekStart: {
-                ...(filter.from ? { gte: filter.from } : {}),
-                ...(filter.to ? { lte: filter.to } : {}),
-              },
-            }
-          : {}),
+  }, page: PageParams, includeInternal = false): Promise<
+    Paged<SettlementPublic> & { totals: { credited: number; registeredCount: number } }
+  > {
+    const where = {
+      ...(filter.userId ? { userId: filter.userId } : {}),
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.from || filter.to
+        ? {
+            weekStart: {
+              ...(filter.from ? { gte: filter.from } : {}),
+              ...(filter.to ? { lte: filter.to } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [rows, total, somas] = await Promise.all([
+      prisma.weeklySettlement.findMany({
+        where,
+        orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
+        include,
+        skip: page.skip,
+        take: page.pageSize,
+      }),
+
+      prisma.weeklySettlement.count({ where }),
+
+      // Só os REGISTADOS entram no creditado: um rascunho aparece na lista mas
+      // ainda não é dinheiro. O cartão do topo dizia "creditados", e contar
+      // rascunhos aí seria prometer o que não foi pago.
+      prisma.weeklySettlement.aggregate({
+        where: { ...where, status: SettlementStatus.REGISTERED },
+        _sum: { netToDriver: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return {
+      items: rows.map((r) => toPublic(r as Row, includeInternal)),
+      page: buildPageInfo(page, total),
+      totals: {
+        credited: Number(somas._sum.netToDriver ?? 0),
+        registeredCount: somas._count._all,
       },
-      orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
-      include,
-    });
-    return rows.map((r) => toPublic(r as Row, includeInternal));
+    };
   },
 
   /**
