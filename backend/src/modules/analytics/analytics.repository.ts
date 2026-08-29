@@ -17,16 +17,67 @@ import {
  * getOverview → o que precisa de ação agora (painel)
  */
 
-export type Granularity = 'day' | 'month';
+/**
+ * 'week' e não 'day': cada ponto do gráfico é uma SEMANA fechada.
+ *
+ * Enquanto as análises somavam lançamentos, que têm data própria, um ponto por
+ * dia fazia sentido. Agora somam fechos, e um fecho cobre a semana inteira —
+ * chamar-lhe "dia" era rotular o gráfico com uma unidade que ele não usa.
+ *
+ * O bucket continua a ser AAAA-MM-DD: é a segunda-feira que abre a semana.
+ */
+export type Granularity = 'week' | 'month';
 
+/**
+ * ─── AS ANÁLISES LEEM DOS FECHOS, NÃO DOS LANÇAMENTOS ────────────────────────
+ *
+ * A versão anterior somava a tabela `earnings` e tinha dois defeitos, ambos
+ * a produzir números errados na tela todos os dias:
+ *
+ * 1. NÃO FILTRAVA O ESTADO. Um lançamento comunicado e depois REJEITADO
+ *    continuava a contar no total, no gráfico, na média e no ranking. Um
+ *    lançamento rejeitado é precisamente um que foi julgado errado.
+ *
+ * 2. MEDIA O QUE FOI DITO, NÃO O QUE FOI PAGO. Neste sistema, `earnings` são
+ *    valores comunicados — informação por conferir. Dinheiro a sério só existe
+ *    num WeeklySettlement REGISTERED. A tela de Análises estava a apresentar
+ *    declarações como se fossem faturação.
+ *
+ * E a receita da empresa era calculada no browser como
+ * `grossEarnings × comissão atual`, o que ignorava duas coisas de uma vez: que
+ * cada fecho grava a SUA percentagem — mudar a comissão hoje reescrevia a
+ * receita histórica — e que a comissão incide sobre o LUCRO, não sobre o bruto,
+ * portanto o número saía sempre acima do que a empresa recebeu.
+ *
+ * Agora tudo vem de colunas gravadas e congeladas no fecho: commissionAmount,
+ * netToDriver, grossRevenue, uberAmount, boltAmount. Nenhuma é recalculada, e
+ * por isso nenhuma pode divergir do recibo que o motorista tem na mão.
+ *
+ * CONSEQUÊNCIA A CONHECER: as Análises passam a refletir SEMANAS FECHADAS. Uma
+ * semana ainda por registar não aparece — o que é correto, porque ainda não é
+ * dinheiro, mas explica por que um período recente pode aparecer vazio.
+ */
 export interface AnalyticsStats {
   range: { from: Date; to: Date; granularity: Granularity };
   totalDrivers: number;
   activeDrivers: number;
+  /** Faturação bruta dos fechos registados: Uber + Bolt + outras receitas. */
   grossEarnings: number;
-  earningsCount: number;
+  /** Comissão da empresa, somada tal como ficou gravada em cada fecho. */
+  companyRevenue: number;
+  /** O que os motoristas receberam, líquido de despesas e comissão. */
+  netToDrivers: number;
+  /** Quantos fechos entram nestes números. */
+  settlementsCount: number;
   activeInPeriod: number;
   pendingWithdrawals: number;
+  /**
+   * Repartição por plataforma, das colunas do fecho.
+   *
+   * Vem daqui e não do `platform` dos lançamentos porque é o valor auditado —
+   * é o que foi usado para pagar. `count` é o número de fechos que tiveram
+   * receita nessa plataforma, não o número de lançamentos.
+   */
   earningsByPlatform: { platform: EarningPlatform; total: number; count: number }[];
   series: { bucket: string; total: number }[];
   topDrivers: { name: string; email: string; total: number }[];
@@ -85,22 +136,28 @@ export interface OverviewRaw {
  */
 function pickGranularity(from: Date, to: Date): Granularity {
   const days = (to.getTime() - from.getTime()) / 86_400_000;
-  return days <= 62 ? 'day' : 'month';
+  return days <= 62 ? 'week' : 'month';
 }
 
 export const analyticsRepository = {
   async getStats(from: Date, to: Date): Promise<AnalyticsStats> {
     const granularity = pickGranularity(from, to);
-    const bucketFormat = granularity === 'day' ? 'YYYY-MM-DD' : 'YYYY-MM';
-    const inRange = { date: { gte: from, lte: to } };
+    const bucketFormat = granularity === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
+
+    // Um fecho entra no período quando a SEMANA A QUE DIZ RESPEITO acaba lá
+    // dentro — não quando foi registado. Um fecho da semana de março lançado
+    // com atraso em abril continua a ser faturação de março, e é assim que o
+    // contabilista o vai procurar.
+    const noPeriodo = {
+      status: SettlementStatus.REGISTERED,
+      weekEnd: { gte: from, lte: to },
+    };
 
     const [
       totalDrivers,
       activeDrivers,
-      grossRaw,
-      earningsCount,
+      totais,
       pendingWithdrawals,
-      byPlatform,
       seriesRaw,
       activeRaw,
       topDriversRaw,
@@ -111,82 +168,88 @@ export const analyticsRepository = {
         where: { role: UserRole.DRIVER, status: UserStatus.ACTIVE },
       }),
 
-      prisma.earning.aggregate({ _sum: { amount: true }, where: inRange }),
-
-      prisma.earning.count({ where: inRange }),
+      // Uma agregação só para tudo o que é dinheiro. Cada coluna já foi
+      // calculada e congelada no momento do fecho; aqui apenas se somam.
+      prisma.weeklySettlement.aggregate({
+        where: noPeriodo,
+        _sum: {
+          grossRevenue: true,
+          commissionAmount: true,
+          netToDriver: true,
+          uberAmount: true,
+          boltAmount: true,
+          otherRevenue: true,
+        },
+        _count: { _all: true },
+      }),
 
       prisma.withdrawal.count({ where: { status: WithdrawalStatus.PENDING } }),
 
-      // Soma EUROS por plataforma. O frontend fazia map[platform] += 1, ou
-      // seja, contava lançamentos: uma plataforma com muitos registos pequenos
-      // aparecia maior que outra com poucos e grandes.
-      prisma.earning.groupBy({
-        by: ['platform'],
-        _sum: { amount: true },
-        _count: { _all: true },
-        where: inRange,
-        orderBy: { _sum: { amount: 'desc' } },
-      }),
-
       // TO_CHAR aceita o formato como parâmetro, por isso a interpolação
       // continua parametrizada e não vira concatenação de SQL.
+      //
+      // Agrupa por week_start e não por week_end: a semana pertence ao dia em
+      // que começou, e é assim que fica alinhada com o resto do sistema.
       prisma.$queryRaw<{ bucket: string; total: number }[]>`
         SELECT
-          TO_CHAR(date, ${bucketFormat}) AS bucket,
-          CAST(SUM(amount) AS FLOAT)     AS total
-        FROM earnings
-        WHERE date >= ${from} AND date <= ${to}
+          TO_CHAR(week_start, ${bucketFormat})   AS bucket,
+          CAST(SUM(gross_revenue) AS FLOAT)      AS total
+        FROM weekly_settlements
+        WHERE status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
 
-      // Retenção real: quem de facto faturou. Diferente de status = ACTIVE,
-      // que é estado de cadastro — alguém pode estar ativo e parado há meses.
+      // Quem teve semana fechada no período. É retenção a sério: diferente de
+      // status = ACTIVE, que é estado de cadastro — alguém pode estar ativo e
+      // parado há meses.
       prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(DISTINCT user_id)::int AS count
-        FROM earnings
-        WHERE date >= ${from} AND date <= ${to}
+        FROM weekly_settlements
+        WHERE status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
       `,
 
       prisma.$queryRaw<{ name: string; email: string; total: number }[]>`
-        SELECT u.name, u.email, CAST(SUM(e.amount) AS FLOAT) AS total
-        FROM earnings e
-        JOIN users u ON u.id = e.user_id
-        WHERE e.date >= ${from} AND e.date <= ${to}
+        SELECT u.name, u.email, CAST(SUM(s.gross_revenue) AS FLOAT) AS total
+        FROM weekly_settlements s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.status = 'REGISTERED' AND s.week_end >= ${from} AND s.week_end <= ${to}
         GROUP BY u.id, u.name, u.email
         ORDER BY total DESC
         LIMIT 10
       `,
     ]);
 
+    const soma = totais._sum;
+    const n = (v: unknown) => Number(v ?? 0);
+
+    // Só entram as plataformas com valor. Uma linha "Free Now: 0 €" num
+    // gráfico de repartição não informa nada e ocupa legenda.
+    const porPlataforma = [
+      { platform: EarningPlatform.UBER, total: n(soma.uberAmount) },
+      { platform: EarningPlatform.BOLT, total: n(soma.boltAmount) },
+      { platform: EarningPlatform.OTHER, total: n(soma.otherRevenue) },
+    ]
+      .filter((p) => p.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .map((p) => ({ ...p, count: totais._count._all }));
+
     return {
       range: { from, to, granularity },
       totalDrivers,
       activeDrivers,
-      grossEarnings: Number(grossRaw._sum.amount ?? 0),
-      earningsCount,
+      grossEarnings: n(soma.grossRevenue),
+      companyRevenue: n(soma.commissionAmount),
+      netToDrivers: n(soma.netToDriver),
+      settlementsCount: totais._count._all,
       activeInPeriod: Number(activeRaw[0]?.count ?? 0),
       pendingWithdrawals,
-      earningsByPlatform: byPlatform.map((e) => ({
-        platform: e.platform as EarningPlatform,
-        total: Number(e._sum.amount ?? 0),
-        count: e._count._all,
-      })),
+      earningsByPlatform: porPlataforma,
       series: seriesRaw.map((s) => ({ bucket: s.bucket, total: Number(s.total) })),
-      topDrivers: topDriversRaw.map((d) => ({
-        name: d.name,
-        email: d.email,
-        total: Number(d.total),
-      })),
+      topDrivers: topDriversRaw.map((d) => ({ ...d, total: Number(d.total) })),
     };
   },
 
-  /**
-   * Dados do painel: fila de trabalho, posição financeira e motoristas parados.
-   *
-   * @param stalledSince  Corte para considerar um motorista parado.
-   * @param expiringUntil Limite superior do aviso de expiração de documento.
-   */
   async getOverview(
     stalledSince: Date,
     expiringUntil: Date,

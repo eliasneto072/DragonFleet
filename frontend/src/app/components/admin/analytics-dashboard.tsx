@@ -76,7 +76,7 @@ function periodRange(period: PeriodKey): { from: string; to: string } {
 }
 
 /** "2026-07-14" → "14/07"  ·  "2026-07" → "jul." */
-function formatBucket(bucket: string, granularity: 'day' | 'month'): string {
+function formatBucket(bucket: string, granularity: 'week' | 'month'): string {
   if (granularity === 'month') {
     const [y, m] = bucket.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('pt-PT', { month: 'short' });
@@ -184,8 +184,12 @@ export function AnalyticsDashboard() {
 
   const granularity = stats.range.granularity;
   // Comissão da resposta, não de shared/constants — ver nota no topo.
-  const commission = stats.companyCommission;
-  const revenue = stats.grossEarnings * commission;
+  // A receita vem somada do servidor, das comissões gravadas em cada fecho.
+  // Era calculada aqui como `grossEarnings × comissão atual`, e isso ignorava
+  // duas coisas: que cada fecho grava a SUA percentagem — mudar a comissão hoje
+  // reescrevia a receita histórica — e que ela incide sobre o lucro e não sobre
+  // o bruto, portanto o número saía sempre acima do que a empresa recebeu.
+  const revenue = stats.companyRevenue;
 
   const series = stats.series.map((s) => ({
     label: formatBucket(s.bucket, granularity),
@@ -200,8 +204,8 @@ export function AnalyticsDashboard() {
   const average = active.length
     ? active.reduce((s, b) => s + b.total, 0) / active.length
     : 0;
-  const unit = granularity === 'month' ? 'mês' : 'dia';
-  const unitPlural = granularity === 'month' ? 'meses' : 'dias';
+  const unit = granularity === 'month' ? 'mês' : 'semana';
+  const unitPlural = granularity === 'month' ? 'meses' : 'semanas';
 
   const platformTotal = stats.earningsByPlatform.reduce((s, p) => s + p.total, 0);
   const segments = stats.earningsByPlatform.map((p) => ({
@@ -218,8 +222,10 @@ export function AnalyticsDashboard() {
     ? (stats.activeInPeriod / stats.totalDrivers) * 100
     : 0;
 
-  const avgPerEntry = stats.earningsCount > 0
-    ? stats.grossEarnings / stats.earningsCount
+  // Média por motorista e não por lançamento: quem fecha a semana quer saber
+  // quanto rendeu uma pessoa, não quanto rendeu uma linha de extrato.
+  const avgPerDriver = stats.activeInPeriod > 0
+    ? stats.grossEarnings / stats.activeInPeriod
     : 0;
 
   return (
@@ -247,12 +253,12 @@ export function AnalyticsDashboard() {
         <Metric
           label="Receita da plataforma"
           value={formatCurrency(revenue)}
-          hint={`${Math.round(commission * 100)}% dos ganhos brutos`}
+          hint="Comissão gravada em cada fecho"
         />
         <Metric
-          label="Ganhos dos motoristas"
+          label="Faturação da frota"
           value={formatCurrency(stats.grossEarnings)}
-          hint={`${stats.earningsCount} lançamento${stats.earningsCount !== 1 ? 's' : ''}`}
+          hint={`${stats.settlementsCount} ${stats.settlementsCount === 1 ? 'semana fechada' : 'semanas fechadas'}`}
         />
         <Metric
           label="Motoristas que faturaram"
@@ -260,9 +266,9 @@ export function AnalyticsDashboard() {
           hint={`${formatShare(retention)} do cadastro`}
         />
         <Metric
-          label="Média por lançamento"
-          value={formatCurrency(avgPerEntry)}
-          hint="Ganhos brutos ÷ lançamentos"
+          label="Pago aos motoristas"
+          value={formatCurrency(stats.netToDrivers)}
+          hint={`Média de ${formatCurrency(avgPerDriver)} faturados por motorista`}
         />
       </div>
 
@@ -282,8 +288,8 @@ export function AnalyticsDashboard() {
                   período, "sem movimento suficiente" parece contradição. */}
               <p className="max-w-md text-sm text-muted-foreground">
                 {active.length === 0
-                  ? 'Nenhum lançamento neste período.'
-                  : `Todos os lançamentos deste período caem no mesmo ${unit}. Com movimento em pelo menos dois ${unitPlural}, o gráfico aparece aqui.`}
+                  ? 'Nenhuma semana fechada neste período. As análises refletem fechos registados — uma semana ainda por fechar não aparece aqui.'
+                  : `Só há uma ${unit} fechada neste período. Com pelo menos duas, o gráfico aparece aqui.`}
               </p>
             </div>
           ) : (
@@ -330,15 +336,15 @@ export function AnalyticsDashboard() {
       {/* Origem da receita */}
       <Card className="shadow-card">
         <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">De onde vem a receita</CardTitle>
+          <CardTitle className="text-base sm:text-lg">De onde vem a faturação</CardTitle>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {formatCurrency(platformTotal)} em ganhos brutos no período
+            {formatCurrency(platformTotal)} faturados por plataforma, nas semanas fechadas
           </p>
         </CardHeader>
         <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {segments.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum lançamento no período.
+              Nenhuma semana fechada no período.
             </p>
           ) : (
             <>
@@ -399,13 +405,13 @@ export function AnalyticsDashboard() {
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg">Quem mais faturou</CardTitle>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Ganhos brutos por motorista no período
+            Faturação por motorista, nas semanas fechadas
           </p>
         </CardHeader>
         <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {stats.topDrivers.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum motorista com lançamentos no período.
+              Nenhuma semana fechada neste período.
             </p>
           ) : (
             <ul>

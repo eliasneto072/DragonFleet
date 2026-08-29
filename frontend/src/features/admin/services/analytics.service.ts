@@ -3,25 +3,44 @@
 import { apiClient } from '@/shared/lib/api-client';
 import type { EarningPlatform } from '@/shared/types/api';
 
-export type Granularity = 'day' | 'month';
+/** 'week': cada ponto é uma semana fechada, identificada pela segunda-feira. */
+export type Granularity = 'week' | 'month';
 
 export interface ApiStats {
   range: { from: string; to: string; granularity: Granularity };
   /** Estado do cadastro — não depende do período consultado. */
   totalDrivers: number;
   activeDrivers: number;
-  /** Métricas do período. */
-  grossEarnings: number;
-  earningsCount: number;
   /**
-   * Motoristas distintos que lançaram ganhos no período. Diferente de
+   * ─── MÉTRICAS DO PERÍODO, VINDAS DOS FECHOS REGISTADOS ─────────────────────
+   *
+   * Todas estas somam colunas gravadas e congeladas no fecho. Não são
+   * recalculadas em lado nenhum, e por isso não podem divergir do recibo que o
+   * motorista tem na mão.
+   *
+   * Antes vinham dos lançamentos comunicados, sem filtrar o estado: um valor
+   * REJEITADO continuava a contar. E a receita da empresa era calculada aqui no
+   * browser como bruto × comissão atual, o que ignorava as percentagens
+   * congeladas de cada fecho e a incidência sobre o lucro em vez do bruto.
+   *
+   * Refletem SEMANAS FECHADAS: uma semana por registar não aparece.
+   */
+  /** Faturação bruta: Uber + Bolt + outras receitas. */
+  grossEarnings: number;
+  /** Comissão da empresa, como ficou gravada em cada fecho. */
+  companyRevenue: number;
+  /** O que os motoristas receberam, líquido de despesas e comissão. */
+  netToDrivers: number;
+  settlementsCount: number;
+  /**
+   * Motoristas distintos com semana fechada no período. Diferente de
    * activeDrivers, que conta status = ACTIVE: alguém pode estar ativo no
    * cadastro e não trabalhar há meses.
    */
   activeInPeriod: number;
   pendingWithdrawals: number;
   earningsByPlatform: { platform: EarningPlatform; total: number; count: number }[];
-  /** Bucket é "YYYY-MM-DD" ou "YYYY-MM", conforme range.granularity. */
+  /** Bucket é "YYYY-MM-DD" (segunda-feira da semana) ou "YYYY-MM". */
   series: { bucket: string; total: number }[];
   topDrivers: { name: string; email: string; total: number }[];
   /**
