@@ -139,4 +139,66 @@ export const apiClient = {
    */
   upload: <T>(path: string, form: FormData, method: 'POST' | 'PUT' | 'PATCH' = 'POST') =>
     request<T>(path, { method, body: form }),
+
+  /**
+   * Descarrega binário: PDF, imagens, documentos.
+   *
+   * Não passa pelo request() porque esse desembrulha JSON, e um PDF não é JSON.
+   * Mas repete o que interessa — o token, e os erros em ApiError com o `code`,
+   * porque mesmo nestas rotas a resposta de ERRO vem em JSON.
+   *
+   * Devolve também o nome do ficheiro que o servidor sugere no
+   * Content-Disposition. Sem ele, cada tela inventava o seu, e o utilizador
+   * recebia nomes diferentes para o mesmo relatório conforme o sítio de onde o
+   * pediu.
+   *
+   * A renovação silenciosa da sessão NÃO se aplica aqui: um download que
+   * apanhe um token expirado devolve 401 e quem chama volta a tentar. Trazer a
+   * fila de renovação para este caminho duplicava-a por um ganho pequeno — os
+   * downloads são raros e o utilizador está à frente do ecrã quando os pede.
+   */
+  async download(path: string): Promise<{ blob: Blob; filename: string | null }> {
+    const token = tokenStorage.getAccess();
+
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new ApiError(
+        res.status,
+        json?.code ?? 'DOWNLOAD_ERROR',
+        json?.message ?? 'Não foi possível obter o ficheiro.',
+      );
+    }
+
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+
+    return { blob: await res.blob(), filename: match?.[1] ?? null };
+  },
 };
+
+/**
+ * Provoca a transferência de um blob para o disco do utilizador.
+ *
+ * O revokeObjectURL é obrigatório: sem ele, cada relatório descarregado deixa
+ * o ficheiro inteiro retido na memória do separador até ele ser fechado.
+ *
+ * MAS COM ATRASO, e não logo a seguir ao clique. Havia duas cópias disto no
+ * projeto e discordavam uma da outra: a do admin revogava de imediato, a do
+ * motorista esperava um segundo com um comentário a dizer que revogar cedo
+ * cancela o download nalguns browsers. Alguém apanhou esse bug e escreveu-o;
+ * a versão cautelosa é a que fica.
+ */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
