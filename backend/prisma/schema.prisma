@@ -302,6 +302,10 @@ model Withdrawal {
 
   @@index([userId])
   @@index([status])
+  // A tela de Recibos Verdes agrupa e soma por sociedade, e o cartao das
+  // sociedades conta os recibos de cada uma. Sem este indice, cada uma dessas
+  // consultas e um varrimento sequencial da tabela toda.
+  @@index([companyId])
   @@map("withdrawals")
 }
 

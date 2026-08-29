@@ -56,7 +56,15 @@ function ymd(iso: string): string {
 
 // ── Gestão da lista de sociedades ─────────────────────────────────────────────
 
-function CompaniesCard() {
+/**
+ * Gestao da lista, e o total de cada sociedade.
+ *
+ * `onSelect` liga o cartao ao registo por baixo: clicar numa sociedade
+ * filtra a lista para os recibos que compoem aquele total. Sem isso, os
+ * numeros ficavam por verificar — a tela dizia "4 recibos, 820 EUR" e nao
+ * havia caminho nenhum para ver quais.
+ */
+function CompaniesCard({ onSelect }: { onSelect: (companyId: string) => void }) {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState('');
   const [editing, setEditing] = useState<ApiCompany | null>(null);
@@ -121,15 +129,28 @@ function CompaniesCard() {
           <ul className="divide-y divide-border">
             {companies.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center gap-2 py-2 first:pt-0">
-                <div className="min-w-0 flex-1">
+                {/* A linha filtra o registo por esta sociedade. É o caminho
+                    dos números para os recibos que os compõem: ver "4 recibos,
+                    820 €" e não poder abrir os quatro deixava o total por
+                    verificar. */}
+                <button
+                  type="button"
+                  onClick={() => onSelect(c.id)}
+                  className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Ver os recibos de ${c.name}`}
+                >
                   <p className={`truncate text-sm ${c.active ? 'font-medium' : 'text-muted-foreground line-through'}`}>
                     {c.name}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {c.withdrawalCount ?? 0} recibo{(c.withdrawalCount ?? 0) === 1 ? '' : 's'}
+                    {c.receiptCount ?? 0} recibo{(c.receiptCount ?? 0) === 1 ? '' : 's'}
+                    {' · '}
+                    <span className="font-medium text-foreground">
+                      {formatCurrency(c.receiptTotal ?? 0)}
+                    </span>
                     {!c.active && ' · desativada'}
                   </p>
-                </div>
+                </button>
 
                 <Button
                   size="sm" variant="ghost" className="h-8 w-8 p-0" disabled={updating}
@@ -145,9 +166,13 @@ function CompaniesCard() {
                 >
                   <Power className={`h-3.5 w-3.5 ${c.active ? '' : 'text-muted-foreground'}`} aria-hidden="true" />
                 </Button>
-                {/* Só sem recibos. O servidor recusa de qualquer maneira, mas
-                    esconder o botão poupa o erro a quem não sabe a regra. */}
-                {(c.withdrawalCount ?? 0) === 0 && (
+                {/* linkedCount e não receiptCount: o servidor recusa apagar
+                    por causa de QUALQUER retirada ligada, incluindo as que
+                    foram rejeitadas depois de classificadas e que não contam
+                    como recibo. Usar o número visível escondia o botão em
+                    casos diferentes daqueles em que o servidor recusa, e o
+                    erro aparecia sem explicação. */}
+                {(c.linkedCount ?? 0) === 0 && (
                   <Button
                     size="sm" variant="ghost" className="h-8 w-8 p-0"
                     onClick={() => remove(c.id)}
@@ -279,6 +304,22 @@ export function GreenReceipts() {
     .filter((w) => (w.status === 'APPROVED' || w.status === 'PAID') && !w.companySetAt).length;
 
   /**
+   * Soma do que esta filtrado.
+   *
+   * Somada aqui e nao no servidor porque e a soma DESTAS linhas, as que estao
+   * a ser mostradas — e o ponto e poder confronta-la com o total que o cartao
+   * da sociedade mostra. Se filtrar por uma sociedade e os dois numeros nao
+   * baterem, ha alguma coisa errada e ve-se a olho.
+   *
+   * A conta e sobre poucas dezenas de linhas ja convertidas para numero. Os
+   * totais que contam — os do cartao — vem somados em SQL.
+   */
+  const filteredTotal = useMemo(
+    () => rows.reduce((sum, w) => sum + Number(w.amount), 0),
+    [rows],
+  );
+
+  /**
    * Exportação para o contabilista.
    *
    * Feita no cliente sobre o que está filtrado: o que ele leva é o que está a
@@ -342,7 +383,7 @@ export function GreenReceipts() {
         }
       />
 
-      <CompaniesCard />
+      <CompaniesCard onSelect={setCompanyFilter} />
 
       {unclassified > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
@@ -387,6 +428,17 @@ export function GreenReceipts() {
               Nenhum recibo corresponde a estes filtros.
             </p>
           ) : (
+            <>
+            {/* O total do que esta em baixo. Confronta-se com o numero do
+                cartao quando o filtro e uma sociedade so. */}
+            <div className="mb-3 flex items-baseline justify-between border-b border-border pb-2">
+              <span className="text-xs text-muted-foreground">
+                {rows.length} recibo{rows.length === 1 ? '' : 's'}
+              </span>
+              <span className="text-sm font-semibold tabular-nums">
+                {formatCurrency(filteredTotal)}
+              </span>
+            </div>
             <ul className="divide-y divide-border">
               {rows.map((w) => {
                 const c = describeCompany(w);
@@ -442,6 +494,7 @@ export function GreenReceipts() {
                 );
               })}
             </ul>
+            </>
           )}
         </CardContent>
       </Card>

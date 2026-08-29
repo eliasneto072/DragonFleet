@@ -106,8 +106,25 @@ export interface ApiCompany {
   name: string;
   active: boolean;
   sortOrder: number;
-  /** Só vem na listagem. Impede apagar uma sociedade que já tem recibos. */
-  withdrawalCount?: number;
+
+  /**
+   * Recibos emitidos a esta sociedade: só aprovados e pagos, o mesmo universo
+   * do registo por baixo. Só vem na listagem.
+   */
+  receiptCount?: number;
+
+  /** Soma desses recibos, em euros. Vem somada do servidor, não do browser. */
+  receiptTotal?: number;
+
+  /**
+   * Retiradas ligadas a esta sociedade seja em que estado for — incluindo as
+   * que foram rejeitadas depois de classificadas, que o registo não mostra.
+   *
+   * É este número, e não o receiptCount, que decide se o apagar é possível: a
+   * chave estrangeira é SET NULL e não distingue estados. Uma sociedade pode
+   * ter zero recibos e ainda assim não poder ser apagada.
+   */
+  linkedCount?: number;
 }
 
 /**
