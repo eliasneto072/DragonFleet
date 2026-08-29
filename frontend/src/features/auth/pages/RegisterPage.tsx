@@ -53,11 +53,11 @@ export function RegisterPage() {
     e.preventDefault();
 
     if (password !== confirm) {
-      showError('As senhas não coincidem.');
+      showError('As palavras-passe não coincidem.');
       return;
     }
     if (password.length < 6) {
-      showError('A senha deve ter pelo menos 6 caracteres.');
+      showError('A palavra-passe deve ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -194,7 +194,7 @@ export function RegisterPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="password">Senha</label>
+              <label className="text-sm font-medium text-gray-700" htmlFor="password">Palavra-passe</label>
               <div className="relative">
                 <input
                   id="password"
@@ -219,7 +219,7 @@ export function RegisterPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="confirm">Confirmar senha</label>
+              <label className="text-sm font-medium text-gray-700" htmlFor="confirm">Confirmar palavra-passe</label>
               <input
                 id="confirm"
                 type={showPassword ? 'text' : 'password'}
@@ -232,10 +232,10 @@ export function RegisterPage() {
                     ? 'border-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-400/20'
                     : inputNormal
                 }`}
-                placeholder="Repita a senha"
+                placeholder="Repita a palavra-passe"
               />
               {confirm && confirm !== password && (
-                <p className="text-xs text-red-500">As senhas não coincidem</p>
+                <p className="text-xs text-red-500">As palavras-passe não coincidem</p>
               )}
             </div>
 

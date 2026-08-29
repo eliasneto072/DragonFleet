@@ -64,7 +64,7 @@ export function LoginPage() {
       await login(email, password);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        showError('E-mail ou senha inválidos.');
+        showError('E-mail ou palavra-passe inválidos.');
       } else if (err instanceof ApiError && err.status === 403) {
         showError('A sua conta está inativa ou bloqueada. Contacte o suporte.');
       } else {
@@ -174,7 +174,7 @@ export function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="password">Senha</label>
+              <label className="text-sm font-medium text-gray-700" htmlFor="password">Palavra-passe</label>
               <div className="relative">
                 <input
                   ref={passwordRef}

@@ -171,7 +171,7 @@ export function AdminNotifications() {
             <Label htmlFor="notif-title">Título</Label>
             <Input
               id="notif-title"
-              placeholder="Ex: Documento aprovado, Saque processado…"
+              placeholder="Ex: Documento aprovado, Retirada processada…"
               value={title}
               onChange={e => setTitle(e.target.value)}
             />

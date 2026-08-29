@@ -44,7 +44,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       return withdrawals.map((w) => this.toPublic(w) as IWithdrawalPublic);
     } catch (err) {
-      logger.error('Erro ao buscar saques', err);
+      logger.error('Erro ao obter retiradas', err);
       throw err;
     }
   }
@@ -60,7 +60,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
-      logger.error('Erro ao buscar saque por id', err);
+      logger.error('Erro ao obter retirada por id', err);
       throw err;
     }
   }
@@ -75,7 +75,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       return withdrawals.map((w) => this.toPublic(w) as IWithdrawalPublic);
     } catch (err) {
-      logger.error('Erro ao buscar saques por utilizador', err);
+      logger.error('Erro ao obter retiradas por utilizador', err);
       throw err;
     }
   }
@@ -95,7 +95,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
-      logger.error('Erro ao criar saque', err);
+      logger.error('Erro ao criar retirada', err);
       throw err;
     }
   }
@@ -123,7 +123,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
 
       return this.toPublic(withdrawal) as IWithdrawalPublic;
     } catch (err) {
-      logger.error('Erro ao atualizar saque', err);
+      logger.error('Erro ao atualizar retirada', err);
       throw err;
     }
   }
@@ -132,7 +132,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
     try {
       await prisma.withdrawal.delete({ where: { id } });
     } catch (err) {
-      logger.error('Erro ao deletar saque', err);
+      logger.error('Erro ao apagar retirada', err);
       throw err;
     }
   }

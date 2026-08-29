@@ -27,7 +27,7 @@ export class UsersRepository  implements IUserRepository{
 
         } catch(err) {
 
-            logger.error("Erro ao buscar usuários", err);
+            logger.error("Erro ao obter utilizadores", err);
             throw err; // deixa middleware de erro tratar
         
         }
@@ -43,7 +43,7 @@ export class UsersRepository  implements IUserRepository{
 
         }catch(err){
 
-            logger.error('Erro ao buscar usuário', err)
+            logger.error('Erro ao obter utilizador', err)
             throw err
         }
     }
@@ -58,7 +58,7 @@ export class UsersRepository  implements IUserRepository{
 
         } catch(err){
 
-            logger.error('Erro ao buscar usuário por id', err)
+            logger.error('Erro ao obter utilizador por id', err)
             throw err
         }
     }
@@ -70,7 +70,7 @@ export class UsersRepository  implements IUserRepository{
             return await prisma.user.findUnique({ where: {email} })
 
         } catch(err){
-            logger.error('Erro ao buscar usuário por email', err)
+            logger.error('Erro ao obter utilizador por email', err)
             throw err
         }
     }
@@ -88,7 +88,7 @@ export class UsersRepository  implements IUserRepository{
         select: this.publicSelect,
       });
     } catch (err) {
-      logger.error("Erro ao criar usuário", err);
+      logger.error("Erro ao criar utilizador", err);
       throw err;
     }
   }
@@ -107,7 +107,7 @@ export class UsersRepository  implements IUserRepository{
         select: this.publicSelect,
       });
     } catch (err) {
-      logger.error("Erro ao atualizar usuário", err);
+      logger.error("Erro ao atualizar utilizador", err);
       throw err;
     }
   }
@@ -116,7 +116,7 @@ export class UsersRepository  implements IUserRepository{
     try {
       await prisma.user.delete({ where: { id } });
     } catch (err) {
-      logger.error("Erro ao deletar usuário", err);
+      logger.error("Erro ao apagar utilizador", err);
       throw err;
     }
   }

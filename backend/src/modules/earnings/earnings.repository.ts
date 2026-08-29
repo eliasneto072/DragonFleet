@@ -94,7 +94,7 @@ export class EarningRepository implements IEarningRepository {
       });
       return earnings.map((e) => this.toPublic(e));
     } catch (err) {
-      logger.error('Erro ao buscar ganhos por usuário', err);
+      logger.error('Erro ao buscar ganhos por utilizador', err);
       throw err;
     }
   }

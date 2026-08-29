@@ -40,7 +40,7 @@ export class DocumentsController {
     return ok(res, { document });
   };
 
-  // Serve o arquivo do documento com validação de permissão (dono ou admin/manager).
+  // Serve o ficheiro do documento com validação de permissão (dono ou admin/manager).
   // O frontend nunca mais toca na URL do Cloudinary diretamente — quem decide o
   // acesso é o backend (JWT + ownership), não a obscuridade do link. [RGPD]
   getFile = async (req: AuthRequest, res: Response) => {
@@ -56,7 +56,7 @@ export class DocumentsController {
 
     if (!upstream.ok) {
       throw new AppError(
-        'Não foi possível obter o arquivo. O documento pode precisar de ser reenviado.',
+        'Não foi possível obter o ficheiro. O documento pode precisar de ser reenviado.',
         502,
         'FILE_FETCH_FAILED'
       );
@@ -89,7 +89,7 @@ export class DocumentsController {
     }
 
     if (!req.file) {
-      throw new AppError('Arquivo não enviado', 400, 'MISSING_FILE');
+      throw new AppError('Ficheiro não enviado', 400, 'MISSING_FILE');
     }
 
     const { fileUrl, fileKey } = await uploadToCloudinary(

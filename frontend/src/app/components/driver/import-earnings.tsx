@@ -50,7 +50,7 @@ export function ImportEarnings() {
 
   async function handleFile(f: File) {
     if (!f.name.toLowerCase().endsWith('.csv')) {
-      toast.error('Envie um arquivo .csv (exportado da Uber, Bolt, etc.)');
+      toast.error('Envie um ficheiro .csv (exportado da Uber, Bolt, etc.)');
       return;
     }
     setFile(f);
@@ -60,10 +60,10 @@ export function ImportEarnings() {
       const result = await earningsImportService.preview(f, plat);
       setPreview(result);
       if (result.rowCount === 0) {
-        toast.error('Nenhuma linha válida encontrada. Verifique o arquivo.');
+        toast.error('Nenhuma linha válida encontrada. Verifique o ficheiro.');
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao ler o arquivo.');
+      toast.error(e instanceof Error ? e.message : 'Falha ao ler o ficheiro.');
       reset();
     } finally {
       setLoading(false);
@@ -98,7 +98,7 @@ export function ImportEarnings() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Baixe o relatório de ganhos da Uber, Bolt ou Free Now e envie o arquivo .csv aqui.
+          Descarregue o relatório de ganhos da Uber, Bolt ou Free Now e envie o ficheiro .csv aqui.
           O sistema lê os valores e registra automaticamente por plataforma.
         </p>
 
@@ -136,7 +136,7 @@ export function ImportEarnings() {
             ].join(' ')}
           >
             <Upload className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-medium">Arraste o arquivo .csv ou clique para selecionar</p>
+            <p className="text-sm font-medium">Arraste o ficheiro .csv ou clique para selecionar</p>
             <p className="text-xs text-muted-foreground">Máx. 5 MB</p>
             <input
               ref={inputRef}
@@ -152,7 +152,7 @@ export function ImportEarnings() {
         {loading && (
           <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Processando arquivo…</span>
+            <span>Processando ficheiro…</span>
           </div>
         )}
 

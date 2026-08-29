@@ -53,12 +53,12 @@ export class DocumentsRepository implements IDocumentRepository {
         orderBy: { createdAt: 'desc' },
       });
     } catch (err) {
-      logger.error('Erro ao buscar documentos por usuário', err);
+      logger.error('Erro ao buscar documentos por utilizador', err);
       throw err;
     }
   }
 
-  // Documento PESSOAL do usuário (vehicleId = null) de um dado tipo.
+  // Documento PESSOAL do utilizador (vehicleId = null) de um dado tipo.
   async findByUserIdAndType(userId: string, type: DocumentType): Promise<IDocumentPublic | null> {
     try {
       return await prisma.document.findFirst({
@@ -67,7 +67,7 @@ export class DocumentsRepository implements IDocumentRepository {
         orderBy: { createdAt: 'desc' },
       });
     } catch (err) {
-      logger.error('Erro ao buscar documento por usuário e tipo', err);
+      logger.error('Erro ao buscar documento por utilizador e tipo', err);
       throw err;
     }
   }
@@ -126,7 +126,7 @@ export class DocumentsRepository implements IDocumentRepository {
   }
 
   // Substitui o ficheiro e reinicia o ciclo de validação (re-upload após
-  // rejeição/expiração): novo arquivo, nova validade, status PENDING, notas limpas.
+  // rejeição/expiração): novo ficheiro, nova validade, status PENDING, notas limpas.
   async replace(id: string, data: ReplaceDocumentData): Promise<IDocumentPublic> {
     try {
       return await prisma.document.update({

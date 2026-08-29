@@ -34,7 +34,7 @@ export class EarningsImportService {
 
     if (parsed.rows.length === 0) {
       throw new AppError(
-        parsed.errors[0]?.reason ?? 'Nenhuma linha válida encontrada no arquivo.',
+        parsed.errors[0]?.reason ?? 'Nenhuma linha válida encontrada no ficheiro.',
         400,
         'IMPORT_EMPTY',
       );

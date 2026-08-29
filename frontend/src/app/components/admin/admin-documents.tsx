@@ -137,7 +137,7 @@ function getStatusBadge(status: DocumentStatus) {
   }
 }
 
-// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+// Abre o ficheiro via endpoint autenticado do backend (não expõe a URL do Cloudinary)
 function viewDocument(id: string) {
   documentsService.openFile(id).catch((err: any) =>
     toast.error(err?.message ?? 'Erro ao abrir o documento.'),

@@ -111,11 +111,11 @@ export const emailService = {
   },
 
   async sendWithdrawalApproved(to: string, driverName: string, amount: number) {
-    return dispatch(to, '✅ Saque aprovado — DragonFleet', shell(
+    return dispatch(to, '✅ Retirada aprovada — DragonFleet', shell(
       driverName,
-      `<p style="color:#444;line-height:1.6">O seu pedido de saque de <strong style="color:#108865">${euro(amount)}</strong> foi <strong style="color:#108865">aprovado</strong>.</p>
+      `<p style="color:#444;line-height:1.6">O seu pedido de retirada de <strong style="color:#108865">${euro(amount)}</strong> foi <strong style="color:#108865">aprovado</strong>.</p>
        <p style="color:#444;line-height:1.6">O valor será processado em breve e transferido para a sua conta.</p>`,
-      { href: `${APP_URL}/app/driver/withdrawals`, label: 'Ver Saques' },
+      { href: `${APP_URL}/app/driver/withdrawals`, label: 'Ver Retiradas' },
     ));
   },
 
@@ -151,9 +151,9 @@ export const emailService = {
   },
 
   async sendWithdrawalRejected(to: string, driverName: string, amount: number, notes?: string) {
-    return dispatch(to, '❌ Saque rejeitado — DragonFleet', shell(
+    return dispatch(to, '❌ Retirada rejeitada — DragonFleet', shell(
       driverName,
-      `<p style="color:#444;line-height:1.6">O seu pedido de saque de <strong>${euro(amount)}</strong> foi <strong style="color:#e53e3e">rejeitado</strong>.</p>
+      `<p style="color:#444;line-height:1.6">O seu pedido de retirada de <strong>${euro(amount)}</strong> foi <strong style="color:#e53e3e">rejeitado</strong>.</p>
        ${notes ? `<div style="background:#fff3f3;border-left:4px solid #e53e3e;padding:12px 16px;border-radius:4px;margin:16px 0">
          <p style="margin:0;color:#c53030;font-size:14px"><strong>Motivo:</strong> ${notes}</p></div>` : ''}
        <p style="color:#444;line-height:1.6">O saldo foi restituído à sua conta. Se tiver dúvidas, contacte o suporte.</p>`,

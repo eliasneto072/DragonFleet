@@ -192,7 +192,7 @@ export function parseEarningsCsv(csv: string, fallback?: EarningPlatform): Parse
 
   const lines = csv.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.trim() !== '');
   if (lines.length < 2) {
-    return { rows, errors: [{ line: 0, reason: 'Arquivo vazio ou sem linhas de dados.' }], detectedPlatform: null, totalAmount: 0 };
+    return { rows, errors: [{ line: 0, reason: 'Ficheiro vazio ou sem linhas de dados.' }], detectedPlatform: null, totalAmount: 0 };
   }
 
   const delimiter = detectDelimiter(lines[0]);
@@ -225,7 +225,7 @@ export function parseEarningsCsv(csv: string, fallback?: EarningPlatform): Parse
     let platform: EarningPlatform | null = null;
     if (platformIdx !== -1) platform = platformFromValue(cols[platformIdx] ?? '');
     if (!platform) platform = fallback ?? null;
-    if (!platform) { errors.push({ line: lineNo, reason: 'Plataforma não identificada. Selecione a plataforma do arquivo.' }); continue; }
+    if (!platform) { errors.push({ line: lineNo, reason: 'Plataforma não identificada. Selecione a plataforma do ficheiro.' }); continue; }
 
     if (!detectedPlatform) detectedPlatform = platform;
 

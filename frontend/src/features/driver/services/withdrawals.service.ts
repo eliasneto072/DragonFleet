@@ -16,7 +16,7 @@ interface UpdateWithdrawalStatusInput {
 }
 
 export const withdrawalsService = {
-  /** GET /withdrawals — lista do usuário logado (ou todos, se admin) */
+  /** GET /withdrawals — lista do utilizador com sessão iniciada (ou todos, se admin) */
   list(): Promise<{ withdrawals: ApiWithdrawal[] }> {
     return apiClient.get('/withdrawals');
   },

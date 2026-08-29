@@ -25,7 +25,7 @@ interface UpdateVehicleInput {
 }
 
 export const vehiclesService = {
-  /** GET /vehicles — lista do usuário logado (ou todos, se admin) */
+  /** GET /vehicles — lista do utilizador com sessão iniciada (ou todos, se admin) */
   list(): Promise<{ vehicles: ApiVehicle[] }> {
     return apiClient.get('/vehicles');
   },
