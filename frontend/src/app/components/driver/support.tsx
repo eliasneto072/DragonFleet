@@ -21,6 +21,7 @@ import { toast }           from 'sonner';
 import { supportService }  from '@/features/driver/services/support.service';
 import { useAuth }         from '@/features/auth/context/AuthContext';
 import type { ApiTicket, TicketCategory, TicketStatus } from '@/features/driver/services/support.service';
+import { queryKeys } from '@/shared/lib/query-keys';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; className: string }> 
   CLOSED:      { label: 'Fechado',     className: 'bg-gray-100 text-gray-800'   },
 };
 
-const QUERY_KEY = ['support', 'tickets'];
+const QUERY_KEY = queryKeys.support.tickets;
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   const { label, className } = STATUS_CONFIG[status] ?? STATUS_CONFIG.OPEN;

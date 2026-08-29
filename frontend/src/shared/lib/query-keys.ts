@@ -80,6 +80,17 @@ export const queryKeys = {
     byUser: (userId: string) => ['bank', 'user', userId] as const,
   },
 
+  // Suporte
+  //
+  // Estava definida à mão em dois componentes — admin-support e o do motorista —
+  // ambos com ['support','tickets'] escrito literalmente. Funcionava por
+  // coincidência: bastava um deles mudar o texto para as invalidações deixarem
+  // de se encontrar, e o sintoma seria uma tela desatualizada sem erro nenhum.
+  support: {
+    all: ['support'] as const,
+    tickets: ['support', 'tickets'] as const,
+  },
+
   // Sociedades do recibo verde
   //
   // `all` inclui as inativas e serve a gestão da lista; `active` é o que o

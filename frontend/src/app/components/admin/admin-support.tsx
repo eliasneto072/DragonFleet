@@ -16,6 +16,7 @@ import { MessageCircle, Send, Loader2, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
+import { queryKeys } from '@/shared/lib/query-keys';
 import { supportService } from '@/features/driver/services/support.service';
 import type { ApiTicket, TicketStatus } from '@/features/driver/services/support.service';
 
@@ -35,7 +36,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; className: string }> 
   CLOSED:      { label: 'Fechado',      className: 'bg-secondary text-muted-foreground'                                  },
 };
 
-const QUERY_KEY = ['support', 'tickets'];
+const QUERY_KEY = queryKeys.support.tickets;
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   const { label, className } = STATUS_CONFIG[status];
