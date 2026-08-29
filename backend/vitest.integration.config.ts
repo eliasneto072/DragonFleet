@@ -20,8 +20,12 @@ export default defineConfig({
     // um limpa-a antes de começar: em paralelo, um apagaria as tabelas debaixo
     // de outro a meio da execução. Isolar por processo exigiria uma base por
     // ficheiro, o que custa mais do que rende nesta escala.
+    //
+    // O `poolOptions` deixou de existir no Vitest 4 — as opções do pool passaram
+    // a ser de topo. O `fileParallelism: false` é o que garante a execução em
+    // série; o antigo `{ threads: { singleThread: true } }` era redundante com
+    // ele e foi removido em vez de traduzido.
     fileParallelism: false,
-    poolOptions: { threads: { singleThread: true } },
 
     // Aponta o DATABASE_URL à base de testes ANTES de a aplicação ser
     // carregada. Sem isto, o cliente Prisma do config/prisma liga-se à base de
