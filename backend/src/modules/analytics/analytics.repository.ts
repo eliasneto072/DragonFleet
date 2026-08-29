@@ -52,6 +52,16 @@ export interface OverviewRaw {
   earningsPending: { count: number; oldestAt: Date | null };
   /** Tickets abertos ou em progresso, com a data do mais antigo. */
   supportOpen: { count: number; oldestAt: Date | null };
+  /**
+   * Dados bancários à espera de aprovação.
+   *
+   * Faltava nesta fila desde que a aprovação de IBAN foi construída, e a
+   * ausência tinha consequência: um motorista submetia o IBAN e ficava à
+   * espera indefinidamente, porque nada no painel o mostrava e ninguém tinha
+   * motivo para abrir a aba do Financeiro. Sem IBAN aprovado ele não consegue
+   * pedir retiradas — ou seja, o silêncio bloqueava-lhe o dinheiro.
+   */
+  bankPending: { count: number; oldestAt: Date | null };
   driversBlocked: number;
   documentsExpiringSoon: number;
   /** Quem ainda não tem a semana passada fechada. */
@@ -196,6 +206,8 @@ export const analyticsRepository = {
       earningsPendingOldest,
       supportOpenCount,
       supportOpenOldest,
+      bankPendingCount,
+      bankPendingOldest,
       driversBlocked,
       documentsExpiringSoon,
       activeDriverRows,
@@ -249,6 +261,18 @@ export const analyticsRepository = {
         where: { status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] } },
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true },
+      }),
+
+      // Dados bancários por aprovar. `pendingAt` não nulo é o que marca uma
+      // submissão à espera de decisão — o campo `iban` pode estar preenchido
+      // ao mesmo tempo, porque o IBAN em vigor continua a valer enquanto a
+      // alteração espera.
+      prisma.bankAccount.count({ where: { pendingAt: { not: null } } }),
+
+      prisma.bankAccount.findFirst({
+        where: { pendingAt: { not: null } },
+        orderBy: { pendingAt: 'asc' },
+        select: { pendingAt: true },
       }),
 
       prisma.user.count({
@@ -379,6 +403,10 @@ export const analyticsRepository = {
       supportOpen: {
         count: supportOpenCount,
         oldestAt: supportOpenOldest?.createdAt ?? null,
+      },
+      bankPending: {
+        count: bankPendingCount,
+        oldestAt: bankPendingOldest?.pendingAt ?? null,
       },
       missingSettlements,
       withdrawalsPending: {

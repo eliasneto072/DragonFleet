@@ -46,6 +46,8 @@ export interface AnalyticsOverview {
     earningsPending: { count: number; oldestAt: string | null };
     /** Tickets abertos ou em progresso. */
     supportOpen: { count: number; oldestAt: string | null };
+    /** Dados bancários por aprovar. Sem IBAN aprovado não há retiradas. */
+    bankPending: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
     /** Motoristas ativos sem fecho da semana passada. */
@@ -173,6 +175,10 @@ export class AnalyticsService {
         supportOpen: {
           count: raw.supportOpen.count,
           oldestAt: raw.supportOpen.oldestAt?.toISOString() ?? null,
+        },
+        bankPending: {
+          count: raw.bankPending.count,
+          oldestAt: raw.bankPending.oldestAt?.toISOString() ?? null,
         },
         driversBlocked: raw.driversBlocked,
         documentsExpiringSoon: {
