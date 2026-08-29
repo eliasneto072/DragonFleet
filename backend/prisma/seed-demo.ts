@@ -35,6 +35,11 @@ import bcrypt from 'bcrypt';
 // A fórmula do fecho vem do backend e não é recalculada aqui. Copiá-la faria
 // os números do seed divergirem dos da aplicação assim que um mudasse — e é
 // precisamente a divergência silenciosa que o seed deveria ajudar a apanhar.
+// A verificação corre ANTES deste import: se corresse depois, o
+// MODULE_NOT_FOUND acontecia primeiro e a mensagem nunca apareceria.
+import { assertTemCodigoFonte } from './seed-guard';
+assertTemCodigoFonte();
+// eslint-disable-next-line import/first
 import { computeTotals } from '../src/modules/settlements/settlements.types';
 
 const prisma = new PrismaClient();
