@@ -59,10 +59,28 @@ export const testDb = new PrismaClient({
  * Corre uma vez por execução da suite, no globalSetup.
  */
 export function applyMigrations(): void {
-  execSync('npx prisma migrate deploy', {
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
-    stdio: 'pipe',
-  });
+  try {
+    execSync('npx prisma migrate deploy', {
+      env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
+      stdio: 'pipe',
+    });
+  } catch (err: any) {
+    // `stdio: 'pipe'` mantém a saída fora da consola quando corre bem — são
+    // dezenas de linhas de ruído antes de cada execução. Mas quando falha, essa
+    // mesma opção esconde a razão, e o que se vê é uma exceção sem mensagem.
+    //
+    // Aconteceu na integração contínua: as migrações falhavam e o registo não
+    // dizia porquê. Agora a saída do Prisma é reencaminhada.
+    const saida = [err?.stdout?.toString(), err?.stderr?.toString()]
+      .filter(Boolean).join('\n').trim();
+
+    throw new Error(
+      '[testes] As migrações falharam contra a base de testes.\n' +
+      `  base: ${TEST_DATABASE_URL.replace(/:[^:@]*@/, ':***@')}\n` +
+      'Confirme que o postgres-test está de pé: docker compose up -d postgres-test\n\n' +
+      (saida || String(err)),
+    );
+  }
 }
 
 /**

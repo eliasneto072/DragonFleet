@@ -198,6 +198,11 @@ describe('retirada — o que impede um pedido', () => {
       .post('/withdrawals')
       .set(authHeader(motorista.id, UserRole.DRIVER))
       .field('amount', '5000')
+      // O ficheiro nao vai a lado nenhum: sem credenciais de Cloudinary o
+      // uploadToCloudinary devolve uma referencia ficticia em vez de rebentar.
+      // Sem isso, este teste recebia 500 do envio falhado em vez do 400 da
+      // validacao de saldo — porque o controller envia o ficheiro ANTES de
+      // validar o valor.
       .attach('receipt', Buffer.from('recibo'), 'recibo.pdf');
 
     expect(res.status).toBe(400);

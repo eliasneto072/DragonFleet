@@ -74,6 +74,10 @@ jobs:
         run: npm run test:integration
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5434/dragonfleet_test
+          # NODE_ENV=test e o que autoriza o upload a devolver uma referencia
+          # ficticia em vez de contactar o Cloudinary. Em producao a ausencia
+          # de credenciais rebenta, e e assim que deve ser.
+          NODE_ENV: test
 
   frontend:
     name: Frontend — tipos e build
