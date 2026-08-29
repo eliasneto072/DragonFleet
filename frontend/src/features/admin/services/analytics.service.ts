@@ -50,6 +50,13 @@ export interface ApiOverview {
     earningsPending: { count: number; oldestAt: string | null };
     /** Tickets de suporte abertos ou em progresso. */
     supportOpen: { count: number; oldestAt: string | null };
+    /**
+     * Dados bancários por aprovar.
+     *
+     * Opcional no tipo para o painel não rebentar contra um backend mais
+     * antigo — durante um deploy os dois lados não sobem ao mesmo tempo.
+     */
+    bankPending?: { count: number; oldestAt: string | null };
     driversBlocked: number;
     documentsExpiringSoon: { count: number; days: number };
     /** Motoristas ativos sem fecho da semana passada. */
