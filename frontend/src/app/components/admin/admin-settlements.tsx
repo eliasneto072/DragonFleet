@@ -338,8 +338,8 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
 
   const driversQuery = useQuery({
-    queryKey: queryKeys.users.list,
-    queryFn: () => usersService.list(),
+    queryKey: queryKeys.users.allUnpaged,
+    queryFn: () => usersService.listAll(),
   });
   const drivers = (driversQuery.data?.users ?? []).filter((u) => u.role === 'DRIVER');
 

@@ -187,7 +187,7 @@ export function AdminDocuments() {
   const [rejectReason, setRejectReason] = useState('');
 
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
-  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.allUnpaged, queryFn: () => usersService.listAll() });
   const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
 
   const isLoading = docsQ.isLoading || usersQ.isLoading || vehiclesQ.isLoading;

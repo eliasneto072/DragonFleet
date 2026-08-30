@@ -36,6 +36,18 @@ export interface ApiUser {
   status:    UserStatus;
   createdAt: string;
   updatedAt: string;
+
+  /**
+   * Documentos por resolver deste motorista — pendentes, rejeitados ou
+   * expirados. Contado na BASE e devolvido com a listagem.
+   *
+   * Existe porque a tela mostrava este distintivo cruzando a lista de
+   * utilizadores com TODOS os documentos descarregados: 8000 registos com
+   * 2000 motoristas, para desenhar um número por linha.
+   *
+   * Opcional: só a listagem paginada o traz.
+   */
+  pendingDocs?: number;
 }
 
 /**

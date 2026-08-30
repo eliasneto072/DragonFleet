@@ -200,8 +200,8 @@ export function FinancialControl({ hideHeader = false }: Props) {
   });
 
   const usersQ = useQuery({
-    queryKey: queryKeys.users.list,
-    queryFn: () => usersService.list(),
+    queryKey: queryKeys.users.allUnpaged,
+    queryFn: () => usersService.listAll(),
   });
 
   // Mesma fonte do painel: agregado em SQL, com a comissão vinda das

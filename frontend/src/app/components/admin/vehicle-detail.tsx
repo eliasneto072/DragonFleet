@@ -63,7 +63,7 @@ export function VehicleDetail() {
   const [rejectReason, setRejectReason] = useState('');
 
   const vehicleQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id], queryFn: () => vehiclesService.getById(id), enabled: !!id });
-  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.allUnpaged, queryFn: () => usersService.listAll() });
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
   const historyQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id, 'history'], queryFn: () => vehiclesService.assignmentHistory(id), enabled: !!id });
 

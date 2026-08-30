@@ -129,7 +129,7 @@ export function FleetManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
-  const usersQ    = useQuery({ queryKey: queryKeys.users.list,    queryFn: () => usersService.list() });
+  const usersQ    = useQuery({ queryKey: queryKeys.users.allUnpaged,    queryFn: () => usersService.listAll() });
   const docsQ     = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
 
   const vehicles = vehiclesQ.data?.vehicles ?? [];

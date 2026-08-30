@@ -257,8 +257,8 @@ export function GreenReceipts() {
   });
 
   const usersQ = useQuery({
-    queryKey: queryKeys.users.list,
-    queryFn: () => usersService.list(),
+    queryKey: queryKeys.users.allUnpaged,
+    queryFn: () => usersService.listAll(),
   });
 
   const companiesQ = useQuery({

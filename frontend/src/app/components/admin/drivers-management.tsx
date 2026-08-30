@@ -3,7 +3,6 @@
 // Lista de motoristas (admin). O clique em "Ver" navega para a ficha
 // completa do motorista (drivers/:id) com saldo, ajustes e documentos.
 
-import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/app/components/ui/card';
@@ -17,13 +16,14 @@ import {
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
-import { documentsService } from '@/features/driver/services/documents.service';
+import { DriverAvatar } from '@/app/components/ui/driver-avatar';
 import { Search, Eye, Mail, AlertCircle, Users, X } from 'lucide-react';
 import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatDate } from '@/shared/lib/format';
 import type { ApiUser, UserStatus } from '@/shared/types/api';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination } from '@/app/components/ui/list-toolbar';
 
 const STATUS_STYLES: Record<UserStatus, { label: string; cls: string }> = {
   ACTIVE: { label: 'Ativo', cls: 'bg-brand-50 text-brand-700' },
@@ -120,108 +120,71 @@ function DriversSkeleton() {
   );
 }
 
+/**
+ * Motoristas por página.
+ *
+ * 25 é o que cabe num ecrã sem obrigar a rolar muito, e é o que se pede ao
+ * servidor — não um teto de renderização sobre uma lista já descarregada.
+ */
+const PAGE_SIZE = 25;
+
 export function DriversManagement() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
   // O painel encaminha para cá com o filtro já escolhido: sem isto, a linha
   // "2 motoristas bloqueados" levava à lista completa e obrigava a descobrir
   // sozinho quais eram.
   const location = useLocation();
   const incoming = (location.state ?? {}) as { status?: string };
 
-  const [statusFilter, setStatusFilter] = useState(incoming.status ?? 'all');
-  // 'pending' filtra quem espera decisão nossa — a pergunta mais frequente de
-  // quem abre esta tela.
-  const [pendingFilter, setPendingFilter] = useState<'all' | 'pending' | 'clear'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'recent' | 'pending'>('name');
-
-  // Uma consulta para toda a lista: as fotografias saem daqui, em vez de uma
-  // chamada por linha.
-  const docsQ = useQuery({
-    queryKey: queryKeys.documents.list,
-    queryFn: () => documentsService.list(),
-  });
-  const documents = docsQ.data?.documents ?? [];
-
-  // Pendências por motorista, derivadas dos documentos já carregados para as
-  // fotografias — sem pedido adicional.
+  // Pesquisa, filtros e página vivem no ENDEREÇO, não em estado local.
   //
-  // "Por rever" é o que espera decisão da administração; "por regularizar" é o
-  // que espera ação do motorista. São filas diferentes e quem olha a lista
-  // precisa de distinguir: a primeira é trabalho dela, a segunda é dele.
-  const pendingByUser = useMemo(() => {
-    const map = new Map<string, { toReview: number; toFix: number }>();
-    for (const d of documents) {
-      const entry = map.get(d.userId) ?? { toReview: 0, toFix: 0 };
-      if (d.status === 'PENDING') entry.toReview += 1;
-      else if (d.status === 'REJECTED' || d.status === 'EXPIRED') entry.toFix += 1;
-      map.set(d.userId, entry);
-    }
-    return map;
-  }, [documents]);
+  // Recarregar deixa de perder o que se estava a fazer, o botão "voltar" desfaz
+  // o último filtro em vez de sair da tela, e passa a ser possível mandar um
+  // link a alguém — "vê estes motoristas bloqueados". Nenhuma das três era
+  // possível antes.
+  const lista = useListState({
+    defaults: { status: incoming.status ?? 'all', pending: 'all', sort: 'name' },
+  });
+  const { filters, page } = lista;
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.users.list,
-    queryFn: () => usersService.list(),
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    // Os parâmetros entram na chave: cada combinação é um resultado próprio,
+    // e voltar a um filtro anterior serve-se da cache em vez de repetir o
+    // pedido.
+    queryKey: [...queryKeys.users.list, lista.search, filters.status, filters.pending, filters.sort, page] as const,
+    queryFn: () => usersService.list({
+      role: 'DRIVER',
+      search: lista.search || undefined,
+      status: filters.status !== 'all' ? filters.status : undefined,
+      pending: filters.pending !== 'all' ? filters.pending : undefined,
+      sort: filters.sort !== 'name' ? filters.sort : undefined,
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+    // Mantém a página anterior à vista enquanto a nova chega, em vez de piscar
+    // o esqueleto a cada tecla.
+    placeholderData: (anterior) => anterior,
   });
 
-  const drivers = (data?.users ?? []).filter((u) => u.role === 'DRIVER');
+  const drivers = data?.users ?? [];
+  const pageInfo = data?.page;
 
-  const filtered = useMemo(() => {
-    // Cada palavra tem de constar do nome ou do email, em qualquer ordem:
-    // "elias gmail" encontra o mesmo que "gmail elias". A busca antiga exigia
-    // que a expressão inteira aparecesse seguida.
-    const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-
-    const list = drivers.filter((u) => {
-      const haystack = `${u.name} ${u.email}`.toLowerCase();
-      const matchSearch = terms.every((t) => haystack.includes(t));
-      const matchStatus = statusFilter === 'all' || u.status === statusFilter;
-
-      const p = pendingByUser.get(u.id);
-      const total = (p?.toReview ?? 0) + (p?.toFix ?? 0);
-      const matchPending =
-        pendingFilter === 'all' ||
-        (pendingFilter === 'pending' ? total > 0 : total === 0);
-
-      return matchSearch && matchStatus && matchPending;
-    });
-
-    return [...list].sort((a, b) => {
-      if (sortBy === 'recent') return b.createdAt.localeCompare(a.createdAt);
-      if (sortBy === 'pending') {
-        const pa = pendingByUser.get(a.id);
-        const pb = pendingByUser.get(b.id);
-        // Por rever pesa mais que por regularizar: é a fila da administração.
-        const score = (p?: { toReview: number; toFix: number }) =>
-          (p?.toReview ?? 0) * 10 + (p?.toFix ?? 0);
-        const diff = score(pb) - score(pa);
-        if (diff !== 0) return diff;
-      }
-      return a.name.localeCompare(b.name, 'pt');
-    });
-  }, [drivers, search, statusFilter, pendingFilter, sortBy, pendingByUser]);
-
+  // As contagens vêm do SERVIDOR e cobrem a frota inteira.
+  //
+  // Eram calculadas a partir do array descarregado. Com paginação passariam a
+  // contar os 25 da página, e os cartões do topo mudariam de valor conforme se
+  // navegasse — "1842 ativos" viraria "18 ativos" na página seguinte.
+  const c = data?.counts ?? {};
   const counts = {
-    total: drivers.length,
-    active: drivers.filter((d) => d.status === 'ACTIVE').length,
-    blocked: drivers.filter((d) => d.status === 'BLOCKED').length,
-    regularization: drivers.filter((d) => d.status === 'AGUARDANDO_REGULARIZACAO').length,
+    total: Object.values(c).reduce((a, b) => a + b, 0),
+    active: c.ACTIVE ?? 0,
+    blocked: c.BLOCKED ?? 0,
+    regularization: c.AGUARDANDO_REGULARIZACAO ?? 0,
   };
 
-  const totalPending = [...pendingByUser.values()].reduce(
-    (sum, p) => sum + p.toReview + p.toFix, 0,
-  );
-
-  const hasFilters =
-    !!search || statusFilter !== 'all' || pendingFilter !== 'all' || sortBy !== 'name';
-
-  function clearFilters() {
-    setSearch('');
-    setStatusFilter('all');
-    setPendingFilter('all');
-    setSortBy('name');
-  }
+  // Pendências visíveis NESTA página. Não é o total da frota — para isso
+  // existe a fila do painel, que conta do lado do servidor.
+  const totalPending = drivers.reduce((sum, u) => sum + (u.pendingDocs ?? 0), 0);
 
   function openDriver(user: ApiUser) {
     navigate(`/app/admin/drivers/${user.id}`);
@@ -260,10 +223,10 @@ export function DriversManagement() {
           <button
             key={key}
             type="button"
-            onClick={() => setStatusFilter(key)}
-            aria-pressed={statusFilter === key}
+            onClick={() => lista.setFilter('status', key)}
+            aria-pressed={filters.status === key}
             className={`rounded-xl border p-4 text-left shadow-card transition-colors sm:p-5 ${
-              statusFilter === key
+              filters.status === key
                 ? 'border-foreground/30 bg-secondary'
                 : 'border-border bg-card hover:bg-secondary/50'
             }`}
@@ -280,26 +243,31 @@ export function DriversManagement() {
       <div className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
+              type="search"
               placeholder="Procurar por nome ou email…"
               className="pl-9 pr-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={lista.searchInput}
+              onChange={(e) => lista.setSearchInput(e.target.value)}
+              aria-label="Procurar motoristas"
             />
-            {search && (
+            {lista.searchInput && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => lista.setSearchInput('')}
                 aria-label="Limpar pesquisa"
-                className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={filters.status} onValueChange={(v) => lista.setFilter('status', v)}>
             <SelectTrigger className="w-full sm:w-[190px]" aria-label="Filtrar por estado">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
@@ -312,7 +280,7 @@ export function DriversManagement() {
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+          <Select value={filters.sort} onValueChange={(v) => lista.setFilter('sort', v)}>
             <SelectTrigger className="w-full sm:w-[170px]" aria-label="Ordenar">
               <SelectValue />
             </SelectTrigger>
@@ -334,9 +302,9 @@ export function DriversManagement() {
             <button
               key={key}
               type="button"
-              onClick={() => setPendingFilter(key)}
+              onClick={() => lista.setFilter('pending', key)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                pendingFilter === key
+                filters.pending === key
                   ? 'border-transparent bg-foreground text-background'
                   : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
               }`}
@@ -345,10 +313,10 @@ export function DriversManagement() {
             </button>
           ))}
 
-          {hasFilters && (
+          {lista.hasFilters && (
             <button
               type="button"
-              onClick={clearFilters}
+              onClick={lista.clearAll}
               className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
               Limpar filtros
@@ -358,12 +326,14 @@ export function DriversManagement() {
       </div>
 
       {/* Table — desktop */}
+      {pageInfo && (
+        <Pagination info={pageInfo} onChange={lista.setPage} busy={isFetching} />
+      )}
+
       <Card className="hidden shadow-card md:block">
         <CardContent className="pt-6">
           <p className="mb-3 text-sm text-muted-foreground">
-            {filtered.length === drivers.length
-              ? `${drivers.length} motorista${drivers.length !== 1 ? 's' : ''}`
-              : `${filtered.length} de ${drivers.length}`}
+            {pageInfo ? `${pageInfo.total} motorista${pageInfo.total !== 1 ? 's' : ''}` : ''}
           </p>
           <Table>
             <TableHeader>
@@ -376,15 +346,15 @@ export function DriversManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 && (
+              {drivers.length === 0 && (
                 <TableRow><TableCell colSpan={5} className="py-10 text-center">
                     <p className="text-muted-foreground">
-                      {hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
+                      {lista.hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
                     </p>
-                    {hasFilters && (
+                    {lista.hasFilters && (
                       <button
                         type="button"
-                        onClick={clearFilters}
+                        onClick={lista.clearAll}
                         className="mt-2 text-sm underline underline-offset-2"
                       >
                         Limpar filtros
@@ -392,7 +362,7 @@ export function DriversManagement() {
                     )}
                   </TableCell></TableRow>
               )}
-              {filtered.map((user) => (
+              {drivers.map((user) => (
                 <TableRow
                   key={user.id}
                   className="cursor-pointer hover:bg-muted/40"
@@ -400,7 +370,7 @@ export function DriversManagement() {
                 >
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <DriverAvatar name={user.name} photo={findProfilePhoto(documents, user.id)} />
+                      <DriverAvatar name={user.name} photo={undefined} />
                       <div>
                         <p className="font-medium">{user.name}</p>
                         <p className="text-sm text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" />{user.email}</p>
@@ -408,7 +378,7 @@ export function DriversManagement() {
                     </div>
                   </TableCell>
                   <TableCell><StatusPill status={user.status} /></TableCell>
-                  <TableCell><PendingCell pending={pendingByUser.get(user.id)} /></TableCell>
+                  <TableCell><PendingCell pending={({ toReview: user.pendingDocs ?? 0, toFix: 0 })} /></TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -428,30 +398,30 @@ export function DriversManagement() {
 
       {/* Cards — mobile */}
       <div className="md:hidden space-y-3">
-        <p className="text-sm text-muted-foreground font-medium">Motoristas ({filtered.length})</p>
-        {filtered.length === 0 && (
+        <p className="text-sm text-muted-foreground font-medium">Motoristas ({pageInfo?.total ?? 0})</p>
+        {drivers.length === 0 && (
           <Card className="shadow-card"><CardContent className="py-10 text-center">
               <p className="text-muted-foreground">
-                {hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
+                {lista.hasFilters ? 'Nenhum motorista neste filtro.' : 'Ainda não há motoristas registados.'}
               </p>
-              {hasFilters && (
-                <button type="button" onClick={clearFilters} className="mt-2 text-sm underline underline-offset-2">
+              {lista.hasFilters && (
+                <button type="button" onClick={lista.clearAll} className="mt-2 text-sm underline underline-offset-2">
                   Limpar filtros
                 </button>
               )}
             </CardContent></Card>
         )}
-        {filtered.map((user) => (
+        {drivers.map((user) => (
           <Card key={user.id} className="shadow-card cursor-pointer active:bg-muted/40" onClick={() => openDriver(user)}>
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start gap-3">
-                <DriverAvatar name={user.name} photo={findProfilePhoto(documents, user.id)} />
+                <DriverAvatar name={user.name} photo={undefined} />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{user.name}</p>
                   <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                   <p className="text-xs text-muted-foreground mt-1">Desde {formatDate(user.createdAt)}</p>
                   <div className="mt-2">
-                    <PendingCell pending={pendingByUser.get(user.id)} />
+                    <PendingCell pending={({ toReview: user.pendingDocs ?? 0, toFix: 0 })} />
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">

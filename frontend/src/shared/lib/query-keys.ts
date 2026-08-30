@@ -58,6 +58,15 @@ export const queryKeys = {
     all: ['users'] as const,
     list: ['users', 'list'] as const,
     detail: (id: string) => ['users', 'detail', id] as const,
+    /**
+     * A lista COMPLETA, sem paginar — para mapas de nomes e seletores.
+     *
+     * Chave própria e separada da `list`: essa passou a levar pesquisa,
+     * filtros e página, e partilhar a chave faria a lista completa ser
+     * substituída na cache por uma página de 50. O sintoma seria nomes de
+     * motorista a aparecer como travessão, sem erro nenhum.
+     */
+    allUnpaged: ['users', 'all'] as const,
   },
 
   // Balance (admin)

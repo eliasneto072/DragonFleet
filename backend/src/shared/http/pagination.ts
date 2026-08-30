@@ -85,3 +85,55 @@ export function buildPageInfo(params: PageParams, total: number): PageInfo {
     hasMore: params.page < totalPages,
   };
 }
+
+// ─── Pesquisa ─────────────────────────────────────────────────────────────────
+//
+// ─── POR QUE A PESQUISA TEM DE VIVER AQUI, E NÃO NO BROWSER ──────────────────
+//
+// Toda a pesquisa deste projeto era feita no cliente, sobre a lista inteira já
+// descarregada. Funcionava porque as listagens devolviam tudo.
+//
+// Assim que uma listagem passa a paginar, essa pesquisa fica ERRADA de uma
+// maneira silenciosa: procurar "Mónica" passa a procurar apenas dentro dos 25
+// registos da página atual, e a tela responde "sem resultados" enquanto a
+// pessoa existe na página seguinte. Não dá erro nenhum — dá a resposta errada.
+//
+// Por isso paginar e mover a pesquisa para o servidor não são duas tarefas: são
+// a mesma, e fazer só a primeira é pior do que não fazer nenhuma.
+
+/**
+ * Divide o que foi escrito em termos, para todos terem de casar.
+ *
+ * Escrever "ana silva" deve encontrar a Ana Silva, e não tudo o que tenha
+ * "ana" OU "silva" — que com 2000 motoristas devolveria centenas de linhas.
+ * É o comportamento que a tela de Motoristas já tinha do lado do browser, e
+ * que se preserva ao trazê-lo para cá.
+ *
+ * Limitado a 5 termos: uma frase longa colada por engano não deve virar uma
+ * consulta com vinte condições encadeadas.
+ */
+export function parseSearchTerms(raw: unknown): string[] {
+  if (typeof raw !== 'string') return [];
+  return raw.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
+}
+
+/**
+ * Condição de pesquisa para o Prisma: cada termo tem de aparecer em ALGUM dos
+ * campos indicados.
+ *
+ * `mode: 'insensitive'` trata das maiúsculas. Não trata dos ACENTOS — no
+ * Postgres isso exigiria a extensão `unaccent` e um índice próprio, e com
+ * 2000 registos a diferença não se sente. Fica anotado: se um dia procurar
+ * "Monica" tiver de encontrar "Mónica", é aqui que se resolve, e é uma
+ * migração e não uma linha.
+ */
+export function buildSearchWhere(terms: string[], fields: string[]): object {
+  if (terms.length === 0) return {};
+  return {
+    AND: terms.map((termo) => ({
+      OR: fields.map((campo) => ({
+        [campo]: { contains: termo, mode: 'insensitive' as const },
+      })),
+    })),
+  };
+}
