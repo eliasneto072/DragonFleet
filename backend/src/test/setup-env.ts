@@ -45,3 +45,11 @@ process.env.NODE_ENV = 'test';
 // deteta a ausência e regista em vez de enviar. Não é preciso substituir o
 // serviço por uma imitação.
 process.env.RESEND_API_KEY = '';
+
+// ─── SEGREDOS DE TESTE ───────────────────────────────────────────────────────
+//
+// O env.ts passou a recusar segredos em falta quando NODE_ENV é production.
+// Aqui é 'test', portanto os valores por omissão bastam — mas defini-los
+// explicitamente documenta que os testes não dependem do .env de ninguém.
+process.env.JWT_SECRET ||= 'segredo-de-teste-nao-usar-em-lado-nenhum-1234';
+process.env.JWT_REFRESH_SECRET ||= 'segredo-de-refresh-de-teste-nao-usar-5678';
