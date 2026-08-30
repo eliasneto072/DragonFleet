@@ -4,7 +4,9 @@ import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
 import { SettlementStatus } from '../../shared/types/enums';
 import type { SettlementPublic } from './settlements.types';
-import { buildPageInfo, type PageParams, type Paged } from '../../shared/http/pagination';
+import {
+  buildPageInfo, buildSearchWhere, type PageParams, type Paged,
+} from '../../shared/http/pagination';
 
 const include = {
   user: { select: { name: true } },
@@ -103,12 +105,27 @@ export const settlementsRepository = {
     status?: SettlementStatus;
     from?: Date;
     to?: Date;
+    /** Termos a casar contra o NOME do motorista do fecho. */
+    terms?: string[];
   }, page: PageParams, includeInternal = false): Promise<
     Paged<SettlementPublic> & { totals: { credited: number; registeredCount: number } }
   > {
+    // A pesquisa atravessa a relação: o fecho não tem nome, o motorista tem.
+    // O Postgres resolve com uma junção e nunca traz utilizadores para cá.
+    //
+    // Substitui o seletor de motorista, que era um menu com DOIS MIL nomes numa
+    // lista rolável — para encontrar alguém a meio do alfabeto era preciso
+    // rolar centenas de linhas. Escrever três letras é mais rápido do que
+    // qualquer lista, por melhor ordenada que esteja.
+    const termos = filter.terms ?? [];
+    const porNome = termos.length > 0
+      ? { user: buildSearchWhere(termos, ['name', 'email']) }
+      : {};
+
     const where = {
       ...(filter.userId ? { userId: filter.userId } : {}),
       ...(filter.status ? { status: filter.status } : {}),
+      ...porNome,
       ...(filter.from || filter.to
         ? {
             weekStart: {

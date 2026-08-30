@@ -34,15 +34,16 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileText, Loader2, Pencil, Plus, ReceiptText, Trash2,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileText, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
-import { usersService } from '@/features/admin/services/users.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import type { SettlementStatus } from '@/shared/types/api';
 import { SettlementForm } from './settlement-form';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination } from '@/app/components/ui/list-toolbar';
 
 const STATUS_META: Record<
   SettlementStatus,
@@ -327,7 +328,9 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [mode, setMode] = useState<{ view: 'list' } | { view: 'form'; id?: string }>(
     prefill.userId ? { view: 'form' } : { view: 'list' },
   );
-  const [driverFilter, setDriverFilter] = useState('all');
+  // Pesquisa e página no ENDEREÇO. Recarregar não perde o que se procurava, e
+  // dá para mandar um link com a busca já feita.
+  const lista = useListState({ defaults: {} });
   const [statusFilter, setStatusFilter] = useState<'all' | SettlementStatus>('all');
   const [period, setPeriod] = useState<PeriodKey>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -337,36 +340,35 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [cancelReason, setCancelReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
 
-  const driversQuery = useQuery({
-    queryKey: queryKeys.users.allUnpaged,
-    queryFn: () => usersService.listAll(),
-  });
-  const drivers = (driversQuery.data?.users ?? []).filter((u) => u.role === 'DRIVER');
+
 
   const params = useMemo(() => {
     const range = period === 'custom'
       ? { from: customFrom || undefined, to: customTo || undefined }
       : periodRange(period);
     return {
-      userId: driverFilter === 'all' ? undefined : driverFilter,
       status: statusFilter === 'all' ? undefined : statusFilter,
       ...range,
     };
-  }, [driverFilter, statusFilter, period, customFrom, customTo]);
+  }, [statusFilter, period, customFrom, customTo]);
 
   // A página vive no estado da tela e entra na chave da consulta, para o
   // React Query tratar cada página como um resultado próprio e conseguir
   // servir a anterior da cache quando se volta atrás.
-  const [page, setPage] = useState(1);
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
     // O período entra na chave, senão trocar de filtro devolveria a cache do
     // intervalo anterior.
     queryKey: [
-      ...queryKeys.settlements.list(params.userId, params.status),
-      params.from ?? 'any', params.to ?? 'any', page,
+      ...queryKeys.settlements.list(undefined, params.status),
+      params.from ?? 'any', params.to ?? 'any', lista.search, lista.page,
     ] as const,
-    queryFn: () => settlementsService.list({ ...params, page, pageSize: PAGE_SIZE }),
+    queryFn: () => settlementsService.list({
+      ...params,
+      search: lista.search || undefined,
+      page: lista.page,
+      pageSize: PAGE_SIZE,
+    }),
     // Sem isto, mudar de página piscava o esqueleto entre as duas. Manter o
     // resultado anterior enquanto o novo chega faz a tabela ficar quieta.
     placeholderData: (anterior) => anterior,
@@ -396,8 +398,8 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   // Repõe o limite quando os filtros mudam: sem isto, filtrar mantinha
   // abertas as linhas extra de uma pesquisa anterior.
   useEffect(() => {
-    setPage(1);
-  }, [driverFilter, statusFilter, period, customFrom, customTo]);
+    lista.setPage(1);
+  }, [statusFilter, period, customFrom, customTo]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.settlements.all });
@@ -490,19 +492,41 @@ export function AdminSettlements({ hideHeader = false }: Props) {
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[170px] flex-1 space-y-1.5 sm:flex-none">
-          <Label htmlFor="filter-driver">Motorista</Label>
-          <Select value={driverFilter} onValueChange={setDriverFilter}>
-            <SelectTrigger id="filter-driver" className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {drivers.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Pesquisa livre em vez de um seletor com DOIS MIL nomes.
+            
+            O menu anterior era uma lista rolável de toda a frota: para chegar
+            a alguém a meio do alfabeto era preciso rolar centenas de linhas, e
+            não tinha pesquisa nenhuma. Escrever três letras chega lá mais
+            depressa do que qualquer lista, por melhor ordenada que esteja.
+            
+            E deixa de ser preciso descarregar os 2000 nomes só para desenhar
+            o menu. */}
+        <div className="min-w-[220px] flex-1 space-y-1.5">
+          <Label htmlFor="filter-search">Motorista</Label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id="filter-search"
+              type="search"
+              placeholder="Procurar por nome ou email…"
+              className="pl-9 pr-9"
+              value={lista.searchInput}
+              onChange={(e) => lista.setSearchInput(e.target.value)}
+            />
+            {lista.searchInput && (
+              <button
+                type="button"
+                onClick={() => lista.setSearchInput('')}
+                aria-label="Limpar pesquisa"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="min-w-[170px] flex-1 space-y-1.5 sm:flex-none">
@@ -558,6 +582,15 @@ export function AdminSettlements({ hideHeader = false }: Props) {
           </Select>
         </div>
       </div>
+
+      {/* Paginação também em cima: com 25 linhas, obrigar a rolar até ao fim
+          para mudar de página é atrito a cada consulta. A variante compacta
+          larga o "1 / 3529" para não competir com a barra de baixo. */}
+      {pageInfo && pageInfo.totalPages > 1 && (
+        <Pagination
+          info={pageInfo} onChange={lista.setPage} busy={isFetching} compact
+        />
+      )}
 
       {isLoading ? (
         <ListSkeleton />
@@ -692,7 +725,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                   <Button
                     size="sm" variant="outline" className="h-8 px-2"
                     disabled={pageInfo.page <= 1 || isFetching}
-                    onClick={() => setPage(1)}
+                    onClick={() => lista.setPage(1)}
                     aria-label="Primeira página"
                   >
                     <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
@@ -700,7 +733,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                   <Button
                     size="sm" variant="outline" className="h-8 px-2"
                     disabled={pageInfo.page <= 1 || isFetching}
-                    onClick={() => setPage((p) => p - 1)}
+                    onClick={() => lista.setPage(pageInfo.page - 1)}
                     aria-label="Página anterior"
                   >
                     <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -708,7 +741,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                   <Button
                     size="sm" variant="outline" className="h-8 px-2"
                     disabled={!pageInfo.hasMore || isFetching}
-                    onClick={() => setPage((p) => p + 1)}
+                    onClick={() => lista.setPage(pageInfo.page + 1)}
                     aria-label="Página seguinte"
                   >
                     <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -716,7 +749,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                   <Button
                     size="sm" variant="outline" className="h-8 px-2"
                     disabled={!pageInfo.hasMore || isFetching}
-                    onClick={() => setPage(pageInfo.totalPages)}
+                    onClick={() => lista.setPage(pageInfo.totalPages)}
                     aria-label="Última página"
                   >
                     <ChevronsRight className="h-4 w-4" aria-hidden="true" />

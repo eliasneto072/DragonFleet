@@ -24,7 +24,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, CheckCircle, ExternalLink, Landmark, Loader2, XCircle,
+  AlertCircle, CheckCircle, ExternalLink, Landmark, Loader2, Search, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CopyIbanButton } from '@/app/components/ui/copy-iban-button';
@@ -33,6 +33,9 @@ import { formatIban } from '@/shared/lib/iban';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { invalidateAfterBank } from '@/shared/lib/invalidate';
 import type { ApiPendingBankAccount } from '@/shared/types/api';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination } from '@/app/components/ui/list-toolbar';
+import { Input } from '@/app/components/ui/input';
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—';
@@ -71,12 +74,21 @@ export function BankApprovals() {
   const [rejectTarget, setRejectTarget] = useState<ApiPendingBankAccount | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.bank.pending,
-    queryFn: () => bankService.listPending(),
+  // Pesquisa e página no endereço, como nas outras listagens.
+  const lista = useListState({ defaults: {} });
+
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    queryKey: [...queryKeys.bank.pending, lista.search, lista.page] as const,
+    queryFn: () => bankService.listPending({
+      search: lista.search || undefined,
+      page: lista.page,
+      pageSize: 20,
+    }),
+    placeholderData: (anterior) => anterior,
   });
 
   const accounts = data?.accounts ?? [];
+  const pageInfo = data?.page;
 
   const { mutate: review, isPending: reviewing } = useMutation({
     mutationFn: ({ userId, approve, reason }: {
@@ -117,13 +129,35 @@ export function BankApprovals() {
           </p>
         </CardHeader>
 
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          {/* Pesquisa: com centenas à espera, encontrar um motorista específico
+              obrigava a percorrer a lista com os olhos — numa tela onde se
+              chega já a saber de quem se anda à procura. */}
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              placeholder="Procurar por nome ou email…"
+              className="pl-9"
+              value={lista.searchInput}
+              onChange={(e) => lista.setSearchInput(e.target.value)}
+              aria-label="Procurar motoristas com IBAN por aprovar"
+            />
+          </div>
+
           {accounts.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <CheckCircle className="h-8 w-8 text-success" aria-hidden="true" />
-              <p className="text-sm font-medium">Nada por aprovar</p>
+              <p className="text-sm font-medium">
+                {lista.search ? `Nada encontrado para “${lista.search}”` : 'Nada por aprovar'}
+              </p>
               <p className="text-sm text-muted-foreground">
-                Todas as alterações de dados bancários foram decididas.
+                {lista.search
+                  ? 'Verifique a escrita ou limpe a pesquisa.'
+                  : 'Todas as alterações de dados bancários foram decididas.'}
               </p>
             </div>
           ) : (
@@ -206,6 +240,10 @@ export function BankApprovals() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {pageInfo && (
+            <Pagination info={pageInfo} onChange={lista.setPage} busy={isFetching} />
           )}
         </CardContent>
       </Card>

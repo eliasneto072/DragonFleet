@@ -23,8 +23,13 @@ export class BankController {
 
   // GET /bank/pending — fila de alterações à espera de decisão
   listPending = async (req: AuthRequest, res: Response) => {
-    const accounts = await bankService.listPending(getActor(req));
-    return ok(res, { accounts });
+    const { items, page } = await bankService.listPending(getActor(req), {
+      search: req.query.search,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    });
+    // `accounts` mantém o nome; o que muda é ser uma página.
+    return ok(res, { accounts: items, page });
   };
 
   // GET /bank/:userId — a gestão consulta os dados de um motorista

@@ -108,6 +108,8 @@ export interface PageInfo {
 }
 
 export interface ListSettlementsParams {
+  /** Termos a casar contra o nome ou email do motorista do fecho. */
+  search?: string;
   /** 1 é a primeira. Omitido, o servidor devolve a primeira. */
   page?: number;
   /** O servidor aplica um teto de 200, por muito que se peça mais. */

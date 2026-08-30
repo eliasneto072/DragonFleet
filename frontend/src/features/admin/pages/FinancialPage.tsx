@@ -38,10 +38,11 @@ export function FinancialPage() {
   // cache, por isso o contador não custa um pedido a mais.
   const pendingQ = useQuery({
     queryKey: queryKeys.bank.pending,
-    queryFn: () => bankService.listPending(),
+    // Só a contagem interessa aqui: pede-se uma página de 1 e lê-se o total.
+    queryFn: () => bankService.listPending({ pageSize: 1 }),
   });
 
-  const pendingCount = pendingQ.data?.accounts.length ?? 0;
+  const pendingCount = pendingQ.data?.page.total ?? 0;
 
   return (
     <div className="space-y-5 sm:space-y-6">

@@ -10,6 +10,7 @@
 
 import { apiClient } from '@/shared/lib/api-client';
 import type { ApiBankAccount, ApiPendingBankAccount } from '@/shared/types/api';
+import type { PageInfo } from '@/app/components/ui/list-toolbar';
 
 interface SubmitBankInput {
   iban: string;
@@ -36,8 +37,16 @@ export const bankService = {
   },
 
   /** GET /bank/pending — a fila de alterações à espera de decisão. */
-  listPending(): Promise<{ accounts: ApiPendingBankAccount[] }> {
-    return apiClient.get('/bank/pending');
+  listPending(params: { search?: string; page?: number; pageSize?: number } = {}): Promise<{
+    accounts: ApiPendingBankAccount[];
+    page: PageInfo;
+  }> {
+    const q = new URLSearchParams();
+    if (params.search) q.set('search', params.search);
+    if (params.page && params.page > 1) q.set('page', String(params.page));
+    if (params.pageSize) q.set('pageSize', String(params.pageSize));
+    const qs = q.toString();
+    return apiClient.get(`/bank/pending${qs ? `?${qs}` : ''}`);
   },
 
   /**

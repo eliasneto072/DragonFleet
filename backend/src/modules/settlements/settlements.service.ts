@@ -24,7 +24,7 @@ import type {
   SettlementUpdateInput,
   SettlementPublic,
 } from './settlements.types';
-import { parsePage } from '../../shared/http/pagination';
+import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
 
 /** Limite superior para o intervalo de um fecho, como guarda contra enganos. */
 const MAX_WEEK_DAYS = 31;
@@ -154,7 +154,7 @@ export class SettlementsService {
     actor: Actor,
     filter: {
       userId?: string; status?: SettlementStatus; from?: string; to?: string;
-      page?: unknown; pageSize?: unknown;
+      search?: unknown; page?: unknown; pageSize?: unknown;
     } = {},
   ) {
     // Motorista vê apenas os próprios; a gestão vê todos, ou filtra por pessoa.
@@ -167,6 +167,9 @@ export class SettlementsService {
 
     return settlementsRepository.findManyPaged({
       userId,
+      // Um motorista não procura por nome: só vê os próprios fechos, e
+      // procurar dentro deles pelo próprio nome não faz sentido.
+      terms: isManager ? parseSearchTerms(filter.search) : [],
       status: filter.status,
       from: filter.from ? parseDay(filter.from, 'from') : undefined,
       to: filter.to ? parseDay(filter.to, 'to') : undefined,

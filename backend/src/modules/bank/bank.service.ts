@@ -19,6 +19,9 @@ import { UserRole } from '../../shared/types/enums';
 // deste modulo que importa o Prisma — o que as tornava impossiveis de testar
 // sem levantar uma base de dados para verificar aritmetica de strings.
 import { isValidIban, normalizeIban } from '../../shared/utils/iban';
+import {
+  buildPageInfo, buildSearchWhere, parsePage, parseSearchTerms,
+} from '../../shared/http/pagination';
 import type {
   Actor, BankAccountPublic, ReviewBankInput, SubmitBankInput,
 } from './bank.types';
@@ -94,24 +97,57 @@ export class BankService {
   }
 
   /** Contas com alteração à espera de decisão. Alimenta a fila do painel. */
-  async listPending(actor: Actor) {
+  /**
+   * Fila de IBAN por aprovar, com pesquisa e paginação.
+   *
+   * Devolvia todos. Com uma frota grande são centenas à espera, e encontrar
+   * um motorista específico obrigava a percorrer a lista com os olhos — numa
+   * tela onde a decisão é comparar um comprovativo com um IBAN, ou seja, onde
+   * se chega já a saber de quem se anda à procura.
+   *
+   * `page` continua opcional: sem ela, devolve a primeira com o tamanho por
+   * omissão, e o teto de MAX_PAGE_SIZE aplica-se de qualquer maneira.
+   */
+  async listPending(actor: Actor, filter: {
+    search?: unknown; page?: unknown; pageSize?: unknown;
+  } = {}) {
     if (!canManage(actor.role)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
 
-    const rows = await prisma.bankAccount.findMany({
-      where: { pendingIban: { not: null } },
-      select: {
-        ...publicSelect,
-        pendingProofUrl: true,
-        user: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { pendingAt: 'asc' },
-    });
+    const pagina = parsePage({ page: filter.page, pageSize: filter.pageSize });
+    const termos = parseSearchTerms(filter.search);
 
-    return rows.map((r) => ({
-      ...toPublic(r, r.userId),
-      proofUrl: r.pendingProofUrl,
-      user: r.user,
-    }));
+    // Atravessa a relação: a conta bancária não tem nome, o utilizador tem.
+    const where = {
+      pendingIban: { not: null },
+      ...(termos.length > 0 ? { user: buildSearchWhere(termos, ['name', 'email']) } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      prisma.bankAccount.findMany({
+        where,
+        select: {
+          ...publicSelect,
+          pendingProofUrl: true,
+          user: { select: { id: true, name: true, email: true } },
+        },
+        // Quem espera há mais tempo primeiro: é uma fila, e a ordem de chegada
+        // é a única justa quando o que está em causa é destrancar o acesso de
+        // alguém ao próprio dinheiro.
+        orderBy: { pendingAt: 'asc' },
+        skip: pagina.skip,
+        take: pagina.pageSize,
+      }),
+      prisma.bankAccount.count({ where }),
+    ]);
+
+    return {
+      items: rows.map((r) => ({
+        ...toPublic(r, r.userId),
+        proofUrl: r.pendingProofUrl,
+        user: r.user,
+      })),
+      page: buildPageInfo(pagina, total),
+    };
   }
 
   /**

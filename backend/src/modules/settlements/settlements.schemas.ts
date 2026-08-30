@@ -53,6 +53,7 @@ export const listSettlementsSchema = z.object({
     to: dayString.optional(),
     // Chegam como texto na query string. O parsePage trata dos valores
     // absurdos e aplica o teto; aqui basta deixá-los passar.
+    search: z.string().max(120).optional(),
     page: z.string().optional(),
     pageSize: z.string().optional(),
   }),

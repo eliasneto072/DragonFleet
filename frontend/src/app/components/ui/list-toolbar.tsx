@@ -115,16 +115,51 @@ export interface PageInfo {
  * se acumularem cliques que disparam três pedidos e mostram o do meio.
  */
 export function Pagination({
-  info, onChange, busy = false,
+  info, onChange, busy = false, compact = false,
 }: {
   info: PageInfo;
   onChange: (page: number) => void;
   busy?: boolean;
+  /**
+   * Variante para o TOPO da lista.
+   *
+   * A paginação aparece em cima e em baixo — com 25 linhas, obrigar a rolar
+   * até ao fim para mudar de página é atrito a cada consulta. Mas duas barras
+   * idênticas competem uma com a outra: a de cima larga o "1 / 3529" e o
+   * primeiro/último, e fica só com o essencial para avançar.
+   */
+  compact?: boolean;
 }) {
   if (info.totalPages <= 1) return null;
 
   const primeiro = (info.page - 1) * info.pageSize + 1;
   const ultimo = Math.min(info.page * info.pageSize, info.total);
+
+  if (compact) {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs tabular-nums text-muted-foreground">
+          {primeiro}–{ultimo} de {info.total}
+        </p>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm" variant="outline" className="h-8 px-2"
+            disabled={info.page <= 1 || busy}
+            onClick={() => onChange(info.page - 1)} aria-label="Página anterior"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <Button
+            size="sm" variant="outline" className="h-8 px-2"
+            disabled={!info.hasMore || busy}
+            onClick={() => onChange(info.page + 1)} aria-label="Página seguinte"
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
