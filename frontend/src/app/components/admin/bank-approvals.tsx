@@ -148,6 +148,12 @@ export function BankApprovals() {
             />
           </div>
 
+          {pageInfo && pageInfo.totalPages > 1 && (
+            <Pagination
+              info={pageInfo} onChange={lista.setPage} busy={isFetching} compact
+            />
+          )}
+
           {accounts.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <CheckCircle className="h-8 w-8 text-success" aria-hidden="true" />

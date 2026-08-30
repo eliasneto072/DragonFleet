@@ -1,5 +1,6 @@
 // src/modules/withdrawals/withdrawals.service.ts
 import { prisma }               from '../../config/prisma';
+import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
 import { logger }               from '../../shared/utils/logger';
 import { AppError }             from '../../shared/errors/AppError';
 import { UserRole, WithdrawalStatus } from '../../shared/types/enums';
@@ -36,9 +37,19 @@ export class WithdrawalsService {
     if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   }
 
-  async list(actor: Actor): Promise<IWithdrawalPublic[]> {
-    if (canManageWithdrawals(actor.role)) return withdrawalsRepository.findAll();
-    return withdrawalsRepository.findByUserId(actor.id);
+  async list(actor: Actor, filter: {
+    status?: string; search?: unknown; page?: unknown; pageSize?: unknown;
+  } = {}) {
+    const gere = canManageWithdrawals(actor.role);
+    const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
+
+    return withdrawalsRepository.findManyPaged({
+      // O motorista só vê as próprias, e procurar pelo próprio nome dentro
+      // delas não faz sentido.
+      userId: gere ? undefined : actor.id,
+      status: filter.status,
+      terms: gere ? parseSearchTerms(filter.search) : [],
+    }, page);
   }
 
   async listByUser(actor: Actor, userId: string): Promise<IWithdrawalPublic[]> {

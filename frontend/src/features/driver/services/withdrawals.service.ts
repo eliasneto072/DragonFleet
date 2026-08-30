@@ -2,6 +2,7 @@
 
 import { apiClient } from '@/shared/lib/api-client';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
+import type { PageInfo } from '@/app/components/ui/list-toolbar';
 
 interface UpdateWithdrawalStatusInput {
   status: WithdrawalStatus;
@@ -16,9 +17,20 @@ interface UpdateWithdrawalStatusInput {
 }
 
 export const withdrawalsService = {
-  /** GET /withdrawals — lista do utilizador com sessão iniciada (ou todos, se admin) */
-  list(): Promise<{ withdrawals: ApiWithdrawal[] }> {
-    return apiClient.get('/withdrawals');
+  /**
+   * GET /withdrawals — uma PÁGINA. O motorista vê as próprias; a gestão vê
+   * todas e pode procurar por nome.
+   */
+  list(params: {
+    status?: string; search?: string; page?: number; pageSize?: number;
+  } = {}): Promise<{ withdrawals: ApiWithdrawal[]; page: PageInfo }> {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
+    if (params.page && params.page > 1) q.set('page', String(params.page));
+    if (params.pageSize) q.set('pageSize', String(params.pageSize));
+    const qs = q.toString();
+    return apiClient.get(`/withdrawals${qs ? `?${qs}` : ''}`);
   },
 
   /** GET /withdrawals/user/:userId */

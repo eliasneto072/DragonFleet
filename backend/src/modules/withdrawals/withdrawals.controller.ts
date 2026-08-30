@@ -22,8 +22,13 @@ function getActor(req: AuthRequest) {
 
 export class WithdrawalsController {
   list = async (req: AuthRequest, res: Response) => {
-    const withdrawals = await withdrawalsService.list(getActor(req));
-    return ok(res, { withdrawals });
+    const { items, page } = await withdrawalsService.list(getActor(req), {
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      search: req.query.search,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    });
+    return ok(res, { withdrawals: items, page });
   };
 
   listByUser = async (req: AuthRequest, res: Response) => {

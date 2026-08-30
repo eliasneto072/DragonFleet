@@ -31,8 +31,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, Banknote, CheckCircle, Clock, DollarSign, Loader2, Receipt, TrendingDown,
-  TrendingUp, Wallet, XCircle,
+  AlertCircle, Banknote, CheckCircle, Clock, DollarSign, Loader2, Receipt, Search, TrendingDown, TrendingUp, Wallet, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
@@ -46,6 +45,8 @@ import { formatIban } from '@/shared/lib/iban';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination } from '@/app/components/ui/list-toolbar';
 
 // Variantes dark: obrigatórias — bg-*-100 com text-*-800 não invertem sozinhas
 // e no modo escuro dariam texto escuro sobre fundo claro.
@@ -192,12 +193,46 @@ export function FinancialControl({ hideHeader = false }: Props) {
   const [approveTarget, setApproveTarget] = useState<ApiWithdrawal | null>(null);
   const [companyChoice, setCompanyChoice] = useState<CompanyChoice | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
-  const [historyFilter, setHistoryFilter] = useState<'all' | WithdrawalStatus>('all');
 
-  const withdrawalsQ = useQuery({
-    queryKey: queryKeys.withdrawals.list,
-    queryFn: () => withdrawalsService.list(),
+  // Pesquisa e página do histórico, no endereço.
+  const lista = useListState({ defaults: { estado: 'all' } });
+
+  // ─── TRÊS CONSULTAS, E NÃO UMA DIVIDIDA EM TRÊS ───────────────────────────
+  //
+  // Antes havia uma só, que descarregava TODAS as retiradas, e as três listas
+  // eram fatias desse array. Isso quebra com paginação: uma página de 25
+  // retiradas misturadas não dá para derivar "as pendentes" — as outras estão
+  // nas páginas seguintes, e a fila apareceria incompleta sem o dizer.
+  //
+  // As duas filas de trabalho são naturalmente curtas: só as que esperam
+  // decisão e as que esperam transferência. O histórico é o que cresce sem fim,
+  // e é o único que pagina.
+
+  const pendingQ = useQuery({
+    queryKey: [...queryKeys.withdrawals.list, 'PENDING'] as const,
+    queryFn: () => withdrawalsService.list({ status: 'PENDING', pageSize: 100 }),
   });
+
+  const toTransferQ = useQuery({
+    queryKey: [...queryKeys.withdrawals.list, 'APPROVED'] as const,
+    queryFn: () => withdrawalsService.list({ status: 'APPROVED', pageSize: 100 }),
+  });
+
+  const historyQ = useQuery({
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'history',
+      lista.filters.estado, lista.search, lista.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: lista.filters.estado !== 'all' ? lista.filters.estado : undefined,
+      search: lista.search || undefined,
+      page: lista.page,
+      pageSize: 25,
+    }),
+    placeholderData: (anterior) => anterior,
+  });
+
+  const withdrawalsQ = historyQ;
 
   const usersQ = useQuery({
     queryKey: queryKeys.users.allUnpaged,
@@ -211,27 +246,22 @@ export function FinancialControl({ hideHeader = false }: Props) {
     queryFn: () => analyticsService.getOverview(),
   });
 
-  const withdrawals = withdrawalsQ.data?.withdrawals ?? [];
+  const historyPage = historyQ.data?.page;
   const users = usersQ.data?.users ?? [];
   const finance = overviewQ.data?.overview.finance;
 
   const driverName = (userId: string) =>
     users.find((u) => u.id === userId)?.name ?? '—';
 
+  // Quem espera há mais tempo primeiro: é uma fila.
   const pending = useMemo(
-    () => withdrawals
-      .filter((w) => w.status === 'PENDING')
+    () => [...(pendingQ.data?.withdrawals ?? [])]
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
-    [withdrawals],
+    [pendingQ.data],
   );
 
-  const history = useMemo(
-    () => withdrawals
-      .filter((w) => w.status !== 'PENDING')
-      .filter((w) => historyFilter === 'all' || w.status === historyFilter)
-      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)),
-    [withdrawals, historyFilter],
-  );
+  // O histórico já vem ordenado e filtrado do servidor.
+  const history = historyQ.data?.withdrawals ?? [];
 
   // Aprovadas e por transferir.
   //
@@ -240,10 +270,9 @@ export function FinancialControl({ hideHeader = false }: Props) {
   // saber a quem ainda se devia dinheiro obrigava a filtrar por Aprovado e a
   // ler a lista à procura do que faltava.
   const toTransfer = useMemo(
-    () => withdrawals
-      .filter((w) => w.status === 'APPROVED')
+    () => [...(toTransferQ.data?.withdrawals ?? [])]
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
-    [withdrawals],
+    [toTransferQ.data],
   );
 
   const pendingTotal = pending.reduce((s, w) => s + Number(w.amount), 0);
@@ -533,12 +562,12 @@ export function FinancialControl({ hideHeader = false }: Props) {
           <div>
             <CardTitle className="text-base sm:text-lg">Histórico de retiradas</CardTitle>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              {history.length} registo{history.length !== 1 ? 's' : ''}
+              {historyPage?.total ?? 0} registo{(historyPage?.total ?? 0) !== 1 ? 's' : ''}
             </p>
           </div>
           <Select
-            value={historyFilter}
-            onValueChange={(v) => setHistoryFilter(v as 'all' | WithdrawalStatus)}
+            value={lista.filters.estado}
+            onValueChange={(v) => lista.setFilter('estado', v)}
           >
             <SelectTrigger className="w-full sm:w-[170px]" aria-label="Filtrar por estado">
               <SelectValue />
@@ -551,7 +580,30 @@ export function FinancialControl({ hideHeader = false }: Props) {
             </SelectContent>
           </Select>
         </CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              placeholder="Procurar por nome ou email…"
+              className="pl-9"
+              value={lista.searchInput}
+              onChange={(e) => lista.setSearchInput(e.target.value)}
+              aria-label="Procurar no histórico de retiradas"
+            />
+          </div>
+
+          {/* Paginação no topo, como nas outras listagens. */}
+          {historyPage && historyPage.totalPages > 1 && (
+            <Pagination
+              info={historyPage} onChange={lista.setPage}
+              busy={historyQ.isFetching} compact
+            />
+          )}
+
           {history.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma retirada neste filtro.
@@ -616,6 +668,12 @@ export function FinancialControl({ hideHeader = false }: Props) {
                 );
               })}
             </ul>
+          )}
+
+          {historyPage && (
+            <Pagination
+              info={historyPage} onChange={lista.setPage} busy={historyQ.isFetching}
+            />
           )}
         </CardContent>
       </Card>

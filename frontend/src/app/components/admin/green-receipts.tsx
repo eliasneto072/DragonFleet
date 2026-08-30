@@ -30,8 +30,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, Building2, Download, ExternalLink, FileText, Loader2, Pencil, Plus,
-  Power, Trash2,
+  AlertCircle, Building2, Download, ExternalLink, FileText, Loader2, Pencil, Plus, Power, Search, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
@@ -46,6 +45,8 @@ import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { invalidateAfterCompany } from '@/shared/lib/invalidate';
 import type { ApiWithdrawal, ApiCompany } from '@/shared/types/api';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination } from '@/app/components/ui/list-toolbar';
 
 const ALL = '__all__';
 const UNCLASSIFIED = '__unclassified__';
@@ -246,14 +247,27 @@ function CompaniesCard({ onSelect }: { onSelect: (companyId: string) => void }) 
 
 export function GreenReceipts() {
   const queryClient = useQueryClient();
-  const [driverFilter, setDriverFilter] = useState<string>(ALL);
-  const [companyFilter, setCompanyFilter] = useState<string>(ALL);
+  // Pesquisa, filtro de sociedade e página no endereço.
+  const lista = useListState({ defaults: { sociedade: ALL } });
   const [editing, setEditing] = useState<ApiWithdrawal | null>(null);
   const [choice, setChoice] = useState<CompanyChoice | null>(null);
 
+  // Só as decididas geram recibo: uma pendente ainda pode ser rejeitada, e uma
+  // rejeitada não gera nenhum. O filtro de estado vai no pedido em vez de ser
+  // aplicado depois — com paginação, filtrar aqui devolveria uma página já
+  // desfalcada e a contagem mentiria.
   const withdrawalsQ = useQuery({
-    queryKey: queryKeys.withdrawals.list,
-    queryFn: () => withdrawalsService.list(),
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'recibos',
+      lista.search, lista.filters.sociedade, lista.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: 'PAID',
+      search: lista.search || undefined,
+      page: lista.page,
+      pageSize: 25,
+    }),
+    placeholderData: (anterior) => anterior,
   });
 
   const usersQ = useQuery({
@@ -286,22 +300,24 @@ export function GreenReceipts() {
 
   // Só as decididas: uma pendente ainda pode ser rejeitada, e o recibo dela
   // pode nunca chegar a existir. Rejeitadas não geram recibo nenhum.
+  // O filtro por sociedade continua a ser aplicado sobre a página.
+  //
+  // É uma limitação assumida e não um esquecimento: o servidor ainda não sabe
+  // filtrar por sociedade, e implementá-lo é o passo seguinte. Enquanto isso,
+  // este filtro afina o que está à vista — e é por isso que o rótulo diz
+  // "nesta página" em vez de fingir que cobre tudo.
+  const pageInfo = withdrawalsQ.data?.page;
   const rows = useMemo(() => {
-    const all = (withdrawalsQ.data?.withdrawals ?? [])
-      .filter((w) => w.status === 'APPROVED' || w.status === 'PAID');
-
-    return all
-      .filter((w) => driverFilter === ALL || w.userId === driverFilter)
-      .filter((w) => {
-        if (companyFilter === ALL) return true;
-        if (companyFilter === UNCLASSIFIED) return !w.companySetAt;
-        return w.companyId === companyFilter;
-      })
-      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
-  }, [withdrawalsQ.data, driverFilter, companyFilter]);
+    const soc = lista.filters.sociedade;
+    return (withdrawalsQ.data?.withdrawals ?? []).filter((w) => {
+      if (soc === ALL) return true;
+      if (soc === UNCLASSIFIED) return !w.companySetAt;
+      return w.companyId === soc;
+    });
+  }, [withdrawalsQ.data, lista.filters.sociedade]);
 
   const unclassified = (withdrawalsQ.data?.withdrawals ?? [])
-    .filter((w) => (w.status === 'APPROVED' || w.status === 'PAID') && !w.companySetAt).length;
+    .filter((w) => !w.companySetAt).length;
 
   /**
    * Soma do que esta filtrado.
@@ -383,7 +399,7 @@ export function GreenReceipts() {
         }
       />
 
-      <CompaniesCard onSelect={setCompanyFilter} />
+      <CompaniesCard onSelect={(v) => lista.setFilter('sociedade', v)} />
 
       {unclassified > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
@@ -399,20 +415,29 @@ export function GreenReceipts() {
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg">Registo</CardTitle>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Select value={driverFilter} onValueChange={setDriverFilter}>
-              <SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Todos os motoristas</SelectItem>
-                {(usersQ.data?.users ?? [])
-                  .filter((u) => u.role === 'DRIVER')
-                  .map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* Pesquisa em vez do menu com os 2000 motoristas. */}
+            <div className="relative flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                placeholder="Procurar por nome ou email…"
+                className="pl-9"
+                value={lista.searchInput}
+                onChange={(e) => lista.setSearchInput(e.target.value)}
+                aria-label="Procurar recibos por motorista"
+              />
+            </div>
 
-            <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <Select
+              value={lista.filters.sociedade}
+              onValueChange={(v) => lista.setFilter('sociedade', v)}
+            >
               <SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Todas as sociedades</SelectItem>
+                <SelectItem value={ALL}>Todas as sociedades (nesta página)</SelectItem>
                 <SelectItem value={UNCLASSIFIED}>Por classificar</SelectItem>
                 {(companiesQ.data?.companies ?? []).map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -422,7 +447,14 @@ export function GreenReceipts() {
           </div>
         </CardHeader>
 
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          {pageInfo && pageInfo.totalPages > 1 && (
+            <Pagination
+              info={pageInfo} onChange={lista.setPage}
+              busy={withdrawalsQ.isFetching} compact
+            />
+          )}
+
           {rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nenhum recibo corresponde a estes filtros.
@@ -495,6 +527,12 @@ export function GreenReceipts() {
               })}
             </ul>
             </>
+          )}
+
+          {pageInfo && (
+            <Pagination
+              info={pageInfo} onChange={lista.setPage} busy={withdrawalsQ.isFetching}
+            />
           )}
         </CardContent>
       </Card>

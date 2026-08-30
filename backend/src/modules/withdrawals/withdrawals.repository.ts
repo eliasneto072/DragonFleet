@@ -3,6 +3,9 @@ import { logger } from '../../shared/utils/logger';
 import { IWithdrawalPublic } from './withdrawals.types';
 import { IWithdrawalRepository } from './withdrawals.repository.interfaces';
 import { CreateWithdrawalData, UpdateWithdrawalData } from './withdrawals.repository.types';
+import {
+  buildPageInfo, buildSearchWhere, type PageParams, type Paged,
+} from '../../shared/http/pagination';
 
 export class WithdrawalsRepository implements IWithdrawalRepository {
   private readonly publicSelect = {
@@ -33,6 +36,48 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
   ) {
     const { company, ...rest } = row as T & { company?: { name: string } | null };
     return { ...rest, amount: row.amount.toNumber(), companyName: company?.name ?? null };
+  }
+
+  /**
+   * Uma página de retiradas, com pesquisa por motorista e filtro de estado.
+   *
+   * A tela do Financeiro descarregava TODAS. Com um ano de operação são
+   * milhares, e o histórico só tinha filtro de estado — encontrar a retirada
+   * de uma pessoa obrigava a percorrer a lista com os olhos.
+   *
+   * A pesquisa atravessa a relação: a retirada não tem nome, o utilizador tem.
+   */
+  async findManyPaged(
+    filter: { userId?: string; status?: string; terms?: string[] },
+    page: PageParams,
+  ): Promise<Paged<IWithdrawalPublic>> {
+    try {
+      const termos = filter.terms ?? [];
+      const where = {
+        ...(filter.userId ? { userId: filter.userId } : {}),
+        ...(filter.status ? { status: filter.status as never } : {}),
+        ...(termos.length > 0 ? { user: buildSearchWhere(termos, ['name', 'email']) } : {}),
+      };
+
+      const [rows, total] = await Promise.all([
+        prisma.withdrawal.findMany({
+          where,
+          select: this.publicSelect,
+          orderBy: { requestedAt: 'desc' },
+          skip: page.skip,
+          take: page.pageSize,
+        }),
+        prisma.withdrawal.count({ where }),
+      ]);
+
+      return {
+        items: rows.map((w) => this.toPublic(w) as IWithdrawalPublic),
+        page: buildPageInfo(page, total),
+      };
+    } catch (err) {
+      logger.error('Erro ao obter retiradas paginadas', err);
+      throw err;
+    }
   }
 
   async findAll(): Promise<IWithdrawalPublic[]> {
