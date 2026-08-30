@@ -52,21 +52,39 @@ export interface ListState {
 export function useListState(opts: {
   /** Filtros conhecidos e o valor que conta como "sem filtro". */
   defaults?: Record<string, string>;
+  /**
+   * Prefixo dos parâmetros no URL, para várias listagens coexistirem na mesma
+   * tela.
+   *
+   * Sem ele, as três secções do Financeiro — pendentes, por transferir e
+   * histórico — escreveriam todas em `q` e `page`, e procurar numa mudava as
+   * outras duas. Com `prefix: 'pend'`, os parâmetros passam a `pend_q` e
+   * `pend_page`.
+   *
+   * Omitido, os nomes ficam curtos: uma tela com uma listagem só não deve
+   * carregar prefixos no endereço para nada.
+   */
+  prefix?: string;
 } = {}): ListState {
   const defaults = useMemo(() => opts.defaults ?? {}, [opts.defaults]);
   const [params, setParams] = useSearchParams();
 
-  const search = params.get('q') ?? '';
-  const page = Math.max(1, Number(params.get('page') ?? 1) || 1);
+  const pre = opts.prefix ? `${opts.prefix}_` : '';
+  const K_Q = `${pre}q`;
+  const K_PAGE = `${pre}page`;
+  const chaveFiltro = useCallback((k: string) => `${pre}${k}`, [pre]);
+
+  const search = params.get(K_Q) ?? '';
+  const page = Math.max(1, Number(params.get(K_PAGE) ?? 1) || 1);
 
   const filters = useMemo(() => {
     const out: Record<string, string> = { ...defaults };
     for (const chave of Object.keys(defaults)) {
-      const valor = params.get(chave);
+      const valor = params.get(chaveFiltro(chave));
       if (valor) out[chave] = valor;
     }
     return out;
-  }, [params, defaults]);
+  }, [params, defaults, chaveFiltro]);
 
   // A caixa tem estado próprio, para responder a cada tecla sem esperar.
   const [searchInput, setSearchInput] = useState(search);
@@ -83,11 +101,12 @@ export function useListState(opts: {
     timer.current = setTimeout(() => {
       setParams((atual) => {
         const p = new URLSearchParams(atual);
-        if (searchInput.trim()) p.set('q', searchInput.trim());
-        else p.delete('q');
+        if (searchInput.trim()) p.set(K_Q, searchInput.trim());
+        else p.delete(K_Q);
         // Procurar volta sempre ao princípio: senão ficava-se na página 12 de
-        // um resultado que agora tem duas.
-        p.delete('page');
+        // um resultado que agora tem duas. Só a página DESTA listagem — as
+        // outras secções da tela ficam onde estavam.
+        p.delete(K_PAGE);
         return p;
         // `replace` e não `push`: escrever não deve encher o histórico. Só a
         // navegação entre páginas e filtros merece um passo para trás.
@@ -95,31 +114,43 @@ export function useListState(opts: {
     }, DEBOUNCE_MS);
 
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [searchInput, search, setParams]);
+  }, [searchInput, search, setParams, K_Q, K_PAGE]);
 
   const setFilter = useCallback((key: string, value: string | null) => {
     setParams((atual) => {
       const p = new URLSearchParams(atual);
-      if (value === null || value === defaults[key]) p.delete(key);
-      else p.set(key, value);
-      p.delete('page');
+      if (value === null || value === defaults[key]) p.delete(chaveFiltro(key));
+      else p.set(chaveFiltro(key), value);
+      p.delete(K_PAGE);
       return p;
     });
-  }, [setParams, defaults]);
+  }, [setParams, defaults, chaveFiltro, K_PAGE]);
 
   const setPage = useCallback((p: number) => {
     setParams((atual) => {
       const q = new URLSearchParams(atual);
-      if (p <= 1) q.delete('page');
-      else q.set('page', String(p));
+      if (p <= 1) q.delete(K_PAGE);
+      else q.set(K_PAGE, String(p));
       return q;
     });
-  }, [setParams]);
+  }, [setParams, K_PAGE]);
 
+  /**
+   * Limpa só ESTA listagem, não o endereço todo.
+   *
+   * Numa tela com três secções, apagar tudo ao limpar uma delas desfazia
+   * também o trabalho feito nas outras duas.
+   */
   const clearAll = useCallback(() => {
     setSearchInput('');
-    setParams(new URLSearchParams());
-  }, [setParams]);
+    setParams((atual) => {
+      const p = new URLSearchParams(atual);
+      p.delete(K_Q);
+      p.delete(K_PAGE);
+      for (const k of Object.keys(defaults)) p.delete(chaveFiltro(k));
+      return p;
+    });
+  }, [setParams, K_Q, K_PAGE, defaults, chaveFiltro]);
 
   const hasFilters =
     search.length > 0 ||

@@ -46,7 +46,7 @@ import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 import { useListState } from '@/shared/hooks/use-list-state';
-import { Pagination } from '@/app/components/ui/list-toolbar';
+import { Pagination, type PageInfo } from '@/app/components/ui/list-toolbar';
 
 // Variantes dark: obrigatórias — bg-*-100 com text-*-800 não invertem sozinhas
 // e no modo escuro dariam texto escuro sobre fundo claro.
@@ -183,6 +183,48 @@ interface Props {
   hideHeader?: boolean;
 }
 
+/**
+ * Pesquisa e paginação de topo de uma secção.
+ *
+ * As três secções desta tela — decidir, transferir, consultar — são tarefas
+ * diferentes e cada uma tem a sua fila. Partilhar pesquisa entre elas obrigaria
+ * a limpar o filtro de uma para trabalhar noutra.
+ *
+ * Extraído porque o mesmo bloco aparece três vezes: sem isto, corrigir um
+ * detalhe do espaçamento exigiria lembrar-se dos três sítios.
+ */
+function SecaoBarra({
+  lista, info, busy, placeholder,
+}: {
+  lista: ReturnType<typeof useListState>;
+  info?: PageInfo;
+  busy: boolean;
+  placeholder: string;
+}) {
+  return (
+    <>
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          placeholder={placeholder}
+          className="pl-9"
+          value={lista.searchInput}
+          onChange={(e) => lista.setSearchInput(e.target.value)}
+          aria-label={placeholder}
+        />
+      </div>
+
+      {info && info.totalPages > 1 && (
+        <Pagination info={info} onChange={lista.setPage} busy={busy} compact />
+      )}
+    </>
+  );
+}
+
 export function FinancialControl({ hideHeader = false }: Props) {
   const queryClient = useQueryClient();
   const [rejectTarget, setRejectTarget] = useState<ApiWithdrawal | null>(null);
@@ -194,8 +236,18 @@ export function FinancialControl({ hideHeader = false }: Props) {
   const [companyChoice, setCompanyChoice] = useState<CompanyChoice | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
 
-  // Pesquisa e página do histórico, no endereço.
-  const lista = useListState({ defaults: { estado: 'all' } });
+  // ─── TRÊS LISTAGENS INDEPENDENTES ─────────────────────────────────────────
+  //
+  // Cada secção é uma tarefa diferente — decidir, transferir, consultar — e com
+  // uma frota grande cada uma tem centenas de registos. Partilhar pesquisa e
+  // página entre elas obrigaria a limpar o filtro de uma para trabalhar noutra.
+  //
+  // O prefixo mantém-nas separadas no endereço: `pend_q`, `transf_page`,
+  // `hist_estado`. Procurar numa não mexe nas outras, e o link continua a
+  // guardar o estado das três.
+  const filaPendentes = useListState({ prefix: 'pend' });
+  const filaTransferir = useListState({ prefix: 'transf' });
+  const lista = useListState({ prefix: 'hist', defaults: { estado: 'all' } });
 
   // ─── TRÊS CONSULTAS, E NÃO UMA DIVIDIDA EM TRÊS ───────────────────────────
   //
@@ -209,13 +261,31 @@ export function FinancialControl({ hideHeader = false }: Props) {
   // e é o único que pagina.
 
   const pendingQ = useQuery({
-    queryKey: [...queryKeys.withdrawals.list, 'PENDING'] as const,
-    queryFn: () => withdrawalsService.list({ status: 'PENDING', pageSize: 100 }),
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'PENDING',
+      filaPendentes.search, filaPendentes.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: 'PENDING',
+      search: filaPendentes.search || undefined,
+      page: filaPendentes.page,
+      pageSize: 15,
+    }),
+    placeholderData: (anterior) => anterior,
   });
 
   const toTransferQ = useQuery({
-    queryKey: [...queryKeys.withdrawals.list, 'APPROVED'] as const,
-    queryFn: () => withdrawalsService.list({ status: 'APPROVED', pageSize: 100 }),
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'APPROVED',
+      filaTransferir.search, filaTransferir.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: 'APPROVED',
+      search: filaTransferir.search || undefined,
+      page: filaTransferir.page,
+      pageSize: 15,
+    }),
+    placeholderData: (anterior) => anterior,
   });
 
   const historyQ = useQuery({
@@ -259,6 +329,8 @@ export function FinancialControl({ hideHeader = false }: Props) {
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
     [pendingQ.data],
   );
+  const pendingPage = pendingQ.data?.page;
+  const toTransferPage = toTransferQ.data?.page;
 
   // O histórico já vem ordenado e filtrado do servidor.
   const history = historyQ.data?.withdrawals ?? [];
@@ -275,6 +347,12 @@ export function FinancialControl({ hideHeader = false }: Props) {
     [toTransferQ.data],
   );
 
+  // Somas da PÁGINA visível, não da fila inteira.
+  //
+  // O servidor ainda não devolve o somatório destas duas filas — o do
+  // histórico devolve, porque foi construído para o cartão do topo. Enquanto
+  // não devolver, os rótulos dizem quantos pedidos há ao todo e o valor
+  // refere-se ao que está à vista.
   const pendingTotal = pending.reduce((s, w) => s + Number(w.amount), 0);
   const toTransferTotal = toTransfer.reduce((s, w) => s + Number(w.amount), 0);
 
@@ -372,7 +450,7 @@ export function FinancialControl({ hideHeader = false }: Props) {
           label="Por processar"
           value={formatCurrency(pendingTotal)}
           icon={Clock}
-          hint={`${pending.length} pedido${pending.length !== 1 ? 's' : ''}`}
+          hint={`${pendingPage?.total ?? 0} pedido${(pendingPage?.total ?? 0) !== 1 ? 's' : ''} ao todo`}
         />
       </div>
 
@@ -384,11 +462,22 @@ export function FinancialControl({ hideHeader = false }: Props) {
             Quem espera há mais tempo aparece primeiro
           </p>
         </CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          <SecaoBarra
+            lista={filaPendentes}
+            info={pendingPage}
+            busy={pendingQ.isFetching}
+            placeholder="Procurar quem espera decisão…"
+          />
+
           {pending.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <CheckCircle className="h-8 w-8 text-success" aria-hidden="true" />
-              <p className="text-sm font-medium">Nada por processar</p>
+              <p className="text-sm font-medium">
+                {filaPendentes.search
+                  ? `Nada encontrado para “${filaPendentes.search}”`
+                  : 'Nada por processar'}
+              </p>
               <p className="text-sm text-muted-foreground">
                 Todas as retiradas foram decididas.
               </p>
@@ -450,6 +539,13 @@ export function FinancialControl({ hideHeader = false }: Props) {
               })}
             </ul>
           )}
+
+          {pendingPage && (
+            <Pagination
+              info={pendingPage} onChange={filaPendentes.setPage}
+              busy={pendingQ.isFetching}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -460,7 +556,7 @@ export function FinancialControl({ hideHeader = false }: Props) {
           mexe em nenhum número; regista que a transferência foi mesmo feita.
           Sem esta lista, essa distinção não existia em lado nenhum e não havia
           como saber o que já tinha sido enviado para o banco. */}
-      {toTransfer.length > 0 && (
+      {(toTransferPage?.total ?? 0) > 0 && (
         <Card className="shadow-card">
           <CardHeader className="flex flex-col gap-1 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
@@ -477,7 +573,14 @@ export function FinancialControl({ hideHeader = false }: Props) {
             </p>
           </CardHeader>
 
-          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+            <SecaoBarra
+              lista={filaTransferir}
+              info={toTransferPage}
+              busy={toTransferQ.isFetching}
+              placeholder="Procurar quem espera transferência…"
+            />
+
             <ul className="divide-y divide-border">
               {toTransfer.map((w) => (
                 <li key={w.id} className="py-3 first:pt-0 last:pb-0">
@@ -552,6 +655,13 @@ export function FinancialControl({ hideHeader = false }: Props) {
                 </li>
               ))}
             </ul>
+
+            {toTransferPage && (
+              <Pagination
+                info={toTransferPage} onChange={filaTransferir.setPage}
+                busy={toTransferQ.isFetching}
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -581,28 +691,12 @@ export function FinancialControl({ hideHeader = false }: Props) {
           </Select>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              placeholder="Procurar por nome ou email…"
-              className="pl-9"
-              value={lista.searchInput}
-              onChange={(e) => lista.setSearchInput(e.target.value)}
-              aria-label="Procurar no histórico de retiradas"
-            />
-          </div>
-
-          {/* Paginação no topo, como nas outras listagens. */}
-          {historyPage && historyPage.totalPages > 1 && (
-            <Pagination
-              info={historyPage} onChange={lista.setPage}
-              busy={historyQ.isFetching} compact
-            />
-          )}
+          <SecaoBarra
+            lista={lista}
+            info={historyPage}
+            busy={historyQ.isFetching}
+            placeholder="Procurar no histórico…"
+          />
 
           {history.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
