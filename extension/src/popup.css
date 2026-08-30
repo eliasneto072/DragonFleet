@@ -1,0 +1,24 @@
+/* Estreito de propósito: um popup de extensão tem 380px e não deve fingir
+   ser uma aplicação. O que aqui aparece é uma confirmação, não uma tela. */
+:root { --verde:#108865; --erro:#c0392b; --borda:#e3e6e3; --suave:#6b7280; }
+* { box-sizing:border-box; }
+body { width:380px; margin:0; padding:12px; font:13px/1.45 system-ui,-apple-system,sans-serif; }
+header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.etiqueta { font-size:11px; color:var(--suave); border:1px solid var(--borda); border-radius:999px; padding:1px 8px; }
+label { display:block; margin-bottom:8px; font-size:12px; color:var(--suave); }
+input { width:100%; margin-top:3px; padding:7px 9px; border:1px solid var(--borda); border-radius:6px; font-size:13px; }
+button { border:0; border-radius:6px; padding:8px 12px; font-size:13px; cursor:pointer; }
+.principal { background:var(--verde); color:#fff; width:100%; }
+.principal:disabled { opacity:.5; cursor:not-allowed; }
+.secundario { background:#f2f4f3; }
+.ligacao { background:none; color:var(--suave); text-decoration:underline; padding:0; font-size:11px; }
+.botoes { display:flex; gap:8px; margin-top:10px; }
+.botoes .principal { flex:1; }
+.periodo { font-size:12px; color:var(--suave); margin-bottom:6px; }
+.resumo { font-weight:600; margin-bottom:8px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+td { padding:4px 0; border-bottom:1px solid var(--borda); }
+td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+.aviso { margin-top:8px; padding:8px; border-radius:6px; background:#fff8e6; border:1px solid #f0d9a0; font-size:12px; }
+.erro { margin-top:10px; padding:8px; border-radius:6px; background:#fdecea; border:1px solid #f5c4be; color:var(--erro); font-size:12px; white-space:pre-wrap; }
+footer { margin-top:10px; text-align:center; }
