@@ -4,11 +4,22 @@ export const BRAND = {
   accentColor: '#108865',
 } as const;
 
-export const FINANCIAL = {
-  minWithdrawal: 50,
-  maxWithdrawal: 10000,
-  companyCommission: 0.20,
-  processingDays: 3,
+/**
+ * Valores de recurso, usados apenas enquanto as configurações do servidor não
+ * chegam.
+ *
+ * NÃO SÃO A VERDADE. Os limites reais vivem em SystemSettings e são aplicados
+ * pelo servidor: durante meses estes números disseram 20% de comissão e 10.000
+ * de máximo enquanto o sistema estava em 15% e 5.000, e as telas anunciavam ao
+ * motorista regras que não eram cumpridas.
+ *
+ * Quem precisa dos valores deve ler de GET /settings — ver useSettings.
+ */
+export const FINANCIAL_FALLBACK = {
+  minWithdrawal: 0,
+  maxWithdrawal: 0,
+  companyCommission: 0,
+  processingDays: 1,
 } as const;
 
 export const DRIVER_STATUS_LABELS: Record<string, string> = {

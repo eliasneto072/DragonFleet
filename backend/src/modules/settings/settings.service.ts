@@ -15,6 +15,7 @@ const GLOBAL_ID = 'global';
 // Whitelist of updatable fields (prevents mass-assignment of id/updatedAt/etc).
 const EDITABLE_KEYS = [
   'companyCommission',
+  'settlementTaxRate',
   'minWithdrawalAmount',
   'maxWithdrawalAmount',
   'withdrawalProcessingDays',
@@ -52,6 +53,14 @@ export class SettingsService {
     if (data.companyCommission !== undefined) {
       const c = Number(data.companyCommission);
       if (c < 0 || c > 100) throw new AppError('Comissão deve estar entre 0 e 100%.', 400, 'INVALID_RANGE');
+    }
+    // Alterar isto NÃO mexe nos fechos já registados: cada um gravou a taxa
+    // que lhe foi aplicada. O valor daqui vale a partir do próximo fecho.
+    if (data.settlementTaxRate !== undefined) {
+      const t = Number(data.settlementTaxRate);
+      if (isNaN(t) || t < 0 || t > 100) {
+        throw new AppError('Imposto deve estar entre 0 e 100%.', 400, 'INVALID_RANGE');
+      }
     }
     if (
       data.minWithdrawalAmount !== undefined &&

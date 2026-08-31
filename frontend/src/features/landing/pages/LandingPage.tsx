@@ -214,7 +214,7 @@ export function LandingPage() {
                 fontSize: 'clamp(15px, 2vw, 18px)', lineHeight: 1.7,
                 color: '#6b7280', margin: '0 0 40px', maxWidth: '440px',
               }}>
-                Uma plataforma completa para motoristas e gestores. Ganhos, saques,
+                Uma plataforma completa para motoristas e gestores. Ganhos, retiradas,
                 documentos e frota — tudo em um só lugar.
               </p>
 
@@ -291,7 +291,7 @@ export function LandingPage() {
             Funcionalidades
           </p>
           <h2 style={{ fontSize: 'clamp(24px, 4vw, 44px)', fontWeight: 700, textAlign: 'center', letterSpacing: '-1px', margin: '0 0 48px' }}>
-            Tudo que você precisa
+            Tudo o que precisa
           </h2>
           <div style={{
             display: 'grid',
@@ -300,7 +300,7 @@ export function LandingPage() {
           }}>
             {[
               { icon: '💰', title: 'Controle de ganhos',   desc: 'Registre e acompanhe seus ganhos por plataforma — Uber, Bolt e muito mais.' },
-              { icon: '🏦', title: 'Saques simplificados', desc: 'Solicite retiradas com poucos cliques. Aprovação rápida e histórico completo.' },
+              { icon: '🏦', title: 'Retiradas simplificadas', desc: 'Peça retiradas com poucos cliques. Aprovação rápida e histórico completo.' },
               { icon: '📄', title: 'Gestão de documentos', desc: 'Envie e acompanhe o status da sua CNH, CRLV e demais documentos obrigatórios.' },
               { icon: '🚗', title: 'Gestão de frota',      desc: 'Admins têm visão completa da frota: status, manutenção e associação de motoristas.' },
               { icon: '📊', title: 'Analytics avançado',   desc: 'Dashboards com gráficos de receita, corridas por plataforma e top motoristas.' },

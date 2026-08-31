@@ -16,7 +16,7 @@
 // vêm da escala blue padrão do Tailwind, a mesma usada nos badges de status.
 // Ficam duplicados em hex aqui porque atributos fill de SVG inline não
 // resolvem var() de forma confiável em todos os navegadores. Se a escala de
-// marca mudar no theme.css, este arquivo precisa acompanhar — é o único lugar.
+// marca mudar no theme.css, este ficheiro precisa acompanhar — é o único lugar.
 
 export type IllustrationTone = 'brand' | 'info';
 export type IllustrationSurface = 'light' | 'dark';

@@ -10,6 +10,12 @@ export function vehiclesRouter(): Router {
 
   router.get('/', vehiclesController.list);
   router.get('/user/:userId', vehiclesController.listByUser); // antes de /:id
+  // Também antes de '/:id': 'driver' seria lido como um identificador.
+  router.get(
+    '/driver/:userId/assignments',
+    requireStaff,
+    vehiclesController.driverVehicleHistory,
+  );
   router.get('/:id', vehiclesController.getById);
   router.get('/:id/assignments', requireStaff, vehiclesController.assignmentHistory);
   router.post('/', vehiclesController.create);

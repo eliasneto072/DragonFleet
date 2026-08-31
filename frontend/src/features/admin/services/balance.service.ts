@@ -5,7 +5,13 @@ import { apiClient } from '@/shared/lib/api-client';
 export type AdjustmentType = 'CREDIT' | 'DEBIT';
 
 export interface BalanceSummary {
+  /**
+   * Informativo: o que o motorista comunicou. NÃO entra em `available`.
+   * O dinheiro vem dos fechos semanais; os lançamentos são conferência.
+   */
   totalEarnings: number;
+  /** Soma líquida dos fechos registados. É daqui que vem o saldo. */
+  totalSettlements: number;
   totalCredits: number;
   totalDebits: number;
   totalWithdrawn: number;
@@ -27,7 +33,12 @@ export interface Adjustment {
 interface CreateAdjustmentInput {
   type: AdjustmentType;
   amount: number;
-  reason: string;
+  /**
+   * Opcional, como no backend: `createAdjustmentSchema` marca-o `.optional()` e
+   * o service grava string vazia quando falta. O tipo dizia obrigatório e
+   * obrigava quem chama a inventar um valor para o compilador aceitar.
+   */
+  reason?: string;
 }
 
 export const balanceService = {

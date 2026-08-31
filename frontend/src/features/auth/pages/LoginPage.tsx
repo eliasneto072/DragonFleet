@@ -12,7 +12,7 @@
 // para não herdarem cor clara no dark mode.
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { ApiError } from '@/shared/lib/api-client';
@@ -20,7 +20,6 @@ import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 
 export function LoginPage() {
   const { login, isAuthenticated, user, loading } = useAuth();
-  const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +64,7 @@ export function LoginPage() {
       await login(email, password);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        showError('E-mail ou senha inválidos.');
+        showError('E-mail ou palavra-passe inválidos.');
       } else if (err instanceof ApiError && err.status === 403) {
         showError('A sua conta está inativa ou bloqueada. Contacte o suporte.');
       } else {
@@ -175,7 +174,7 @@ export function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="password">Senha</label>
+              <label className="text-sm font-medium text-gray-700" htmlFor="password">Palavra-passe</label>
               <div className="relative">
                 <input
                   ref={passwordRef}

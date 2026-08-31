@@ -14,17 +14,31 @@ export class VehiclesRepository implements IVehicleRepository {
     vin: true,
     status: true,
     activationForced: true,
+    weeklyFee: true,
     userId: true,
     createdAt: true,
     updatedAt: true,
   } as const;
 
+  /**
+   * weeklyFee é Decimal no Prisma e chegaria ao cliente como objeto, não como
+   * número. Os restantes campos do veículo são primitivos, por isso esta é a
+   * única conversão necessária — e tem de ser feita em todas as saídas.
+   */
+  private toPublic<T extends { weeklyFee?: unknown }>(v: T): IVehiclePublic {
+    return {
+      ...(v as unknown as IVehiclePublic),
+      weeklyFee: Number(v.weeklyFee ?? 0),
+    };
+  }
+
   async findAll(): Promise<IVehiclePublic[]> {
     try {
-      return await prisma.vehicle.findMany({
+      const rows = await prisma.vehicle.findMany({
         select: this.publicSelect,
         orderBy: { createdAt: 'desc' },
       });
+      return rows.map((v) => this.toPublic(v));
     } catch (err) {
       logger.error('Erro ao buscar veículos', err);
       throw err;
@@ -33,10 +47,11 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async findById(id: string): Promise<IVehiclePublic | null> {
     try {
-      return await prisma.vehicle.findUnique({
+      const row = await prisma.vehicle.findUnique({
         where: { id },
         select: this.publicSelect,
       });
+      return row ? this.toPublic(row) : null;
     } catch (err) {
       logger.error('Erro ao buscar veículo por id', err);
       throw err;
@@ -45,9 +60,12 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async findByPlate(plate: string): Promise<IVehicle | null> {
     try {
-      return await prisma.vehicle.findUnique({
+      const row = await prisma.vehicle.findUnique({
         where: { plate },
       });
+      // findByPlate devolve o registo completo (inclui campos fora do
+      // publicSelect); a conversão do Decimal aplica-se na mesma.
+      return row ? (this.toPublic(row) as unknown as IVehicle) : null;
     } catch (err) {
       logger.error('Erro ao buscar veículo por placa', err);
       throw err;
@@ -56,11 +74,12 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async findByUserId(userId: string): Promise<IVehiclePublic[]> {
     try {
-      return await prisma.vehicle.findMany({
+      const rows = await prisma.vehicle.findMany({
         where: { userId },
         select: this.publicSelect,
         orderBy: { createdAt: 'desc' },
       });
+      return rows.map((v) => this.toPublic(v));
     } catch (err) {
       logger.error('Erro ao buscar veículos por utilizador', err);
       throw err;
@@ -69,7 +88,7 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async create(data: CreateVehicleData): Promise<IVehiclePublic> {
     try {
-      return await prisma.vehicle.create({
+      const row = await prisma.vehicle.create({
         data: {
           brand: data.brand,
           model: data.model,
@@ -78,9 +97,11 @@ export class VehiclesRepository implements IVehicleRepository {
           status: data.status,
           userId: data.userId ?? null,
           ...(data.vin !== undefined ? { vin: data.vin } : {}),
+          ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
         },
         select: this.publicSelect,
       });
+      return this.toPublic(row);
     } catch (err) {
       logger.error('Erro ao criar veículo', err);
       throw err;
@@ -89,7 +110,7 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async update(id: string, data: UpdateVehicleData): Promise<IVehiclePublic> {
     try {
-      return await prisma.vehicle.update({
+      const row = await prisma.vehicle.update({
         where: { id },
         data: {
           ...(data.brand !== undefined ? { brand: data.brand } : {}),
@@ -99,10 +120,12 @@ export class VehiclesRepository implements IVehicleRepository {
           ...(data.vin !== undefined ? { vin: data.vin } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
           ...(data.activationForced !== undefined ? { activationForced: data.activationForced } : {}),
+          ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
           ...(data.userId !== undefined ? { userId: data.userId } : {}),
         },
         select: this.publicSelect,
       });
+      return this.toPublic(row);
     } catch (err) {
       logger.error('Erro ao atualizar veículo', err);
       throw err;

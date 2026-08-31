@@ -6,6 +6,9 @@ import { earningsService } from './earnings.service';
 import {
   createEarningSchema,
   updateEarningSchema,
+  reviewEarningSchema,
+  listEarningsSchema,
+  reportedRangeSchema,
   earningIdParamSchema,
   userIdParamSchema,
 } from './earnings.schemas';
@@ -16,12 +19,27 @@ function getActor(req: AuthRequest) {
   }
 
   return { id: req.user.id, role: req.user.role };
-} 
+}
 
 export class EarningsController {
+  // GET /earnings?userId=&status=&from=&to=
   list = async (req: AuthRequest, res: Response) => {
-    const earnings = await earningsService.list(getActor(req));
+    const parsed = listEarningsSchema.parse({ query: req.query });
+    const earnings = await earningsService.list(getActor(req), parsed.query);
     return ok(res, { earnings });
+  };
+
+  // GET /earnings/reported?userId=&from=&to=
+  // Conferência cruzada do fecho semanal.
+  reported = async (req: AuthRequest, res: Response) => {
+    const parsed = reportedRangeSchema.parse({ query: req.query });
+    const reported = await earningsService.reportedInRange(
+      getActor(req),
+      parsed.query.userId,
+      parsed.query.from,
+      parsed.query.to,
+    );
+    return ok(res, { reported });
   };
 
   listByUser = async (req: AuthRequest, res: Response) => {
@@ -47,6 +65,7 @@ export class EarningsController {
       amount: parsed.body.amount,
       date: parsed.body.date,
       platform: parsed.body.platform,
+      notes: parsed.body.notes,
     });
 
     return ok(res, { earning }, 201);
@@ -59,6 +78,22 @@ export class EarningsController {
     });
 
     const earning = await earningsService.update(
+      getActor(req),
+      parsed.params.id,
+      parsed.body
+    );
+
+    return ok(res, { earning });
+  };
+
+  // PATCH /earnings/:id/review — aprovar ou recusar
+  review = async (req: AuthRequest, res: Response) => {
+    const parsed = reviewEarningSchema.parse({
+      params: req.params,
+      body: req.body,
+    });
+
+    const earning = await earningsService.review(
       getActor(req),
       parsed.params.id,
       parsed.body

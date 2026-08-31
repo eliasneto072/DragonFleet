@@ -12,6 +12,13 @@ export interface IVehicle {
   status: VehicleStatus;
   activationForced: boolean;
 
+  /**
+   * Encargo semanal da viatura. Preenche o campo "Viatura" no fecho semanal
+   * como valor sugerido — o fecho grava a sua própria cópia, para que alterar
+   * isto não reescreva semanas já pagas.
+   */
+  weeklyFee: number;
+
   userId: string | null; // pode ser null (veículo não atribuído)
 
   createdAt: Date;
@@ -35,4 +42,16 @@ export interface IVehicleAssignment {
 
 export type IVehicleAssignmentWithUser = IVehicleAssignment & {
   user?: IUserPublic | null;
+};
+
+/** O mesmo histórico visto do lado do motorista: que carros ele conduziu. */
+export type IVehicleAssignmentWithVehicle = IVehicleAssignment & {
+  vehicle?: {
+    id: string;
+    brand: string;
+    model: string;
+    plate: string;
+    year: number;
+    status: string;
+  } | null;
 };

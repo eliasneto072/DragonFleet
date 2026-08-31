@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { BankAccountSection } from '@/app/components/driver/bank-account';
 import { usersService } from '@/features/admin/services/users.service';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -335,7 +336,7 @@ export function DriverProfile() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const { data: profile, isLoading, isError } = useQuery<ApiUser>({
-    queryKey: queryKeys.users.detail(user?.id),
+    queryKey: queryKeys.users.detail(user?.id ?? ''),
     queryFn: async () => {
       const res = await usersService.getById(user!.id);
       return (res as any).user ?? res;
@@ -349,7 +350,10 @@ export function DriverProfile() {
   });
 
   const photoDoc = documentsQuery.data?.documents.find(
-    (d) => d.type === 'FOTO_PERFIL' && !d.vehicleId,
+    // d.userId é obrigatório mesmo aqui, onde a tela é sempre do próprio:
+    // depender de quem a abre é uma garantia que se perde na primeira vez que
+    // alguém reutilizar o componente.
+    (d) => d.userId === user?.id && d.type === 'FOTO_PERFIL' && !d.vehicleId,
   );
   // Mostrada assim que enviada. Rejeitada ou expirada volta às iniciais.
   const photoVisible =
@@ -405,7 +409,7 @@ export function DriverProfile() {
         <p className="text-muted-foreground">Erro ao carregar o perfil.</p>
         <Button
           variant="outline"
-          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(user?.id) })}
+          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(user?.id ?? '') })}
         >
           Tentar novamente
         </Button>
@@ -495,6 +499,10 @@ export function DriverProfile() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Dados bancários — antes da Segurança porque é o que o motorista vem
+          cá fazer quando o pedido de retirada o manda para o Perfil. */}
+      <BankAccountSection />
 
       {/* Segurança */}
       <Card className="shadow-card">

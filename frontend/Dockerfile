@@ -1,15 +1,18 @@
 # ---- Build Stage ----
 FROM node:22-alpine AS builder
 
-# pnpm é necessário pois o projeto usa overrides de pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
+# package-lock.json entra na imagem de propósito.
+#
+# Antes copiava-se `pnpm-lock.yaml*` — um ficheiro que este projeto nunca teve —
+# e caía-se no `npm install`, que resolve versões novas dentro dos intervalos
+# semver a cada build. O build deixava de ser reprodutível: a mesma commit dava
+# imagens diferentes consoante o dia, e uma delas podia partir sem ninguém ter
+# tocado no código. `npm ci` instala exatamente o que o lockfile fixa.
+COPY package.json package-lock.json ./
 
-# Fallback para npm caso não exista pnpm-lock.yaml
-RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else npm install; fi
+RUN npm ci
 
 COPY . .
 
@@ -17,7 +20,11 @@ COPY . .
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
 
-RUN if [ -f pnpm-lock.yaml ]; then pnpm run build; else npm run build; fi
+# `npm run build` é agora `tsc -b && vite build`: o typecheck corre ANTES do
+# empacotamento. O Vite sozinho apaga os tipos sem os verificar, e um componente
+# inexistente ou uma propriedade mal escrita só apareciam como ecrã branco em
+# produção. Aqui param o build.
+RUN npm run build
 
 # ---- Production Stage ----
 FROM nginx:stable-alpine AS production

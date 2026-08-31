@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { DollarSign, TrendingUp, Star, Car } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
 interface StatsCardProps {
   title: string;

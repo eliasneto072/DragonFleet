@@ -28,7 +28,12 @@ import { balanceService, type AdjustmentType } from '@/features/admin/services/b
 import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
+import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
+import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
+import {
+  invalidateAfterAdjustment, invalidateAfterDocument, invalidateAfterUser,
+} from '@/shared/lib/invalidate';
 import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
 import {
@@ -126,6 +131,12 @@ export function DriverDetailPage() {
     [allDocs, id],
   );
 
+  // Documentos à espera de decisão da administração. Alimenta o resumo do
+  // cabeçalho — pendente é fila nossa; rejeitado é fila do motorista.
+  const docsPending = allDocs.filter(
+    (d) => d.userId === id && d.status === 'PENDING',
+  ).length;
+
   // Veículos do motorista.
   const driverVehicles = useMemo(
     () => vehicles.filter((v) => v.userId === id),
@@ -162,7 +173,7 @@ export function DriverDetailPage() {
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
     mutationFn: (status: UserStatus) => usersService.update(id, { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      invalidateAfterUser(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(id) });
       toast.success('Motorista atualizado.');
     },
@@ -176,7 +187,7 @@ export function DriverDetailPage() {
       reason: reason.trim() || undefined,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.summary(id) });
+      invalidateAfterAdjustment(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.balance.adjustments(id) });
       toast.success(adjustType === 'CREDIT' ? 'Crédito adicionado ao saldo.' : 'Débito aplicado ao saldo.');
       setAdjustOpen(false);
@@ -190,8 +201,7 @@ export function DriverDetailPage() {
     mutationFn: ({ docId, status, notes }: { docId: string; status: DocumentStatus; notes?: string }) =>
       documentsService.updateStatus(docId, { status, notes }),
     onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+      invalidateAfterDocument(queryClient);
       toast.success(status === 'APPROVED' ? 'Documento aprovado.' : 'Documento rejeitado.');
       setRejectDoc(null);
       setRejectReason('');
@@ -294,219 +304,281 @@ export function DriverDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />Motoristas
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold">{user.name}</h2>
-            <p className="text-muted-foreground flex items-center gap-1">
-              <Mail className="h-3.5 w-3.5" />{user.email}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            {/* A fotografia vem do documento FOTO_PERFIL, que o motorista já
+                enviou. É mostrada mesmo por confirmar: o rosto certo por
+                aprovar diz mais do que duas iniciais. */}
+            <DriverAvatar
+              name={user.name}
+              photo={findProfilePhoto(allDocs, user.id)}
+              size={52}
+            />
+            <div className="min-w-0">
+              <h2 className="truncate text-2xl font-bold">{user.name}</h2>
+              <p className="flex items-center gap-1 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{user.email}</span>
+              </p>
+            </div>
           </div>
           <StatusPill status={user.status} />
         </div>
+
+        {/* Resumo: responde de imediato o que antes exigia rolar até ao
+            terceiro cartão. */}
+        <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Saldo</p>
+            <p className={`mt-0.5 text-xl font-semibold tabular-nums ${
+              balance && balance.available < 0 ? 'text-destructive' : ''
+            }`}>
+              {balance ? eur(balance.available) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Documentos</p>
+            <p className={`mt-0.5 text-xl font-semibold ${
+              docsPending > 0 ? 'text-amber-600 dark:text-amber-400' : ''
+            }`}>
+              {docsPending > 0 ? `${docsPending} por rever` : 'Em dia'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Veículo</p>
+            <p className="mt-0.5 truncate font-mono text-sm tracking-tight">
+              {driverVehicles[0]?.plate ?? '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Membro desde</p>
+            <p className="mt-0.5 text-sm">{formatDate(user.createdAt)}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Ações de status */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-2">
-            {user.status !== 'ACTIVE' && (
-              <Button disabled={updatingStatus} onClick={() => updateStatus('ACTIVE')}>
-                {updatingStatus ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}Ativar
-              </Button>
-            )}
-            {user.status === 'ACTIVE' && (
-              <Button variant="outline" disabled={updatingStatus} onClick={() => updateStatus('INACTIVE')}>
-                <UserX className="h-4 w-4 mr-2" />Desativar
-              </Button>
-            )}
-            {user.status !== 'BLOCKED' && (
-              <Button variant="destructive" disabled={updatingStatus} onClick={() => updateStatus('BLOCKED')}>
-                <Ban className="h-4 w-4 mr-2" />Bloquear
-              </Button>
-            )}
-            <div className="ml-auto text-sm text-muted-foreground self-center">
-              Membro desde {formatDate(user.createdAt)}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Duas colunas a partir de xl.
+          A divisão é por natureza, não por tamanho: à esquerda o que exige
+          decisão — saldo, retiradas, documentos por rever; à direita o que se
+          consulta — veículos, histórico, e as ações de estado da conta.
 
-      {/* Saldo */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />Saldo</CardTitle>
-              <CardDescription>Gestão financeira do motorista</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => openAdjust('CREDIT')}>
-                <Plus className="h-4 w-4 mr-1" />Adicionar
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => openAdjust('DEBIT')}>
-                <Minus className="h-4 w-4 mr-1" />Retirar
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {balanceQ.isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="h-4 w-4 animate-spin" />Carregando saldo…
-            </div>
-          ) : balance ? (
-            <>
-              {/* Disponível — destaque */}
-              <div className="rounded-xl border bg-muted/30 p-5">
-                <p className="text-sm text-muted-foreground mb-1">Saldo disponível</p>
-                <p className={`text-3xl font-bold ${balance.available < 0 ? 'text-destructive' : 'text-foreground'}`}>
-                  {eur(balance.available)}
-                </p>
-              </div>
+          Numa coluna única, sete cartões empilhados obrigavam a rolar muito, e
+          num ecrã largo metade ficava vazia. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start xl:gap-6">
 
-              {/* Breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" />Ganhos</p>
-                  <p className="font-semibold mt-1">{eur(balance.totalEarnings)}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-green-600 flex items-center gap-1"><Plus className="h-3.5 w-3.5" />Créditos</p>
-                  <p className="font-semibold mt-1">{eur(balance.totalCredits)}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-destructive flex items-center gap-1"><Minus className="h-3.5 w-3.5" />Débitos</p>
-                  <p className="font-semibold mt-1">{eur(balance.totalDebits)}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground flex items-center gap-1"><ArrowDownCircle className="h-3.5 w-3.5" />Levantado</p>
-                  <p className="font-semibold mt-1">{eur(balance.totalWithdrawn)}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-amber-600 flex items-center gap-1"><Clock className="h-3.5 w-3.5" />Reservado</p>
-                  <p className="font-semibold mt-1">{eur(balance.pendingWithdrawals)}</p>
-                </div>
-              </div>
+        <div className="space-y-4">
 
-              {/* Extrato de ajustes */}
+        {/* Saldo */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium flex items-center gap-1 mb-3">
-                  <History className="h-4 w-4" />Histórico de ajustes
-                </p>
-                {adjustmentsQ.isLoading ? (
-                  <p className="text-sm text-muted-foreground">Carregando…</p>
-                ) : adjustments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">
-                    Nenhum ajuste manual registado.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {adjustments.map((adj) => (
-                      <div key={adj.id} className="flex items-center justify-between border rounded-lg p-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${adj.type === 'CREDIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {adj.type === 'CREDIT' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {adj.reason || <span className="text-muted-foreground italic">Sem motivo</span>}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(adj.createdAt)}
-                              {adj.createdByName ? ` · por ${adj.createdByName}` : ''}
-                            </p>
-                          </div>
-                        </div>
-                        <p className={`font-semibold shrink-0 ml-2 ${adj.type === 'CREDIT' ? 'text-green-600' : 'text-destructive'}`}>
-                          {adj.type === 'CREDIT' ? '+' : '−'}{eur(adj.amount)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />Saldo</CardTitle>
+                <CardDescription>Gestão financeira do motorista</CardDescription>
               </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">Não foi possível carregar o saldo.</p>
-          )}
-        </CardContent>
-      </Card>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => openAdjust('CREDIT')}>
+                  <Plus className="h-4 w-4 mr-1" />Adicionar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => openAdjust('DEBIT')}>
+                  <Minus className="h-4 w-4 mr-1" />Retirar
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {balanceQ.isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />Carregando saldo…
+              </div>
+            ) : balance ? (
+              <>
+                {/* Disponível — destaque */}
+                <div className="rounded-xl border bg-muted/30 p-5">
+                  <p className="text-sm text-muted-foreground mb-1">Saldo disponível</p>
+                  <p className={`text-3xl font-bold ${balance.available < 0 ? 'text-destructive' : 'text-foreground'}`}>
+                    {eur(balance.available)}
+                  </p>
+                </div>
 
-      {/* Retiradas — logo após o saldo, de propósito: aprovar uma retirada sem
-          olhar o disponível é o erro que a validação do servidor bloqueia. */}
-      <DriverWithdrawalsCard userId={id} />
-
-      {/* Documentos pessoais */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" />Documentos pessoais</CardTitle>
-              <CardDescription>{personalDocs.length} documento(s) do motorista</CardDescription>
-            </div>
-            <DocProgress sent={personalProgress.sent} required={personalProgress.required} />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {docsQ.isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="h-4 w-4 animate-spin" />Carregando documentos…
-            </div>
-          ) : personalDocs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento pessoal enviado.</p>
-          ) : (
-            <div className="space-y-2">
-              {personalDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Documentos de veículo — agrupados por veículo */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Car className="h-5 w-5 text-primary" />Documentos de veículo</CardTitle>
-          <CardDescription>
-            {driverVehicles.length === 0
-              ? 'Nenhum veículo registado'
-              : `${driverVehicles.length} veículo(s)`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {docsQ.isLoading || vehiclesQ.isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="h-4 w-4 animate-spin" />Carregando…
-            </div>
-          ) : driverVehicles.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Este motorista não tem veículos registados.</p>
-          ) : (
-            <div className="space-y-5">
-              {driverVehicles.map((v) => {
-                const vDocs = vehicleDocsById[v.id] ?? [];
-                const p = vehicleProgress(v.id);
-                return (
-                  <div key={v.id}>
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Car className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <p className="font-medium text-sm">{v.brand} {v.model}</p>
-                        <span className="text-xs text-muted-foreground font-mono">{v.plate}</span>
-                      </div>
-                      <DocProgress sent={p.sent} required={p.required} />
-                    </div>
-                    {vDocs.length === 0 ? (
-                      <p className="text-xs text-muted-foreground pl-6 py-2">Nenhum documento enviado para este veículo.</p>
-                    ) : (
-                      <div className="space-y-2 pl-6">
-                        {vDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
-                      </div>
-                    )}
+                {/* Breakdown */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" />Ganhos</p>
+                    <p className="font-semibold mt-1">{eur(balance.totalEarnings)}</p>
                   </div>
-                );
-              })}
+                  <div className="rounded-lg border p-3">
+                    <p className="text-green-600 flex items-center gap-1"><Plus className="h-3.5 w-3.5" />Créditos</p>
+                    <p className="font-semibold mt-1">{eur(balance.totalCredits)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-destructive flex items-center gap-1"><Minus className="h-3.5 w-3.5" />Débitos</p>
+                    <p className="font-semibold mt-1">{eur(balance.totalDebits)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground flex items-center gap-1"><ArrowDownCircle className="h-3.5 w-3.5" />Levantado</p>
+                    <p className="font-semibold mt-1">{eur(balance.totalWithdrawn)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-amber-600 flex items-center gap-1"><Clock className="h-3.5 w-3.5" />Reservado</p>
+                    <p className="font-semibold mt-1">{eur(balance.pendingWithdrawals)}</p>
+                  </div>
+                </div>
+
+                {/* Extrato de ajustes */}
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-1 mb-3">
+                    <History className="h-4 w-4" />Histórico de ajustes
+                  </p>
+                  {adjustmentsQ.isLoading ? (
+                    <p className="text-sm text-muted-foreground">Carregando…</p>
+                  ) : adjustments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">
+                      Nenhum ajuste manual registado.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {adjustments.map((adj) => (
+                        <div key={adj.id} className="flex items-center justify-between border rounded-lg p-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${adj.type === 'CREDIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {adj.type === 'CREDIT' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {adj.reason || <span className="text-muted-foreground italic">Sem motivo</span>}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDate(adj.createdAt)}
+                                {adj.createdByName ? ` · por ${adj.createdByName}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <p className={`font-semibold shrink-0 ml-2 ${adj.type === 'CREDIT' ? 'text-green-600' : 'text-destructive'}`}>
+                            {adj.type === 'CREDIT' ? '+' : '−'}{eur(adj.amount)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Não foi possível carregar o saldo.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Retiradas — logo após o saldo, de propósito: aprovar uma retirada sem
+            olhar o disponível é o erro que a validação do servidor bloqueia. */}
+
+        <DriverWithdrawalsCard userId={id} />
+
+        {/* Documentos pessoais */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" />Documentos pessoais</CardTitle>
+                <CardDescription>{personalDocs.length} documento(s) do motorista</CardDescription>
+              </div>
+              <DocProgress sent={personalProgress.sent} required={personalProgress.required} />
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {docsQ.isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />Carregando documentos…
+              </div>
+            ) : personalDocs.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento pessoal enviado.</p>
+            ) : (
+              <div className="space-y-2">
+                {personalDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+
+        <div className="space-y-4">
+        {/* Documentos de veículo — agrupados por veículo */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Car className="h-5 w-5 text-primary" />Documentos de veículo</CardTitle>
+            <CardDescription>
+              {driverVehicles.length === 0
+                ? 'Nenhum veículo registado'
+                : `${driverVehicles.length} veículo(s)`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {docsQ.isLoading || vehiclesQ.isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />Carregando…
+              </div>
+            ) : driverVehicles.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Este motorista não tem veículos registados.</p>
+            ) : (
+              <div className="space-y-5">
+                {driverVehicles.map((v) => {
+                  const vDocs = vehicleDocsById[v.id] ?? [];
+                  const p = vehicleProgress(v.id);
+                  return (
+                    <div key={v.id}>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <p className="font-medium text-sm">{v.brand} {v.model}</p>
+                          <span className="text-xs text-muted-foreground font-mono">{v.plate}</span>
+                        </div>
+                        <DocProgress sent={p.sent} required={p.required} />
+                      </div>
+                      {vDocs.length === 0 ? (
+                        <p className="text-xs text-muted-foreground pl-6 py-2">Nenhum documento enviado para este veículo.</p>
+                      ) : (
+                        <div className="space-y-2 pl-6">
+                          {vDocs.map((doc) => <DocRow key={doc.id} doc={doc} />)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Histórico de veículos — o inverso do que a ficha do veículo mostra:
+            que carros esta pessoa conduziu, e quando. */}
+
+        <DriverVehicleHistory userId={id} />
+
+          {/* Ações de estado no fim, e não no topo: são destrutivas, e nenhuma
+              delas é a razão comum para abrir a ficha. */}
+        {/* Ações de status */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap gap-2">
+              {user.status !== 'ACTIVE' && (
+                <Button disabled={updatingStatus} onClick={() => updateStatus('ACTIVE')}>
+                  {updatingStatus ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}Ativar
+                </Button>
+              )}
+              {user.status === 'ACTIVE' && (
+                <Button variant="outline" disabled={updatingStatus} onClick={() => updateStatus('INACTIVE')}>
+                  <UserX className="h-4 w-4 mr-2" />Desativar
+                </Button>
+              )}
+              {user.status !== 'BLOCKED' && (
+                <Button variant="destructive" disabled={updatingStatus} onClick={() => updateStatus('BLOCKED')}>
+                  <Ban className="h-4 w-4 mr-2" />Bloquear
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        </div>
+      </div>
 
       {/* Dialog de ajuste de saldo */}
       <Dialog open={adjustOpen} onOpenChange={(v) => { if (!v) setAdjustOpen(false); }}>
@@ -522,6 +594,14 @@ export function DriverDetailPage() {
                 ? `Creditar saldo de ${user.name}.`
                 : `Debitar saldo de ${user.name}.`}
               {balance && ` Disponível: ${eur(balance.available)}.`}
+              {/* O débito pode ultrapassar o disponível: o saldo fica negativo
+                  e é descontado dos próximos fechos. Dizê-lo evita a hesitação
+                  de quem lê o disponível e o toma por limite. */}
+              {adjustType === 'DEBIT' && balance && balance.available >= 0 && (
+                <span className="mt-1 block text-muted-foreground">
+                  Um débito maior deixa o saldo negativo, e será descontado dos próximos fechos.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 

@@ -2,20 +2,31 @@
 //
 // Tela de retiradas do motorista.
 //
-// Notas de manutenção:
-// - O hero é azul, distinto do verde do dashboard, para separar as duas telas
-//   à primeira vista. A ilustração acompanha via tone="info".
-// - O hero é um flex de duas colunas em todos os tamanhos; a ilustração encolhe
-//   no telemóvel em vez de desaparecer.
-// - O gradiente é fixo e não acompanha o modo escuro, então todo texto dentro
-//   dele usa branco com opacidade em vez de tokens de tema.
-// - shadow-brand tem tinta verde (rgba(16,136,101,…)); num hero azul isso
-//   produziria um halo esverdeado. Este hero usa shadow-md.
-// - Todo valor monetário passa por formatCurrency(). Ver o comentário no topo
-//   de shared/lib/format.ts.
+// O QUE MUDOU E PORQUÊ: o pedido passou a exigir duas coisas que a tela não
+// conhecia — um recibo verde anexado e um IBAN aprovado. Enquanto isso não
+// existiu aqui, o serviço enviava JSON contra uma rota que espera multipart e
+// TODOS os pedidos levavam 400. Nenhum motorista conseguia pedir uma retirada.
+//
+// A TRANCA É À ENTRADA. Sem IBAN aprovado o botão nasce desativado, com o
+// motivo à vista e um atalho para o Perfil. Deixar preencher o valor, anexar o
+// recibo e só depois recusar com BANK_ACCOUNT_REQUIRED é a pior versão disto:
+// o trabalho todo perdido e o comprovativo enviado para nada.
+//
+// O SALDO DISPONÍVEL passou a aparecer. Antes o motorista escolhia o valor às
+// cegas e levava INSUFFICIENT_BALANCE; e como o backend verifica o saldo ANTES
+// do IBAN, quem pedisse a mais nem chegava a saber que faltava outra coisa.
+//
+// Notas de manutenção herdadas:
+// - O hero é azul, distinto do verde do painel, para separar as duas telas à
+//   primeira vista. A ilustração acompanha via tone="info".
+// - O gradiente é fixo e não acompanha o modo escuro, por isso todo o texto lá
+//   dentro usa branco com opacidade em vez de tokens de tema.
+// - shadow-brand tem tinta verde; num hero azul daria um halo esverdeado. Este
+//   usa shadow-md.
+// - Todo o valor monetário passa por formatCurrency(). Ver shared/lib/format.ts.
 
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -23,21 +34,31 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
+import { FilePicker } from '@/app/components/ui/file-picker';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
   CheckCircle, Clock, XCircle, ArrowDownToLine, Loader2, AlertCircle, Info,
+  Landmark, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth/context/AuthContext';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { bankService } from '@/shared/services/bank.service';
+import { balanceService } from '@/features/admin/services/balance.service';
 import { formatCurrency } from '@/shared/lib/format';
+import { formatIban } from '@/shared/lib/iban';
 import { queryKeys } from '@/shared/lib/query-keys';
-import { FINANCIAL } from '@/shared/constants';
+import { invalidateAfterWithdrawal } from '@/shared/lib/invalidate';
+// Os limites vêm do servidor, não de constantes: as cravadas diziam 10.000 de
+// máximo enquanto o sistema aplicava 5.000, e a tela prometia ao motorista o
+// que seria recusado.
+import { useSettings } from '@/shared/hooks/use-settings';
 import { PayoutIllustration } from '@/app/components/ui/payout-illustration';
 import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
 
-// Ponto único de verdade para o status de uma retirada.
+// Ponto único de verdade para o estado de uma retirada.
 //
 // As variantes dark: são obrigatórias: bg-*-100 com text-*-800 não invertem
 // sozinhas e no modo escuro dariam texto escuro sobre fundo claro. O estado
@@ -130,16 +151,21 @@ export function Withdrawals() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
 
-  // O botão "Retirar" do hero do dashboard navega para cá com
-  // state.openNew = true, já abrindo o diálogo.
+  const { minWithdrawal, maxWithdrawal, processingDays } = useSettings();
+
+  // O botão "Retirar" do hero do painel navega para cá com state.openNew,
+  // já abrindo o diálogo.
   const [open, setOpen] = useState(
     () => Boolean((location.state as { openNew?: boolean } | null)?.openNew),
   );
   const [amount, setAmount] = useState('');
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receiptError, setReceiptError] = useState('');
 
-  // Limpa o state para que um refresh (ou voltar no histórico) não reabra
-  // o diálogo sozinho.
+  // Limpa o state para que um refresh, ou voltar no histórico, não reabra o
+  // diálogo sozinho.
   useEffect(() => {
     if ((location.state as { openNew?: boolean } | null)?.openNew) {
       navigate(location.pathname, { replace: true, state: null });
@@ -152,35 +178,77 @@ export function Withdrawals() {
     queryFn: () => withdrawalsService.list(),
   });
 
+  // A mesma pergunta responde a duas coisas: se pode pedir, e para onde vai.
+  const bankQuery = useQuery({
+    queryKey: queryKeys.bank.mine,
+    queryFn: () => bankService.getMine(),
+  });
+
+  const balanceQuery = useQuery({
+    queryKey: queryKeys.balance.summary(user?.id ?? ''),
+    queryFn: () => balanceService.getSummary(user!.id),
+    enabled: !!user?.id,
+  });
+
   const withdrawals: ApiWithdrawal[] = data?.withdrawals ?? [];
+  const account = bankQuery.data?.account;
+  const available = balanceQuery.data?.balance.available ?? 0;
+
+  // isUsable é derivado no servidor: há IBAN em vigor. Enquanto a consulta não
+  // responde tratamos como bloqueado — abrir o formulário para o fechar a
+  // seguir seria pior do que esperar.
+  const canWithdraw = account?.isUsable === true;
 
   const settled = withdrawals.filter((w) => w.status === 'PAID' || w.status === 'APPROVED');
   const totalWithdrawn = settled.reduce((sum, w) => sum + Number(w.amount), 0);
 
   const { mutate: createWithdrawal, isPending } = useMutation({
-    mutationFn: (value: number) => withdrawalsService.create(value),
+    mutationFn: ({ value, file }: { value: number; file: File }) =>
+      withdrawalsService.create(value, file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
-      toast.success('Solicitação de saque enviada!');
+      // Também o painel do administrador: o pedido entra na fila dele.
+      invalidateAfterWithdrawal(queryClient);
+      toast.success('Pedido de retirada enviado.');
       setOpen(false);
       setAmount('');
+      setReceipt(null);
+      setReceiptError('');
     },
-    onError: (err: any) => toast.error(err?.message ?? 'Erro ao solicitar saque.'),
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao pedir a retirada.'),
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const value = parseFloat(amount);
-    if (isNaN(value) || value < FINANCIAL.minWithdrawal) {
-      toast.error(`Valor mínimo: ${formatCurrency(FINANCIAL.minWithdrawal)}`);
+
+    if (isNaN(value) || value < minWithdrawal) {
+      toast.error(`Valor mínimo: ${formatCurrency(minWithdrawal)}`);
       return;
     }
-    if (value > FINANCIAL.maxWithdrawal) {
-      toast.error(`Valor máximo: ${formatCurrency(FINANCIAL.maxWithdrawal)}`);
+    if (value > maxWithdrawal) {
+      toast.error(`Valor máximo: ${formatCurrency(maxWithdrawal)}`);
       return;
     }
-    createWithdrawal(value);
+    // O servidor verifica o saldo antes do IBAN e devolve INSUFFICIENT_BALANCE;
+    // dizê-lo aqui evita a viagem e o recibo enviado para nada.
+    if (value > available) {
+      toast.error(`Disponível para retirada: ${formatCurrency(available)}`);
+      return;
+    }
+    if (!receipt) {
+      setReceiptError('Anexe o recibo verde.');
+      return;
+    }
+
+    createWithdrawal({ value, file: receipt });
+  }
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      setReceipt(null);
+      setReceiptError('');
+    }
   }
 
   if (isLoading) return <WithdrawalsSkeleton />;
@@ -188,8 +256,8 @@ export function Withdrawals() {
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
-        <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-muted-foreground">Erro ao carregar saques.</p>
+        <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
+        <p className="text-muted-foreground">Erro ao carregar as retiradas.</p>
         <Button
           variant="outline"
           onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })}
@@ -204,77 +272,74 @@ export function Withdrawals() {
     <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title="Retiradas"
-        subtitle="Solicite saques e acompanhe seu histórico"
+        subtitle="Peça retiradas e acompanhe o seu histórico"
         icon={<ArrowDownToLine className="h-5 w-5" />}
         actions={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto">
-                <ArrowDownToLine className="mr-2 h-4 w-4" />Nova Retirada
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Solicitar Retirada</DialogTitle>
-                <DialogDescription>
-                  Mínimo {formatCurrency(FINANCIAL.minWithdrawal)} · Máximo{' '}
-                  {formatCurrency(FINANCIAL.maxWithdrawal)}
-                </DialogDescription>
-              </DialogHeader>
-
-              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Valor da retirada</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-muted-foreground">€</span>
-                    <Input
-                      id="amount" type="number" step="0.01"
-                      min={FINANCIAL.minWithdrawal} max={FINANCIAL.maxWithdrawal}
-                      placeholder="0,00" className="pl-8"
-                      value={amount} onChange={(e) => setAmount(e.target.value)} required
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <p className="text-sm text-muted-foreground">
-                    Saques são processados em até {FINANCIAL.processingDays} dias úteis.
-                  </p>
-                </div>
-
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    type="button" variant="outline" onClick={() => setOpen(false)}
-                    className="w-full sm:w-auto"
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button
+            className="w-full sm:w-auto"
+            disabled={!canWithdraw || bankQuery.isLoading}
+            onClick={() => setOpen(true)}
+          >
+            <ArrowDownToLine className="mr-2 h-4 w-4" aria-hidden="true" />
+            Nova Retirada
+          </Button>
         }
       />
 
-      {/* Hero: total sacado */}
+      {/* Sem IBAN aprovado: o motivo e o caminho, em vez de um botão morto sem
+          explicação. Cobre os três casos em que não se pode pedir — nunca
+          registou, está à espera de decisão, e foi recusado. */}
+      {!bankQuery.isLoading && !canWithdraw && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40 sm:p-5">
+          <div className="flex items-start gap-3">
+            <Landmark className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                {account?.hasPending
+                  ? 'Os seus dados bancários aguardam aprovação'
+                  : account?.rejectionReason
+                    ? 'Os seus dados bancários foram recusados'
+                    : 'Ainda não registou uma conta bancária'}
+              </p>
+              <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                {account?.hasPending
+                  ? 'Assim que a administração aprovar, poderá pedir retiradas.'
+                  : 'Sem IBAN aprovado não há destino para a transferência, por isso os pedidos ficam bloqueados.'}
+              </p>
+              {account?.rejectionReason && !account.hasPending && (
+                <p className="mt-1.5 text-sm text-amber-800 dark:text-amber-300">
+                  <span className="font-medium">Motivo:</span> {account.rejectionReason}
+                </p>
+              )}
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link to="/app/driver/profile">Ir para o Perfil</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hero: disponível e total já retirado.
+          O disponível vem primeiro porque é o número que decide o pedido. */}
       <div
         className="overflow-hidden rounded-xl p-5 shadow-md sm:p-6"
         style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
       >
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-white/70">Total sacado</p>
+            <p className="text-sm text-white/70">Disponível para retirada</p>
             <p className="mt-1 text-3xl font-bold tracking-tight text-white tabular-nums sm:text-4xl">
-              {formatCurrency(totalWithdrawn)}
+              {balanceQuery.isLoading ? '—' : formatCurrency(available)}
             </p>
             <p className="mt-2 text-sm text-white/70">
-              {settled.length} saque{settled.length !== 1 ? 's' : ''} aprovado
-              {settled.length !== 1 ? 's' : ''} ou pago{settled.length !== 1 ? 's' : ''}
+              {formatCurrency(totalWithdrawn)} já retirados em {settled.length} pedido
+              {settled.length !== 1 ? 's' : ''}
             </p>
+            {account?.isUsable && account.iban && (
+              <p className="mt-2 truncate font-mono text-xs text-white/60">
+                {formatIban(account.iban)}
+              </p>
+            )}
           </div>
 
           <PayoutIllustration
@@ -285,16 +350,100 @@ export function Withdrawals() {
         </div>
       </div>
 
+      {/* O diálogo vive fora do PageHeader porque também é aberto pelo
+          state.openNew vindo do painel, e não só pelo botão. */}
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pedir retirada</DialogTitle>
+            <DialogDescription>
+              Disponível {formatCurrency(available)} · mínimo {formatCurrency(minWithdrawal)} ·
+              máximo {formatCurrency(maxWithdrawal)}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="mt-4 min-w-0 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="amount">Valor da retirada</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-muted-foreground">€</span>
+                <Input
+                  id="amount" type="number" step="0.01"
+                  min={minWithdrawal} max={maxWithdrawal}
+                  placeholder="0,00" className="pl-8"
+                  value={amount} onChange={(e) => setAmount(e.target.value)} required
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setAmount(String(available))}
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                Usar o disponível ({formatCurrency(available)})
+              </button>
+            </div>
+
+            <FilePicker
+              id="withdrawal-receipt"
+              label="Recibo verde"
+              hint="JPEG, PNG, WebP ou PDF — máx. 10 MB"
+              file={receipt}
+              onChange={(f) => { setReceipt(f); if (f) setReceiptError(''); }}
+              error={receiptError}
+              onError={setReceiptError}
+              disabled={isPending}
+            />
+
+            <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
+              <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                O recibo é obrigatório: a empresa não transfere sem fatura.
+              </p>
+            </div>
+
+            {account?.iban && (
+              <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
+                <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-sm text-muted-foreground">Transferência para</p>
+                  <p className="break-all font-mono text-xs">{formatIban(account.iban)}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                As retiradas são processadas em até {processingDays} dias úteis.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button" variant="outline" onClick={() => handleOpenChange(false)}
+                className="w-full sm:w-auto"
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                Pedir
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Histórico */}
       <Card className="shadow-card">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg">Histórico de retiradas</CardTitle>
-          <CardDescription>Acompanhe todas as suas solicitações</CardDescription>
+          <CardDescription>Acompanhe todos os seus pedidos</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {withdrawals.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum saque solicitado ainda.
+              Ainda não pediu nenhuma retirada.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -321,8 +470,18 @@ export function Withdrawals() {
                       </div>
                     </div>
 
-                    {/* Motivo da recusa em destaque — mesmo padrão dos documentos.
-                        Para os demais status a nota é informativa. */}
+                    {/* O IBAN só existe depois da aprovação, e é o que ficou
+                        congelado — não o atual. Mostrá-lo responde a "para onde
+                        foi este dinheiro?" mesmo depois de o motorista mudar
+                        de conta. */}
+                    {w.paidToIban && (
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        {formatIban(w.paidToIban)}
+                      </p>
+                    )}
+
+                    {/* Motivo da recusa em destaque — mesmo padrão dos
+                        documentos. Nos outros estados a nota é informativa. */}
                     {note && (
                       w.status === 'REJECTED' ? (
                         <p className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">

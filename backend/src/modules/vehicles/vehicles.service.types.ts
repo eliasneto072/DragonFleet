@@ -8,6 +8,8 @@ export type CreateVehicleInput = {
     year: number
     vin?: string | null
     status?: VehicleStatus
+    /** Encargo semanal. Só a gestão o define — ver vehicles.service. */
+    weeklyFee?: number
 }
 
 
@@ -18,4 +20,5 @@ export type UpdateVehicleInput = {
     year?: number
     vin?: string | null
     status?: VehicleStatus
+    weeklyFee?: number
 }

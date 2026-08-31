@@ -9,6 +9,11 @@ import {
 
 export interface FinancialReportData {
   range: { from: Date; to: Date };
+  /**
+   * Percentagem aplicada, em pontos (15 = 15%). Vem das configurações e viaja
+   * com os dados: o rótulo do PDF imprime-a, em vez de a ter escrita no texto.
+   */
+  commissionPercent: number;
   totals: {
     grossEarnings: number;      // tudo que motoristas ganharam
     companyRevenue: number;     // comissão da empresa
@@ -49,10 +54,20 @@ export interface DriverEarningsReportData {
   rows: StatementRow[];
 }
 
-const COMPANY_COMMISSION = 0.20; // mantém o mesmo valor do frontend (FINANCIAL.companyCommission)
-
 export const reportsRepository = {
-  async getFinancialReport(from: Date, to: Date): Promise<FinancialReportData> {
+  /**
+   * @param commissionRate Fração (0.15 = 15%), vinda de SystemSettings.
+   *
+   * Havia aqui uma constante COMPANY_COMMISSION = 0.20, alinhada com o valor
+   * cravado no frontend. A configuração do sistema diz 15, por isso o PDF
+   * reportava a receita da empresa um terço acima do real — num documento que
+   * sai da empresa.
+   */
+  async getFinancialReport(
+    from: Date,
+    to: Date,
+    commissionRate: number,
+  ): Promise<FinancialReportData> {
     const dateFilter = { date: { gte: from, lte: to } };
 
     const [
@@ -113,10 +128,11 @@ export const reportsRepository = {
     const grossEarnings = Number(grossAgg._sum.amount ?? 0);
     const paidWithdrawals = Number(paidAgg._sum.amount ?? 0);
     const pendingWithdrawals = Number(pendingAgg._sum.amount ?? 0);
-    const companyRevenue = grossEarnings * COMPANY_COMMISSION;
+    const companyRevenue = Math.round(grossEarnings * commissionRate * 100) / 100;
 
     return {
       range: { from, to },
+      commissionPercent: Math.round(commissionRate * 100 * 100) / 100,
       totals: {
         grossEarnings,
         companyRevenue,

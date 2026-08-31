@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <strong>DragonFleet</strong>
+    <span id="portal" class="etiqueta"></span>
+  </header>
+
+  <!-- Sessão -->
+  <section id="login" hidden>
+    <p class="ajuda">Entre com a conta de administrador do DragonFleet.</p>
+    <label>Endereço do servidor
+      <input id="api" type="url" placeholder="http://localhost:3000" />
+    </label>
+    <label>Email <input id="email" type="email" autocomplete="username" /></label>
+    <label>Palavra-passe <input id="password" type="password" autocomplete="current-password" /></label>
+    <button id="entrar" class="principal">Entrar</button>
+  </section>
+
+  <!-- Recolha -->
+  <section id="recolha" hidden>
+    <div id="periodo" class="periodo"></div>
+    <div id="resumo" class="resumo"></div>
+    <table id="linhas"></table>
+
+    <div id="porEmparelhar" class="aviso" hidden></div>
+
+    <div class="botoes">
+      <button id="rever" class="secundario">Rever</button>
+      <button id="enviar" class="principal" disabled>Enviar</button>
+    </div>
+  </section>
+
+  <p id="erro" class="erro" hidden></p>
+  <footer><button id="sair" class="ligacao" hidden>Terminar sessão</button></footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

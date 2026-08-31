@@ -22,7 +22,21 @@ function getActor(req: AuthRequest) {
 
 export class UsersController {
   list = async (req: AuthRequest, res: Response) => {
-    const users = await usersService.list(getActor(req));
+    const { items, page, counts } = await usersService.list(getActor(req), {
+      role: typeof req.query.role === 'string' ? req.query.role : undefined,
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      search: req.query.search,
+      pending: typeof req.query.pending === 'string' ? req.query.pending : undefined,
+      sort: typeof req.query.sort === 'string' ? req.query.sort : undefined,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    });
+    // `users` mantém o nome de sempre; o que muda é ser uma página.
+    return ok(res, { users: items, page, counts });
+  };
+
+  listAllRaw = async (req: AuthRequest, res: Response) => {
+    const users = await usersService.listAll(getActor(req));
     return ok(res, { users });
   };
 

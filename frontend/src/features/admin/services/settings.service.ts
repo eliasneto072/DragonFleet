@@ -4,6 +4,8 @@ import { apiClient } from '@/shared/lib/api-client';
 
 export interface SystemSettings {
   companyCommission: number;
+  /** Imposto sobre a faturação, em pontos percentuais. Vale do próximo fecho. */
+  settlementTaxRate: number;
   minWithdrawalAmount: number;
   maxWithdrawalAmount: number;
   withdrawalProcessingDays: number;

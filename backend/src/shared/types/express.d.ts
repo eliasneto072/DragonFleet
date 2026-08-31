@@ -1,5 +1,5 @@
-//é um arquivo de declaração de tipos global.
-//usasse esse arquivo para adicionar a propiedade user no Request
+//é um ficheiro de declaração de tipos global.
+//usasse esse ficheiro para adicionar a propiedade user no Request
 
 //import { IUser } from "../modules/users/users.types"; 
 //

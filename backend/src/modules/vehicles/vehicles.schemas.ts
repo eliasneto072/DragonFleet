@@ -21,6 +21,8 @@ export const createVehicleSchema = z.object({
     year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 1),
     vin: z.string().min(5).max(20).optional(),
     status: z.nativeEnum(VehicleStatus).optional(),
+    /** Encargo semanal. Sugerido no fecho, e lá continua editável. */
+    weeklyFee: z.coerce.number().min(0).optional(),
   }),
 });
 
@@ -36,6 +38,7 @@ export const updateVehicleSchema = z.object({
       year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 1).optional(), // fix: era obrigatório antes
       vin: z.string().min(5).max(20).optional(),
       status: z.nativeEnum(VehicleStatus).optional(),
+      weeklyFee: z.coerce.number().min(0).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required',

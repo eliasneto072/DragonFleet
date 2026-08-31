@@ -1,7 +1,7 @@
 // src/features/driver/services/vehicles.service.ts
 
 import { apiClient } from '@/shared/lib/api-client';
-import type { ApiVehicle, ApiVehicleAssignment, VehicleStatus } from '@/shared/types/api';
+import type { ApiVehicle, ApiVehicleAssignment, ApiDriverAssignment, VehicleStatus } from '@/shared/types/api';
 
 interface CreateVehicleInput {
   brand:   string;
@@ -10,6 +10,8 @@ interface CreateVehicleInput {
   year:    number;
   vin?:    string;
   status?: VehicleStatus;
+  /** Encargo semanal. Só a gestão o define — o servidor recusa aos restantes. */
+  weeklyFee?: number;
 }
 
 interface UpdateVehicleInput {
@@ -19,10 +21,11 @@ interface UpdateVehicleInput {
   year?:   number;
   vin?:    string;
   status?: VehicleStatus;  // apenas admin/manager pode alterar
+  weeklyFee?: number;      // idem — devolve CANNOT_CHANGE_VEHICLE_FEE ao motorista
 }
 
 export const vehiclesService = {
-  /** GET /vehicles — lista do usuário logado (ou todos, se admin) */
+  /** GET /vehicles — lista do utilizador com sessão iniciada (ou todos, se admin) */
   list(): Promise<{ vehicles: ApiVehicle[] }> {
     return apiClient.get('/vehicles');
   },
@@ -66,6 +69,16 @@ export const vehiclesService = {
   /** GET /vehicles/:id/assignments */
   assignmentHistory(id: string): Promise<{ history: ApiVehicleAssignment[] }> {
     return apiClient.get(`/vehicles/${id}/assignments`);
+  },
+
+  /**
+   * GET /vehicles/driver/:userId/assignments — que carros esta pessoa conduziu.
+   *
+   * O inverso de assignmentHistory: mesma tabela, outro ângulo. A ficha do
+   * motorista precisa deste; a do veículo, do outro.
+   */
+  driverVehicleHistory(userId: string): Promise<{ history: ApiDriverAssignment[] }> {
+    return apiClient.get(`/vehicles/driver/${userId}/assignments`);
   },
 
   // ── Ativação híbrida (admin/manager) ────────────────────────────────────

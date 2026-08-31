@@ -1,4 +1,7 @@
 // src/modules/withdrawals/withdrawals.service.ts
+import { prisma }               from '../../config/prisma';
+import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
+import { logger }               from '../../shared/utils/logger';
 import { AppError }             from '../../shared/errors/AppError';
 import { UserRole, WithdrawalStatus } from '../../shared/types/enums';
 import { usersRepository }      from '../users/users.repository';
@@ -9,6 +12,7 @@ import { CreateWithdrawalInput, UpdateWithdrawalStatusInput } from './withdrawal
 import { emailService }         from '../../shared/services/email.service';
 import { balanceService }       from '../balance/balance.service';
 import { settingsService }      from '../settings/settings.service';
+import { bankService }          from '../bank/bank.service';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -33,9 +37,19 @@ export class WithdrawalsService {
     if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   }
 
-  async list(actor: Actor): Promise<IWithdrawalPublic[]> {
-    if (canManageWithdrawals(actor.role)) return withdrawalsRepository.findAll();
-    return withdrawalsRepository.findByUserId(actor.id);
+  async list(actor: Actor, filter: {
+    status?: string; search?: unknown; page?: unknown; pageSize?: unknown;
+  } = {}) {
+    const gere = canManageWithdrawals(actor.role);
+    const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
+
+    return withdrawalsRepository.findManyPaged({
+      // O motorista só vê as próprias, e procurar pelo próprio nome dentro
+      // delas não faz sentido.
+      userId: gere ? undefined : actor.id,
+      status: filter.status,
+      terms: gere ? parseSearchTerms(filter.search) : [],
+    }, page);
   }
 
   async listByUser(actor: Actor, userId: string): Promise<IWithdrawalPublic[]> {
@@ -116,7 +130,23 @@ export class WithdrawalsService {
       );
     }
 
-    const data: CreateWithdrawalData = { amount, userId };
+    // Sem IBAN aprovado não há como pagar. Recusar aqui é melhor do que
+    // aceitar o pedido e descobrir na hora da transferência que não há destino.
+    const bank = await bankService.getActiveIban(userId);
+    if (!bank) {
+      throw new AppError(
+        'Registe os seus dados bancários e aguarde a aprovação antes de pedir uma retirada.',
+        400,
+        'BANK_ACCOUNT_REQUIRED',
+      );
+    }
+
+    const data: CreateWithdrawalData = {
+      amount,
+      userId,
+      receiptUrl: input.receiptUrl,
+      receiptKey: input.receiptKey,
+    };
     return withdrawalsRepository.create(data);
   }
 
@@ -139,6 +169,67 @@ export class WithdrawalsService {
       throw new AppError('Notes are required when rejecting a withdrawal', 400, 'NOTES_REQUIRED');
     }
 
+    // ── Não se paga o que não foi aprovado ────────────────────────────────────
+    //
+    // A API aceitava PENDING → PAID diretamente, e essa passagem saltava por
+    // cima de tudo o que a aprovação existe para registar: o IBAN não era
+    // congelado e o recibo verde não era classificado. O resultado era uma
+    // retirada marcada como paga sem registo nenhum de para onde o dinheiro
+    // foi — o pior estado possível para o único fluxo do sistema que move
+    // dinheiro a sério.
+    //
+    // A interface nunca ofereceu este caminho; a porta estava aberta só para
+    // quem chamasse a rota diretamente. Fechá-la torna a máquina de estados
+    // linear: PENDING → APPROVED → PAID, com REJECTED possível dos dois
+    // primeiros.
+    //
+    // Se um dia fizer sentido um botão de "aprovar e pagar" num passo, o sítio
+    // para o construir é a interface, encadeando as duas transições — assim o
+    // registo de ambas continua a existir.
+    if (
+      input.status === WithdrawalStatus.PAID &&
+      withdrawal.status !== WithdrawalStatus.APPROVED
+    ) {
+      throw new AppError(
+        'Aprove a retirada antes de a marcar como paga. A aprovação é o que fixa ' +
+        'o IBAN de destino e a sociedade do recibo verde.',
+        400,
+        'APPROVAL_REQUIRED',
+      );
+    }
+
+    // ── Classificação do recibo verde, na aprovação ───────────────────────────
+    //
+    // Obrigatória, com "Nenhum" como escolha explícita. Um campo opcional fica
+    // por preencher nas primeiras semanas e depois ninguém volta atrás — o
+    // registo nasceria com buracos precisamente onde interessava.
+    //
+    // "Nenhum" chega como companyId e companyOther ambos ausentes. É diferente
+    // de não classificar: a data fica gravada, e é ela que distingue a escolha
+    // deliberada das retiradas anteriores a este campo.
+    if (input.status === WithdrawalStatus.APPROVED) {
+      if (input.companyId && input.companyOther) {
+        throw new AppError(
+          'Escolha uma sociedade da lista ou escreva outra, não as duas.',
+          400,
+          'COMPANY_AMBIGUOUS',
+        );
+      }
+      if (input.companyId) {
+        const company = await prisma.company.findUnique({ where: { id: input.companyId } });
+        if (!company) {
+          throw new AppError('Sociedade não encontrada.', 404, 'COMPANY_NOT_FOUND');
+        }
+        if (!company.active) {
+          throw new AppError(
+            'Essa sociedade está desativada. Reative-a ou escolha outra.',
+            400,
+            'COMPANY_INACTIVE',
+          );
+        }
+      }
+    }
+
     // Reconferência ao aprovar ou pagar. O saldo pode ter caído entre o pedido
     // e a decisão — por exemplo, um débito lançado pela gestão nesse intervalo.
     // O disponível já contempla esta retirada (pendente ou aprovada), logo um
@@ -159,6 +250,33 @@ export class WithdrawalsService {
       notes:  input.notes ?? null,
     };
 
+    // A classificação grava-se com autor e data. Ao contrário do IBAN, este
+    // campo é corrigível depois: não entra em cálculo nenhum e um clique
+    // errado no seletor não deve obrigar a rejeitar a retirada. O rasto de
+    // quem escolheu é o que torna a correção aceitável.
+    if (input.status === WithdrawalStatus.APPROVED) {
+      data.companyId = input.companyId ?? null;
+      data.companyOther = input.companyOther?.trim() || null;
+      data.companySetById = actor.id;
+      data.companySetAt = new Date();
+    }
+
+    // Congela o destino no momento da aprovação: se o motorista alterar os
+    // dados bancários depois, uma transferência já decidida não muda de conta
+    // sem ninguém reparar.
+    if (input.status === WithdrawalStatus.APPROVED && !withdrawal.paidToIban) {
+      const bank = await bankService.getActiveIban(withdrawal.userId);
+      if (!bank) {
+        throw new AppError(
+          'Este motorista não tem dados bancários aprovados. Não há destino para a transferência.',
+          400,
+          'BANK_ACCOUNT_REQUIRED',
+        );
+      }
+      data.paidToIban = bank.iban;
+      data.paidToHolder = bank.holderName;
+    }
+
     const updated = await withdrawalsRepository.update(id, data);
 
     // ── Disparar email ao driver ──────────────────────────────────────────
@@ -167,8 +285,20 @@ export class WithdrawalsService {
       const amount = Number(withdrawal.amount);
 
       if (user?.email) {
-        if (input.status === WithdrawalStatus.APPROVED || input.status === WithdrawalStatus.PAID) {
+        // Um email por transição, e não o mesmo em duas.
+        //
+        // APPROVED e PAID partilhavam o sendWithdrawalApproved, portanto quem
+        // aprovava e depois marcava como paga mandava ao motorista duas vezes
+        // a mesma mensagem — "foi aprovado, será processado em breve" — e a
+        // segunda chegava quando o dinheiro já estava na conta dele.
+        if (input.status === WithdrawalStatus.APPROVED) {
           await emailService.sendWithdrawalApproved(user.email, user.name, amount);
+        } else if (input.status === WithdrawalStatus.PAID) {
+          // O IBAN e a referência vêm do registo atualizado, não do que estava
+          // antes: são os valores que ficaram gravados nesta transição.
+          await emailService.sendWithdrawalPaid(
+            user.email, user.name, amount, updated.paidToIban, updated.notes,
+          );
         } else if (input.status === WithdrawalStatus.REJECTED) {
           await emailService.sendWithdrawalRejected(user.email, user.name, amount, input.notes);
         }
@@ -177,6 +307,72 @@ export class WithdrawalsService {
       console.error('[email] Failed to send withdrawal status email:', emailErr);
     }
 
+    return updated;
+  }
+
+  /**
+   * Corrigir a que sociedade o recibo foi emitido, depois da aprovação.
+   *
+   * Existe porque este campo é uma anotação contabilística e não uma decisão
+   * financeira: não entra em cálculo nenhum, não move dinheiro, e um clique
+   * errado no seletor não deve obrigar a rejeitar a retirada e a pedir ao
+   * motorista que a submeta outra vez.
+   *
+   * É também o caminho para classificar as retiradas anteriores a este campo,
+   * que estão com companySetAt nulo e aparecem como "por classificar".
+   *
+   * O rasto — quem alterou e quando — é o que torna a correção aceitável. Sem
+   * ele, um registo que se pode reescrever em silêncio não vale como registo.
+   */
+  async setCompany(
+    actor: Actor,
+    id: string,
+    input: { companyId?: string | null; companyOther?: string | null },
+  ): Promise<IWithdrawalPublic> {
+    if (!canManageWithdrawals(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const withdrawal = await this.ensureWithdrawalExists(id);
+
+    // Só faz sentido em retiradas decididas: uma pendente ainda pode ser
+    // rejeitada, e classificar um recibo que talvez nunca seja pago sujaria o
+    // registo com linhas que depois teriam de ser retiradas.
+    if (withdrawal.status === WithdrawalStatus.PENDING) {
+      throw new AppError(
+        'Classifique o recibo ao aprovar a retirada.',
+        400,
+        'WITHDRAWAL_NOT_DECIDED',
+      );
+    }
+    if (withdrawal.status === WithdrawalStatus.REJECTED) {
+      throw new AppError(
+        'Uma retirada rejeitada não gera recibo a classificar.',
+        400,
+        'WITHDRAWAL_REJECTED',
+      );
+    }
+
+    if (input.companyId && input.companyOther) {
+      throw new AppError(
+        'Escolha uma sociedade da lista ou escreva outra, não as duas.',
+        400,
+        'COMPANY_AMBIGUOUS',
+      );
+    }
+    if (input.companyId) {
+      const company = await prisma.company.findUnique({ where: { id: input.companyId } });
+      if (!company) throw new AppError('Sociedade não encontrada.', 404, 'COMPANY_NOT_FOUND');
+    }
+
+    const updated = await withdrawalsRepository.update(id, {
+      companyId: input.companyId ?? null,
+      companyOther: input.companyOther?.trim() || null,
+      companySetById: actor.id,
+      companySetAt: new Date(),
+    });
+
+    logger.info(`[withdrawals] ${actor.id} classificou o recibo de ${id}`);
     return updated;
   }
 

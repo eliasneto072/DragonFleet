@@ -4,7 +4,9 @@
 
 import { prisma } from '../../config/prisma';
 import { logger } from '../../shared/utils/logger';
-import { IVehicleAssignment, IVehicleAssignmentWithUser } from './vehicles.types';
+import {
+  IVehicleAssignment, IVehicleAssignmentWithUser, IVehicleAssignmentWithVehicle,
+} from './vehicles.types';
 
 export class AssignmentsRepository {
   private readonly publicSelect = {
@@ -45,6 +47,31 @@ export class AssignmentsRepository {
       }) as unknown as IVehicleAssignmentWithUser[];
     } catch (err) {
       logger.error('Erro ao listar histórico de atribuições', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Histórico completo de um motorista (mais recente primeiro), com o veículo.
+   *
+   * O inverso de listByVehicle: lá a pergunta é "que motoristas passaram por
+   * este carro"; aqui é "que carros esta pessoa conduziu, e quando". Mesma
+   * tabela, outro ângulo — a ficha do motorista precisa do segundo.
+   */
+  async listByUser(userId: string): Promise<IVehicleAssignmentWithVehicle[]> {
+    try {
+      return await prisma.vehicleAssignment.findMany({
+        where: { userId },
+        select: {
+          ...this.publicSelect,
+          vehicle: {
+            select: { id: true, brand: true, model: true, plate: true, year: true, status: true },
+          },
+        },
+        orderBy: { startedAt: 'desc' },
+      }) as unknown as IVehicleAssignmentWithVehicle[];
+    } catch (err) {
+      logger.error('Erro ao listar histórico de veículos do motorista', err);
       throw err;
     }
   }

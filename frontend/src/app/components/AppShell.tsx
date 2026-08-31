@@ -23,7 +23,7 @@
 // repetir a chamada.
 
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, Menu, X, ArrowLeftRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -38,10 +38,22 @@ export interface NavItem {
   to: string;
   icon: LucideIcon;
   label: string;
+  /** Número a assinalar no item; 0 ou ausente não mostra nada. */
+  badge?: number;
+  /** Vermelho em vez de neutro — algo que exige ação, não só novidade. */
+  badgeUrgent?: boolean;
+}
+
+export interface NavGroup {
+  /** Sem título, o grupo aparece sem cabeçalho. */
+  title?: string;
+  items: readonly NavItem[];
 }
 
 interface AppShellProps {
-  navItems: readonly NavItem[];
+  /** Lista simples; usar `navGroups` quando houver secções. */
+  navItems?: readonly NavItem[];
+  navGroups?: readonly NavGroup[];
   /** Shown under the logo, e.g. "Portal do Motorista". */
   area: string;
   /** Label for the role-switch button, or null to hide it. */
@@ -49,11 +61,21 @@ interface AppShellProps {
   onSwitch?: () => void;
 }
 
-export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProps) {
+export function AppShell({
+  navItems, navGroups, area, switchLabel, onSwitch,
+}: AppShellProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  const groups: readonly NavGroup[] = navGroups ?? [{ items: navItems ?? [] }];
+  const allItems = groups.flatMap((g) => g.items);
+
+  // Fecha a gaveta ao navegar. Sem isto ela ficava aberta por cima da tela
+  // nova, e era preciso um segundo toque para a ver.
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
   const isDriver = user?.role === 'DRIVER';
 
@@ -64,8 +86,13 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
     staleTime: 5 * 60 * 1000,
   });
 
+  // d.userId é obrigatório: sem ele, um administrador — que recebe os
+  // documentos de toda a gente — apanhava o primeiro FOTO_PERFIL da lista e
+  // ficava com a fotografia de um motorista. A guarda `enabled: isDriver`
+  // não bastava: ela evita disparar a consulta, mas o React Query devolve na
+  // mesma o que outra tela já pôs em cache.
   const photoDoc = docsData?.documents.find(
-    (d) => d.type === 'FOTO_PERFIL' && !d.vehicleId,
+    (d) => d.userId === user?.id && d.type === 'FOTO_PERFIL' && !d.vehicleId,
   );
   // Visível assim que enviada, tal como no Perfil. Rejeitada ou expirada
   // volta às iniciais.
@@ -111,25 +138,48 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
     ? user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
     : '–';
 
+  function Badge({ value, urgent }: { value: number; urgent?: boolean }) {
+    return (
+      <span
+        className={`ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+          urgent
+            ? 'bg-destructive text-destructive-foreground'
+            : 'bg-secondary text-muted-foreground'
+        }`}
+      >
+        {value > 99 ? '99+' : value}
+      </span>
+    );
+  }
+
   const navContent = (
-    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label={area}>
-      {navItems.map(({ to, icon: Icon, label }) => (
-        <NavLink
-          key={to}
-          to={to}
-          onClick={() => setDrawerOpen(false)}
-          className={({ isActive }) =>
-            [
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-brand-50 text-accent'
-                : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-            ].join(' ')
-          }
-        >
-          <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
-          <span>{label}</span>
-        </NavLink>
+    <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label={area}>
+      {groups.map((group, gi) => (
+        <div key={group.title ?? gi} className="space-y-1">
+          {group.title && (
+            <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {group.title}
+            </p>
+          )}
+          {group.items.map(({ to, icon: Icon, label, badge, badgeUrgent }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                [
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-brand-50 text-accent dark:bg-emerald-950 dark:text-emerald-300'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                ].join(' ')
+              }
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
+              <span className="truncate">{label}</span>
+              {!!badge && badge > 0 && <Badge value={badge} urgent={badgeUrgent} />}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </nav>
   );
@@ -175,6 +225,14 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
     </div>
   );
 
+  /** Título da tela atual, para o cabeçalho do telemóvel. */
+  const currentLabel =
+    allItems.find((i) => location.pathname.startsWith(i.to))?.label ?? area;
+
+  /** Total de pendências, para assinalar o botão do menu no telemóvel. */
+  const totalBadge = allItems.reduce((sum, i) => sum + (i.badge ?? 0), 0);
+  const anyUrgent = allItems.some((i) => i.badgeUrgent && (i.badge ?? 0) > 0);
+
   return (
     <div className="min-h-screen bg-background">
       <Toaster />
@@ -191,15 +249,28 @@ export function AppShell({ navItems, area, switchLabel, onSwitch }: AppShellProp
         {userFooter}
       </aside>
 
-      {/* ── Mobile top bar ── */}
-      <header className="lg:hidden sticky top-0 z-30 h-14 bg-card border-b border-border flex items-center justify-between px-4">
-        <DragonFleetLogo size={32} />
+      {/* ── Mobile top bar ──
+          Mostra a tela atual, e não só o logo: num telemóvel a barra lateral
+          está fechada, e sem isto nada indica onde se está. */}
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:hidden">
+        <div className="flex min-w-0 items-center gap-3">
+          <DragonFleetLogo size={30} iconOnly />
+          <span className="truncate text-sm font-semibold">{currentLabel}</span>
+        </div>
         <button
           onClick={() => setDrawerOpen(true)}
-          className="h-9 w-9 rounded-lg flex items-center justify-center hover:bg-secondary"
-          aria-label="Abrir menu"
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-secondary"
+          aria-label={totalBadge > 0 ? `Abrir menu, ${totalBadge} pendências` : 'Abrir menu'}
         >
           <Menu className="h-5 w-5" />
+          {totalBadge > 0 && (
+            <span
+              className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ${
+                anyUrgent ? 'bg-destructive' : 'bg-brand-500'
+              }`}
+              aria-hidden="true"
+            />
+          )}
         </button>
       </header>
 

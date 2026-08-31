@@ -9,12 +9,14 @@
 // - "Ver" + "Analisar"; ações no dialog de análise; rejeição com motivo opcional
 // - "Ver" via endpoint autenticado do backend
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import { PageHeader } from '@/app/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -35,10 +37,70 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { usersService } from '@/features/admin/services/users.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
+import { invalidateAfterDocument } from '@/shared/lib/invalidate';
+import {
+  DocumentValidityFields, EMPTY_VALIDITY, isValidityDecided, validityFromDocument,
+  type ValidityValue,
+} from './document-validity-fields';
 import type { DocumentStatus, ApiDocument, DocumentType } from '@/shared/types/api';
 import {
   DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil, VEHICLE_DOCUMENT_TYPES, DRIVER_DOCUMENT_TYPES,
 } from '@/shared/lib/document-labels';
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+//
+// Espelha a estrutura real: quatro cartões de contagem, a barra de filtros e
+// as linhas da tabela. Um placeholder genérico causaria um salto visível
+// quando os dados chegam, que é o oposto do efeito pretendido.
+
+function DocumentsSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar documentos…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardContent className="space-y-2 p-4 sm:p-5">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-7 w-12" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Skeleton className="h-9 min-w-[200px] flex-1" />
+        <Skeleton className="h-9 w-40" />
+        <Skeleton className="h-9 w-40" />
+      </div>
+
+      <Card>
+        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-44" /></CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-8 w-28 shrink-0" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // ── Categorias (derivadas do tipo — sem tocar no banco) ─────────────────────────
 
@@ -65,15 +127,17 @@ function urgencyRank(doc: ApiDocument): number {
 
 function getStatusBadge(status: DocumentStatus) {
   switch (status) {
-    case 'APPROVED': return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
-    case 'PENDING': return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-    case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-    case 'EXPIRED': return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100"><CalendarClock className="h-3 w-3 mr-1" />Expirado</Badge>;
+    // As variantes dark: são obrigatórias: bg-*-100 com text-*-800 não invertem
+    // sozinhas e no modo escuro dariam texto escuro sobre fundo claro.
+    case 'APPROVED': return <Badge className="bg-brand-50 text-brand-700 hover:bg-brand-50 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-950"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
+    case 'PENDING': return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-950"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
+    case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-950"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
+    case 'EXPIRED': return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-950 dark:text-orange-300 dark:hover:bg-orange-950"><CalendarClock className="h-3 w-3 mr-1" />Expirado</Badge>;
     default: return null;
   }
 }
 
-// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+// Abre o ficheiro via endpoint autenticado do backend (não expõe a URL do Cloudinary)
 function viewDocument(id: string) {
   documentsService.openFile(id).catch((err: any) =>
     toast.error(err?.message ?? 'Erro ao abrir o documento.'),
@@ -88,7 +152,7 @@ function ValidityText({ doc }: { doc: ApiDocument }) {
 
   if (doc.status === 'EXPIRED' || (dias !== null && dias < 0)) {
     return (
-      <span className="text-orange-600 font-medium inline-flex items-center gap-1 whitespace-nowrap">
+      <span className="text-orange-600 dark:text-orange-400 font-medium inline-flex items-center gap-1 whitespace-nowrap">
         <CalendarClock className="h-3 w-3 shrink-0" />Expirou em {dateStr}
       </span>
     );
@@ -98,7 +162,7 @@ function ValidityText({ doc }: { doc: ApiDocument }) {
   const atencao = dias !== null && dias <= 30;
 
   return (
-    <span className={`inline-flex items-center gap-1 whitespace-nowrap ${urgente ? 'text-orange-600 font-medium' : atencao ? 'text-amber-600' : 'text-muted-foreground'}`}>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap ${urgente ? 'text-orange-600 dark:text-orange-400 font-medium' : atencao ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
       <CalendarClock className="h-3 w-3 shrink-0" />
       {dateStr} ({dias} dia{dias === 1 ? '' : 's'})
     </span>
@@ -123,17 +187,32 @@ export function AdminDocuments() {
   const [rejectReason, setRejectReason] = useState('');
 
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
-  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.allUnpaged, queryFn: () => usersService.listAll() });
   const vehiclesQ = useQuery({ queryKey: queryKeys.vehicles.list, queryFn: () => vehiclesService.list() });
 
   const isLoading = docsQ.isLoading || usersQ.isLoading || vehiclesQ.isLoading;
   const isError = docsQ.isError || usersQ.isError || vehiclesQ.isError;
 
+  // Validade do documento em revisão. Reposta sempre que o diálogo abre noutro
+  // documento — senão as datas do anterior ficariam no formulário.
+  const [validity, setValidity] = useState<ValidityValue>(EMPTY_VALIDITY);
+
+  useEffect(() => {
+    setValidity(reviewDoc ? validityFromDocument(reviewDoc) : EMPTY_VALIDITY);
+  }, [reviewDoc?.id]);
+
   const { mutate: updateStatus, isPending: updating } = useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: DocumentStatus; notes?: string }) =>
-      documentsService.updateStatus(id, { status, notes }),
+    mutationFn: ({ id, status, notes, dates }: {
+      id: string;
+      status: DocumentStatus;
+      notes?: string;
+      dates?: { issuedAt: string | null; expiresAt: string | null };
+    }) => documentsService.updateStatus(id, { status, notes, ...dates }),
     onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+      // Aprovar reavalia o estado do veículo no servidor e pode desbloquear o
+      // motorista; invalidar só `documents` deixava as outras telas com o
+      // estado antigo até alguém recarregar.
+      invalidateAfterDocument(queryClient);
       toast.success(status === 'APPROVED' ? 'Documento aprovado!' : 'Documento rejeitado.');
       setRejectDoc(null);
       setRejectReason('');
@@ -145,7 +224,7 @@ export function AdminDocuments() {
   const { mutate: removeDocument, isPending: removing } = useMutation({
     mutationFn: (id: string) => documentsService.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+      invalidateAfterDocument(queryClient);
       toast.success('Documento removido.');
       setReviewDoc(null);
     },
@@ -305,17 +384,13 @@ export function AdminDocuments() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando documentos…</span>
-      </div>
-    );
+    return <DocumentsSkeleton />;
   }
 
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <AlertCircle className="h-10 w-10 text-red-400" />
+        <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Erro ao carregar documentos.</p>
         <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.documents.all })}>
           Tentar novamente
@@ -357,7 +432,7 @@ export function AdminDocuments() {
       : 'pessoais + veículo';
     return (
       <span
-        className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${complete ? 'bg-green-100 text-green-700' : 'bg-secondary text-muted-foreground'}`}
+        className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${complete ? 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-secondary text-muted-foreground'}`}
         title={`${p.approved} de ${p.total} documentos ${scopeLabel} aprovados`}
       >
         {complete && <CheckCircle className="h-3 w-3" />}
@@ -382,35 +457,36 @@ export function AdminDocuments() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Gestão de Documentos</h2>
-        <p className="text-muted-foreground">Analise e valide os documentos enviados pelos motoristas</p>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Documentos"
+        subtitle="Analise e valide os documentos enviados pelos motoristas"
+        icon={<FileText className="h-5 w-5" />}
+      />
 
       {/* Cards de resumo — toggles de filtro */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
-          label="Pendentes" value={counts.pending} colorCls="text-yellow-600"
-          icon={<Clock className="h-4 w-4 text-yellow-600 shrink-0" />}
+          label="Pendentes" value={counts.pending} colorCls="text-amber-600 dark:text-amber-400"
+          icon={<Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />}
           active={statusFilter === 'PENDING' && expiryFilter === 'all'}
           onClick={() => toggleStatusFilter('PENDING')}
         />
         <StatCard
-          label="Aprovados" value={counts.approved} colorCls="text-green-600"
-          icon={<CheckCircle className="h-4 w-4 text-green-600 shrink-0" />}
+          label="Aprovados" value={counts.approved} colorCls="text-success"
+          icon={<CheckCircle className="h-4 w-4 text-success shrink-0" />}
           active={statusFilter === 'APPROVED' && expiryFilter === 'all'}
           onClick={() => toggleStatusFilter('APPROVED')}
         />
         <StatCard
-          label="Rejeitados" value={counts.rejected} colorCls="text-red-600"
-          icon={<XCircle className="h-4 w-4 text-red-600 shrink-0" />}
+          label="Rejeitados" value={counts.rejected} colorCls="text-destructive"
+          icon={<XCircle className="h-4 w-4 text-destructive shrink-0" />}
           active={statusFilter === 'REJECTED' && expiryFilter === 'all'}
           onClick={() => toggleStatusFilter('REJECTED')}
         />
         <StatCard
-          label="Expirados" value={counts.expired} colorCls="text-orange-600"
-          icon={<CalendarClock className="h-4 w-4 text-orange-600 shrink-0" />}
+          label="Expirados" value={counts.expired} colorCls="text-orange-600 dark:text-orange-400"
+          icon={<CalendarClock className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />}
           active={statusFilter === 'EXPIRED' && expiryFilter === 'all'}
           onClick={() => toggleStatusFilter('EXPIRED')}
         />
@@ -647,6 +723,12 @@ export function AdminDocuments() {
                   <Button variant="outline" className="w-full" onClick={() => viewDocument(reviewDoc.id)}>
                     <Eye className="h-4 w-4 mr-2" />Ver ficheiro
                   </Button>
+
+                  {/* Logo abaixo de "Ver ficheiro", de propósito: as datas são
+                      lidas do documento, e é essa a sequência do trabalho. */}
+                  {reviewDoc.status !== 'REJECTED' && (
+                    <DocumentValidityFields value={validity} onChange={setValidity} />
+                  )}
                 </div>
 
                 <DialogFooter className="mt-2 flex-col sm:flex-row gap-2 sm:justify-between">
@@ -694,8 +776,25 @@ export function AdminDocuments() {
                     {reviewDoc.status !== 'APPROVED' && (
                       <Button
                         className="flex-1 sm:flex-none"
-                        disabled={updating}
-                        onClick={() => updateStatus({ id: reviewDoc.id, status: 'APPROVED' })}
+                        // Aprovar sem decidir a validade deixaria o documento
+                        // para sempre sem avisar ninguém. "Não expira" é uma
+                        // decisão válida; ausência de decisão não é.
+                        disabled={updating || !isValidityDecided(validity)}
+                        title={
+                          isValidityDecided(validity)
+                            ? undefined
+                            : 'Indique a validade ou marque como sem validade'
+                        }
+                        onClick={() =>
+                          updateStatus({
+                            id: reviewDoc.id,
+                            status: 'APPROVED',
+                            dates: {
+                              issuedAt: validity.issuedAt,
+                              expiresAt: validity.neverExpires ? null : validity.expiresAt,
+                            },
+                          })
+                        }
                       >
                         {updating
                           ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />

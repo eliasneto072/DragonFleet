@@ -2,9 +2,11 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
+import { uploadToCloudinary } from '../upload/upload.service';
 import { withdrawalsService } from './withdrawals.service';
 import {
   createWithdrawalSchema,
+  setWithdrawalCompanySchema,
   updateWithdrawalStatusSchema,
   withdrawalIdParamSchema,
   userIdParamSchema,
@@ -20,8 +22,13 @@ function getActor(req: AuthRequest) {
 
 export class WithdrawalsController {
   list = async (req: AuthRequest, res: Response) => {
-    const withdrawals = await withdrawalsService.list(getActor(req));
-    return ok(res, { withdrawals });
+    const { items, page } = await withdrawalsService.list(getActor(req), {
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      search: req.query.search,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    });
+    return ok(res, { withdrawals: items, page });
   };
 
   listByUser = async (req: AuthRequest, res: Response) => {
@@ -36,11 +43,32 @@ export class WithdrawalsController {
     return ok(res, { withdrawal });
   };
 
+  /**
+   * POST /withdrawals — multipart, com o recibo verde.
+   *
+   * O ficheiro vem no mesmo pedido de propósito: exigi-lo depois da aprovação
+   * deixaria pedidos aprovados à espera de um documento que ninguém lembra de
+   * pedir, e a empresa não paga sem fatura.
+   */
   create = async (req: AuthRequest, res: Response) => {
     const parsed = createWithdrawalSchema.parse({ body: req.body });
     const actor = getActor(req);
 
-    const withdrawal = await withdrawalsService.create(actor, actor.id, parsed.body);
+    if (!req.file) {
+      throw new AppError('Anexe o recibo verde.', 400, 'MISSING_RECEIPT');
+    }
+
+    const { fileUrl, fileKey } = await uploadToCloudinary(
+      req.file.buffer,
+      req.file.mimetype,
+      'withdrawal-receipts',
+    );
+
+    const withdrawal = await withdrawalsService.create(actor, actor.id, {
+      amount: parsed.body.amount,
+      receiptUrl: fileUrl,
+      receiptKey: fileKey,
+    });
 
     return ok(res, { withdrawal }, 201);
   };
@@ -57,6 +85,14 @@ export class WithdrawalsController {
       parsed.body
     );
 
+    return ok(res, { withdrawal });
+  };
+
+  setCompany = async (req: AuthRequest, res: Response) => {
+    const parsed = setWithdrawalCompanySchema.parse({ params: req.params, body: req.body });
+    const withdrawal = await withdrawalsService.setCompany(
+      getActor(req), parsed.params.id, parsed.body,
+    );
     return ok(res, { withdrawal });
   };
 

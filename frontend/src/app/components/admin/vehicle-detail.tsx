@@ -47,7 +47,7 @@ function docStatusBadge(status: DocumentStatus) {
   return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}><Icon className="h-3 w-3" />{label}</span>;
 }
 
-// Abre o arquivo via endpoint autenticado do backend (não expõe a URL do Cloudinary)
+// Abre o ficheiro via endpoint autenticado do backend (não expõe a URL do Cloudinary)
 function viewDocument(id: string) {
   documentsService.openFile(id).catch((err: any) => toast.error(err?.message ?? 'Erro ao abrir o documento.'));
 }
@@ -63,7 +63,7 @@ export function VehicleDetail() {
   const [rejectReason, setRejectReason] = useState('');
 
   const vehicleQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id], queryFn: () => vehiclesService.getById(id), enabled: !!id });
-  const usersQ = useQuery({ queryKey: queryKeys.users.list, queryFn: () => usersService.list() });
+  const usersQ = useQuery({ queryKey: queryKeys.users.allUnpaged, queryFn: () => usersService.listAll() });
   const docsQ = useQuery({ queryKey: queryKeys.documents.list, queryFn: () => documentsService.list() });
   const historyQ = useQuery({ queryKey: [...queryKeys.vehicles.all, id, 'history'], queryFn: () => vehiclesService.assignmentHistory(id), enabled: !!id });
 

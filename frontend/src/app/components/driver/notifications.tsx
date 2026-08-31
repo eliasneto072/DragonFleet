@@ -131,7 +131,7 @@ export function Notifications() {
           <h2 className="text-2xl font-bold text-foreground">Notificações</h2>
           <p className="text-muted-foreground">
             {unreadCount > 0
-              ? `Você tem ${unreadCount} notificação${unreadCount > 1 ? 'ões' : ''} não lida${unreadCount > 1 ? 's' : ''}`
+              ? `Tem ${unreadCount} notificação${unreadCount > 1 ? 'ões' : ''} não lida${unreadCount > 1 ? 's' : ''}`
               : 'Todas as notificações lidas'}
           </p>
         </div>
@@ -203,7 +203,7 @@ export function Notifications() {
             <Bell className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Nenhuma Notificação</h3>
             <p className="text-sm text-muted-foreground text-center">
-              Quando você receber notificações, elas aparecerão aqui.
+              Quando receber notificações, aparecem aqui.
             </p>
           </CardContent>
         </Card>

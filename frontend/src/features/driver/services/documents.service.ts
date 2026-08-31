@@ -3,7 +3,6 @@
 import { apiClient } from '@/shared/lib/api-client';
 import type { ApiDocument, DocumentType, DocumentStatus } from '@/shared/types/api';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 interface UpdateDocumentInput {
   type?: DocumentType;
@@ -13,22 +12,20 @@ interface UpdateDocumentInput {
 interface UpdateStatusInput {
   status: DocumentStatus;
   notes?: string;
+  /**
+   * Datas lidas do documento pela administração ao rever.
+   *
+   * `null` limpa a data — em expiresAt, marca o documento como sem validade.
+   * Omitir deixa como está, para que rejeitar não obrigue a preencher nada.
+   */
+  issuedAt?: string | null;
+  expiresAt?: string | null;
 }
 
-/** Busca o ficheiro autenticado e devolve-o como Blob. */
+/** Obtém o ficheiro autenticado e devolve-o como Blob. */
 async function fetchFileBlob(id: string): Promise<Blob> {
-  const token = localStorage.getItem('dragonfleet:token');
-
-  const res = await fetch(`${BASE_URL}/documents/${id}/file`, {
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  });
-
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json?.message ?? 'Erro ao abrir o documento.');
-  }
-
-  return res.blob();
+  const { blob } = await apiClient.download(`/documents/${id}/file`);
+  return blob;
 }
 
 export const documentsService = {
@@ -43,7 +40,7 @@ export const documentsService = {
   },
 
   /**
-   * GET /documents/:id/file — abre o arquivo numa nova aba.
+   * GET /documents/:id/file — abre o ficheiro numa nova aba.
    * Busca com o token JWT (window.open puro não envia headers) e abre como blob.
    * Abrimos a janela ANTES do fetch para não ser bloqueada pelo popup blocker.
    */
@@ -86,36 +83,31 @@ export const documentsService = {
   },
 
   /**
-   * POST /documents — multipart/form-data
-   * O backend recebe o arquivo e faz o upload para o Cloudinary internamente.
-   * NÃO usar apiClient.post aqui pois ele força Content-Type: application/json.
+   * POST /documents — multipart, com o ficheiro no mesmo pedido.
+   *
+   * Usa o apiClient.upload(), que deteta o FormData e deixa o browser pôr o
+   * Content-Type com o boundary. Era esta limitação que obrigava ao fetch cru
+   * que estava aqui — e esse fetch trazia três problemas que a migração resolve:
+   *
+   *   - repetia a leitura do token e o tratamento de erro;
+   *   - lançava um Error genérico em vez de ApiError, perdendo o `code` que o
+   *     backend devolve e que distingue um documento duplicado de um formato
+   *     recusado;
+   *   - e não passava pela renovação silenciosa da sessão, portanto um token
+   *     que expirasse a meio de um envio dava 401 em vez de renovar. Enviar um
+   *     documento é precisamente das operações mais demoradas da aplicação.
+   *
    * `issuedAt` (ISO date) é obrigatório para o Registo Criminal.
    * `vehicleId` presente → documento pertence a um veículo (não é pessoal).
    */
-  async create(type: DocumentType, file: File, issuedAt?: string, vehicleId?: string): Promise<{ document: ApiDocument }> {
-    const token = localStorage.getItem('dragonfleet:token');
+  create(type: DocumentType, file: File, issuedAt?: string, vehicleId?: string): Promise<{ document: ApiDocument }> {
+    const form = new FormData();
+    form.append('type', type);
+    form.append('file', file);
+    if (issuedAt) form.append('issuedAt', issuedAt);
+    if (vehicleId) form.append('vehicleId', vehicleId);
 
-    const formData = new FormData();
-    formData.append('type', type);
-    formData.append('file', file);
-    if (issuedAt) formData.append('issuedAt', issuedAt);
-    if (vehicleId) formData.append('vehicleId', vehicleId);
-
-    const res = await fetch(`${BASE_URL}/documents`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData,
-    });
-
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      throw new Error(json?.message ?? 'Erro ao enviar documento.');
-    }
-
-    return json.data ?? json;
+    return apiClient.upload('/documents', form);
   },
 
   /** PATCH /documents/:id */

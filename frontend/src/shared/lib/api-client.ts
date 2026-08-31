@@ -59,8 +59,22 @@ async function doRefresh(): Promise<string> {
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const token = tokenStorage.getAccess();
 
+  // Num envio multipart o Content-Type tem de ser definido pelo browser: ele
+  // acrescenta-lhe o `boundary` que separa as partes do corpo, e esse valor só
+  // ele conhece. Cravar application/json em todos os pedidos, como era feito
+  // aqui, fazia o servidor tentar ler o corpo como JSON e não encontrar nem os
+  // campos nem o ficheiro.
+  //
+  // Era por causa disto que cada tela de envio nascia com o seu próprio fetch
+  // cru (ver documents.service.ts e earnings-import.service.ts). Esses fetch
+  // repetem o token e o tratamento de erro, e nenhum passa pela renovação
+  // silenciosa abaixo — um token que expire a meio de um envio dá 401 em vez
+  // de renovar. Detetar o FormData aqui traz os envios de ficheiro para o
+  // mesmo caminho de todos os outros pedidos.
+  const isFormData = options.body instanceof FormData;
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -111,4 +125,80 @@ export const apiClient = {
   put:    <T>(path: string, body: unknown)  => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
   patch:  <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH',  body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string)                => request<T>(path, { method: 'DELETE' }),
+
+  /**
+   * Envio multipart: campos e ficheiro no mesmo pedido.
+   *
+   * Existe para as telas de envio deixarem de precisar de fetch cru. Herdam
+   * daqui o token, os erros em ApiError — com o `code` que o backend devolve,
+   * que é o que permite distinguir BANK_ACCOUNT_REQUIRED de MISSING_RECEIPT —
+   * e a renovação silenciosa da sessão.
+   *
+   * Repetir o pedido depois de renovar o token é seguro com FormData: ao
+   * contrário de um stream, não é consumido pelo primeiro envio.
+   */
+  upload: <T>(path: string, form: FormData, method: 'POST' | 'PUT' | 'PATCH' = 'POST') =>
+    request<T>(path, { method, body: form }),
+
+  /**
+   * Descarrega binário: PDF, imagens, documentos.
+   *
+   * Não passa pelo request() porque esse desembrulha JSON, e um PDF não é JSON.
+   * Mas repete o que interessa — o token, e os erros em ApiError com o `code`,
+   * porque mesmo nestas rotas a resposta de ERRO vem em JSON.
+   *
+   * Devolve também o nome do ficheiro que o servidor sugere no
+   * Content-Disposition. Sem ele, cada tela inventava o seu, e o utilizador
+   * recebia nomes diferentes para o mesmo relatório conforme o sítio de onde o
+   * pediu.
+   *
+   * A renovação silenciosa da sessão NÃO se aplica aqui: um download que
+   * apanhe um token expirado devolve 401 e quem chama volta a tentar. Trazer a
+   * fila de renovação para este caminho duplicava-a por um ganho pequeno — os
+   * downloads são raros e o utilizador está à frente do ecrã quando os pede.
+   */
+  async download(path: string): Promise<{ blob: Blob; filename: string | null }> {
+    const token = tokenStorage.getAccess();
+
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new ApiError(
+        res.status,
+        json?.code ?? 'DOWNLOAD_ERROR',
+        json?.message ?? 'Não foi possível obter o ficheiro.',
+      );
+    }
+
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+
+    return { blob: await res.blob(), filename: match?.[1] ?? null };
+  },
 };
+
+/**
+ * Provoca a transferência de um blob para o disco do utilizador.
+ *
+ * O revokeObjectURL é obrigatório: sem ele, cada relatório descarregado deixa
+ * o ficheiro inteiro retido na memória do separador até ele ser fechado.
+ *
+ * MAS COM ATRASO, e não logo a seguir ao clique. Havia duas cópias disto no
+ * projeto e discordavam uma da outra: a do admin revogava de imediato, a do
+ * motorista esperava um segundo com um comentário a dizer que revogar cedo
+ * cancela o download nalguns browsers. Alguém apanhou esse bug e escreveu-o;
+ * a versão cautelosa é a que fica.
+ */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

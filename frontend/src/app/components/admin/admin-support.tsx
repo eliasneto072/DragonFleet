@@ -13,9 +13,11 @@ import {
 } from '@/app/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { MessageCircle, Send, Loader2, AlertCircle } from 'lucide-react';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
+import { queryKeys } from '@/shared/lib/query-keys';
 import { supportService } from '@/features/driver/services/support.service';
-import { useAuth } from '@/features/auth/context/AuthContext';
 import type { ApiTicket, TicketStatus } from '@/features/driver/services/support.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,24 +27,28 @@ const CATEGORY_LABELS: Record<string, string> = {
   DOCUMENTS: 'Documentos', ACCOUNT: 'Conta', OTHER: 'Outro',
 };
 
+// As variantes dark: são obrigatórias: bg-*-100 com text-*-800 não invertem
+// sozinhas e no modo escuro dariam texto escuro sobre fundo claro.
 const STATUS_CONFIG: Record<TicketStatus, { label: string; className: string }> = {
-  OPEN:        { label: 'Aberto',       className: 'bg-blue-100 text-blue-800'    },
-  IN_PROGRESS: { label: 'Em Progresso', className: 'bg-yellow-100 text-yellow-800' },
-  RESOLVED:    { label: 'Resolvido',    className: 'bg-green-100 text-green-800'  },
-  CLOSED:      { label: 'Fechado',      className: 'bg-gray-100 text-gray-800'    },
+  OPEN:        { label: 'Aberto',       className: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'       },
+  IN_PROGRESS: { label: 'Em progresso', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'   },
+  RESOLVED:    { label: 'Resolvido',    className: 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300' },
+  CLOSED:      { label: 'Fechado',      className: 'bg-secondary text-muted-foreground'                                  },
 };
 
-const QUERY_KEY = ['support', 'tickets'];
+const QUERY_KEY = queryKeys.support.tickets;
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   const { label, className } = STATUS_CONFIG[status];
-  return <Badge className={`${className} hover:${className}`}>{label}</Badge>;
+  // Sem hover interpolado: `hover:${className}` gerava "hover:bg-blue-100
+  // text-blue-800" — o prefixo aplicava-se só à primeira classe e o Tailwind
+  // não gera a variante a partir de uma string montada em execução.
+  return <Badge className={className}>{label}</Badge>;
 }
 
 // ── Modal de detalhe ──────────────────────────────────────────────────────────
 
 function TicketModal({ ticket, onClose }: { ticket: ApiTicket; onClose: () => void }) {
-  const { user }          = useAuth();
   const queryClient       = useQueryClient();
   const [reply, setReply] = useState('');
 
@@ -153,6 +159,48 @@ function TicketModal({ ticket, onClose }: { ticket: ApiTicket; onClose: () => vo
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Espelha a estrutura real: cabeçalho, três contadores e a lista de tickets.
+function SupportSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar tickets…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[0, 1, 2].map((i) => (
+          <Card key={i}>
+            <CardContent className="space-y-2 pt-5">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-7 w-10" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardContent className="space-y-4 p-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start gap-3">
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-52" />
+                <Skeleton className="h-3 w-36" />
+              </div>
+              <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function AdminSupport() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<ApiTicket | null>(null);
@@ -170,15 +218,11 @@ export function AdminSupport() {
   const inProgress = tickets.filter(t => t.status === 'IN_PROGRESS').length;
   const resolved   = tickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length;
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-      <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando tickets…</span>
-    </div>
-  );
+  if (isLoading) return <SupportSkeleton />;
 
   if (isError) return (
     <div className="flex flex-col items-center py-20 gap-3">
-      <AlertCircle className="h-10 w-10 text-red-400" />
+      <AlertCircle className="h-10 w-10 text-destructive" />
       <p className="text-muted-foreground">Erro ao carregar tickets.</p>
       <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEY })}>
         Tentar novamente
@@ -187,39 +231,40 @@ export function AdminSupport() {
   );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Suporte</h2>
-        <p className="text-muted-foreground">Gerencie os pedidos de suporte dos motoristas</p>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <PageHeader
+        title="Suporte"
+        subtitle="Pedidos de ajuda enviados pelos motoristas"
+        icon={<MessageCircle className="h-5 w-5" />}
+      />
 
       {/* Resumo */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Abertos</CardTitle>
-            <MessageCircle className="h-4 w-4 text-blue-600 shrink-0" />
+            <MessageCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{open}</div>
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{open}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Em Progresso</CardTitle>
-            <MessageCircle className="h-4 w-4 text-yellow-600 shrink-0" />
+            <MessageCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{inProgress}</div>
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{inProgress}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Resolvidos</CardTitle>
-            <MessageCircle className="h-4 w-4 text-green-600 shrink-0" />
+            <MessageCircle className="h-4 w-4 text-success shrink-0" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{resolved}</div>
+            <div className="text-2xl font-bold text-success">{resolved}</div>
           </CardContent>
         </Card>
       </div>

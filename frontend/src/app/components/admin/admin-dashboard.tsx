@@ -25,13 +25,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import {
-  AlertCircle, CalendarClock, CheckCircle2, ChevronRight, Coins,
-  FileText, TrendingDown, TrendingUp, UserX,
-} from 'lucide-react';
+import { AlertCircle, ChevronRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
+import { WorkQueue } from '@/app/components/admin/queue/WorkQueue';
+import { buildQueue, sortQueue } from '@/app/components/admin/queue/registry';
+import type { QueueItem } from '@/app/components/admin/queue/types';
 
 /** Dias inteiros decorridos desde uma data ISO. */
 function daysSince(iso: string | null): number | null {
@@ -40,67 +40,12 @@ function daysSince(iso: string | null): number | null {
   return Math.max(0, Math.floor(diff / 86_400_000));
 }
 
-function agoLabel(days: number | null): string {
-  if (days === null) return '';
-  if (days === 0) return 'chegou hoje';
-  if (days === 1) return 'espera há 1 dia';
-  return `espera há ${days} dias`;
-}
-
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
 // ── Linha da fila ─────────────────────────────────────────────────────────────
-
-interface QueueItem {
-  key: string;
-  icon: typeof FileText;
-  title: string;
-  detail: string;
-  /** Dias de espera; define a ordenação e a cor do detalhe. */
-  waiting: number | null;
-  actionLabel: string;
-  to: string;
-}
-
-/** Acima disto, o item passa a ser destacado como atrasado. */
-const OVERDUE_DAYS = 3;
-
-function QueueRow({ item, onGo }: { item: QueueItem; onGo: (to: string) => void }) {
-  const Icon = item.icon;
-  const overdue = item.waiting !== null && item.waiting >= OVERDUE_DAYS;
-
-  return (
-    <li className="flex items-center gap-3 border-t border-border py-3 first:border-t-0 sm:gap-4">
-      <Icon
-        className={`h-[19px] w-[19px] shrink-0 ${
-          overdue ? 'text-destructive' : 'text-muted-foreground'
-        }`}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{item.title}</p>
-        <p
-          className={`truncate text-xs ${
-            overdue ? 'font-medium text-destructive' : 'text-muted-foreground'
-          }`}
-        >
-          {item.detail}
-        </p>
-      </div>
-      <Button
-        size="sm" variant="outline" className="h-8 shrink-0"
-        onClick={() => onGo(item.to)}
-      >
-        {item.actionLabel}
-      </Button>
-    </li>
-  );
-}
-
-// ── Métrica ───────────────────────────────────────────────────────────────────
 
 function Metric({
   label, value, hint, tone = 'neutral',
@@ -168,6 +113,7 @@ function DashboardSkeleton() {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+
 export function AdminDashboard() {
   const navigate = useNavigate();
 
@@ -180,61 +126,7 @@ export function AdminDashboard() {
 
   const queue = useMemo<QueueItem[]>(() => {
     if (!overview) return [];
-    const { queue: q } = overview;
-    const items: QueueItem[] = [];
-
-    if (q.documentsPending.count > 0) {
-      const days = daysSince(q.documentsPending.oldestAt);
-      items.push({
-        key: 'docs',
-        icon: FileText,
-        title: `${q.documentsPending.count} documento${q.documentsPending.count !== 1 ? 's' : ''} por rever`,
-        detail: `O mais antigo ${agoLabel(days)}`,
-        waiting: days,
-        actionLabel: 'Rever',
-        to: '/app/admin/documents',
-      });
-    }
-
-    if (q.withdrawalsPending.count > 0) {
-      const days = daysSince(q.withdrawalsPending.oldestAt);
-      items.push({
-        key: 'withdrawals',
-        icon: Coins,
-        title: `${q.withdrawalsPending.count} retirada${q.withdrawalsPending.count !== 1 ? 's' : ''} pendente${q.withdrawalsPending.count !== 1 ? 's' : ''} · ${formatCurrency(q.withdrawalsPending.total)}`,
-        detail: `A mais antiga ${agoLabel(days)}`,
-        waiting: days,
-        actionLabel: 'Processar',
-        to: '/app/admin/financial',
-      });
-    }
-
-    if (q.driversBlocked > 0) {
-      items.push({
-        key: 'blocked',
-        icon: UserX,
-        title: `${q.driversBlocked} motorista${q.driversBlocked !== 1 ? 's' : ''} bloqueado${q.driversBlocked !== 1 ? 's' : ''} por documentação`,
-        detail: 'Não podem trabalhar até regularizar',
-        waiting: null,
-        actionLabel: 'Ver',
-        to: '/app/admin/drivers',
-      });
-    }
-
-    if (q.documentsExpiringSoon.count > 0) {
-      items.push({
-        key: 'expiring',
-        icon: CalendarClock,
-        title: `${q.documentsExpiringSoon.count} documento${q.documentsExpiringSoon.count !== 1 ? 's' : ''} expira${q.documentsExpiringSoon.count !== 1 ? 'm' : ''} em ${q.documentsExpiringSoon.days} dias`,
-        detail: 'Avise antes de o motorista parar',
-        waiting: null,
-        actionLabel: 'Ver',
-        to: '/app/admin/documents',
-      });
-    }
-
-    // Quem espera há mais tempo primeiro; itens sem idade vão para o fim.
-    return items.sort((a, b) => (b.waiting ?? -1) - (a.waiting ?? -1));
+    return sortQueue(buildQueue(overview));
   }, [overview]);
 
   if (isLoading) return <DashboardSkeleton />;
@@ -267,41 +159,8 @@ export function AdminDashboard() {
         </p>
       </div>
 
-      {/* Fila de trabalho */}
-      <Card className="shadow-card">
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 p-4 sm:p-6">
-          <div>
-            <CardTitle className="text-base sm:text-lg">Precisa da sua ação</CardTitle>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Quem espera há mais tempo aparece primeiro
-            </p>
-          </div>
-          {queue.length > 0 && (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {queue.length} {queue.length === 1 ? 'item' : 'itens'}
-            </span>
-          )}
-        </CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-          {queue.length === 0 ? (
-            // O estado bom merece uma resposta explícita. Metade do valor do
-            // painel é saber que está tudo em dia sem verificar cinco telas.
-            <div className="flex flex-col items-center gap-2 py-8 text-center">
-              <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
-              <p className="text-sm font-medium">Nada à espera</p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                Documentos e retiradas estão em dia.
-              </p>
-            </div>
-          ) : (
-            <ul>
-              {queue.map((item) => (
-                <QueueRow key={item.key} item={item} onGo={(to) => navigate(to)} />
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {/* Fila de trabalho — três níveis, ver queue/types.ts */}
+      <WorkQueue items={queue} expiringDays={overview.queue.documentsExpiringSoon.days} />
 
       {/* Posição financeira */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">

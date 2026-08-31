@@ -63,31 +63,18 @@ export class DocumentsService {
   // Calcula issuedAt/expiresAt conforme o tipo. O Registo Criminal exige data de
   // emissão e expira 90 dias depois (prazo legal em Portugal). Os demais não têm
   // expiração automática por agora.
-  private resolveValidity(type: DocumentType, issuedAtInput?: string): { issuedAt: Date | null; expiresAt: Date | null } {
-    let issuedAt: Date | null = null;
-    let expiresAt: Date | null = null;
-
-    if (type === DocumentType.REGISTO_CRIMINAL) {
-      if (!issuedAtInput) {
-        throw new AppError('A data de emissão é obrigatória para o Registo Criminal.', 400, 'ISSUE_DATE_REQUIRED');
-      }
-      issuedAt = new Date(issuedAtInput);
-      if (isNaN(issuedAt.getTime())) {
-        throw new AppError('Data de emissão inválida.', 400, 'INVALID_ISSUE_DATE');
-      }
-      if (issuedAt.getTime() > Date.now()) {
-        throw new AppError('A data de emissão não pode ser futura.', 400, 'ISSUE_DATE_IN_FUTURE');
-      }
-      expiresAt = new Date(issuedAt);
-      expiresAt.setDate(expiresAt.getDate() + 90);
-    } else if (issuedAtInput) {
-      const d = new Date(issuedAtInput);
-      if (!isNaN(d.getTime())) issuedAt = d;
-    }
-
-    return { issuedAt, expiresAt };
-  }
-
+  /**
+   * A validade deixou de ser calculada no envio.
+   *
+   * Antes, o Registo Criminal exigia data de emissão ao motorista e o sistema
+   * somava 90 dias. Isso assumia que ele sabe a data e que o prazo é sempre o
+   * mesmo — e deixava todos os outros documentos sem validade nenhuma, embora
+   * a carta de condução, o certificado TVDE e a inspeção também expirem.
+   *
+   * Agora quem preenche é a administração ao rever, lendo do próprio documento:
+   * a emissão é opcional, porque nem sempre está legível, e a expiração é o que
+   * importa. Ver setValidity em updateStatus.
+   */
   async list(actor: Actor): Promise<IDocumentPublic[]> {
     if (canManageDocuments(actor.role)) return documentsRepository.findAll();
     return documentsRepository.findByUserId(actor.id);
@@ -102,7 +89,9 @@ export class DocumentsService {
   async create(actor: Actor, input: CreateDocumentInput): Promise<IDocumentPublic> {
     await this.ensureUserExists(actor.id);
 
-    const { issuedAt, expiresAt } = this.resolveValidity(input.type, input.issuedAt);
+    // Sem datas no envio: quem as preenche é a administração, ao rever.
+    const issuedAt: Date | null = null;
+    const expiresAt: Date | null = null;
 
     // ── Documento de VEÍCULO ────────────────────────────────────────────────
     if (input.vehicleId) {
@@ -238,6 +227,61 @@ export class DocumentsService {
     return documentsRepository.update(id, data);
   }
 
+  /**
+   * Datas lidas do documento pela administração.
+   *
+   * A emissão é opcional — nem sempre está legível, e não é ela que dispara os
+   * avisos. A expiração é o que interessa: sem ela, ninguém é notificado antes
+   * de o documento caducar. Por isso a interface obriga a escolher entre uma
+   * data e "não expira", para que a ausência seja decisão e não esquecimento.
+   */
+  private resolveDates(input: UpdateDocumentStatusInput): {
+    issuedAt?: Date | null;
+    expiresAt?: Date | null;
+  } {
+    const out: { issuedAt?: Date | null; expiresAt?: Date | null } = {};
+
+    if (input.issuedAt !== undefined) {
+      if (input.issuedAt === null) {
+        out.issuedAt = null;
+      } else {
+        const d = new Date(input.issuedAt);
+        if (isNaN(d.getTime())) {
+          throw new AppError('Data de emissão inválida.', 400, 'INVALID_ISSUE_DATE');
+        }
+        if (d.getTime() > Date.now()) {
+          throw new AppError('A data de emissão não pode ser futura.', 400, 'ISSUE_DATE_IN_FUTURE');
+        }
+        out.issuedAt = d;
+      }
+    }
+
+    if (input.expiresAt !== undefined) {
+      if (input.expiresAt === null) {
+        out.expiresAt = null;
+      } else {
+        const d = new Date(input.expiresAt);
+        if (isNaN(d.getTime())) {
+          throw new AppError('Data de validade inválida.', 400, 'INVALID_EXPIRY_DATE');
+        }
+        out.expiresAt = d;
+      }
+    }
+
+    // Um documento que expira antes de ter sido emitido é engano de digitação.
+    const issued = out.issuedAt ?? null;
+    const expires = out.expiresAt ?? null;
+    if (issued && expires && expires <= issued) {
+      throw new AppError(
+        'A validade tem de ser posterior à data de emissão.',
+        400,
+        'EXPIRY_BEFORE_ISSUE',
+      );
+    }
+
+    return out;
+  }
+
   async updateStatus(actor: Actor, id: string, input: UpdateDocumentStatusInput): Promise<IDocumentPublic> {
     if (!canManageDocuments(actor.role)) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
@@ -248,6 +292,7 @@ export class DocumentsService {
     const data: UpdateDocumentData = {
       status: input.status,
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...this.resolveDates(input),
     };
 
     const updated = await documentsRepository.update(id, data);

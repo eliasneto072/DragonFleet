@@ -1,372 +1,980 @@
 // src/app/components/admin/financial-control.tsx
+//
+// Controlo financeiro: o dinheiro que sai para os motoristas.
+//
+// O QUE MUDOU E PORQUÊ: os indicadores somavam a tabela de ganhos e
+// multiplicavam pela constante do frontend. Nenhuma das duas coisas é verdade
+// desde o fecho semanal — os lançamentos deixaram de creditar e a comissão vive
+// nas configurações. "Ganhos totais" mostrava o que os motoristas comunicaram,
+// e "Receita" ficava um terço acima do real.
+//
+// Agora tudo vem de /analytics/overview, agregado em SQL, que é a mesma fonte
+// do painel. Duas telas a mostrar números diferentes para a mesma pergunta é
+// pior do que não os mostrar.
+//
+// O gráfico saiu. Ele comparava ganhos, pagos, receita e pendentes na mesma
+// escala — quatro grandezas que não se somam nem se comparam entre si.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import {
-  Dialog, DialogContent, DialogHeader,
-  DialogTitle, DialogFooter,
-} from '@/app/components/ui/dialog';
+import { Skeleton } from '@/app/components/ui/skeleton';
+import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
-import { DollarSign, TrendingUp, CheckCircle, Clock, XCircle, Loader2, AlertCircle } from 'lucide-react';
+import { PageHeader } from '@/app/components/ui/page-header';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/app/components/ui/select';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/app/components/ui/dialog';
+import {
+  AlertCircle, Banknote, CheckCircle, Clock, DollarSign, Loader2, Receipt, Search, TrendingDown, TrendingUp, Wallet, XCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
-import { earningsService }    from '@/features/driver/services/earnings.service';
-import { usersService }       from '@/features/admin/services/users.service';
+import { usersService } from '@/features/admin/services/users.service';
+import { analyticsService } from '@/features/admin/services/analytics.service';
+import { CopyIbanButton } from '@/app/components/ui/copy-iban-button';
+import {
+  CompanyPicker, isChoiceComplete, type CompanyChoice,
+} from '@/app/components/admin/company-picker';
+import { formatIban } from '@/shared/lib/iban';
 import { formatCurrency } from '@/shared/lib/format';
-import { queryKeys }          from '@/shared/lib/query-keys';
-import { FINANCIAL }          from '@/shared/constants';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import type { WithdrawalStatus } from '@/shared/types/api';
+import { queryKeys } from '@/shared/lib/query-keys';
+import type { ApiWithdrawal, WithdrawalStatus } from '@/shared/types/api';
+import { useListState } from '@/shared/hooks/use-list-state';
+import { Pagination, type PageInfo } from '@/app/components/ui/list-toolbar';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Variantes dark: obrigatórias — bg-*-100 com text-*-800 não invertem sozinhas
+// e no modo escuro dariam texto escuro sobre fundo claro.
+const STATUS_META: Record<
+  WithdrawalStatus,
+  { label: string; icon: typeof CheckCircle; cls: string }
+> = {
+  PAID: {
+    label: 'Pago',
+    icon: CheckCircle,
+    cls: 'bg-brand-50 text-brand-700 dark:bg-emerald-950 dark:text-emerald-300',
+  },
+  APPROVED: {
+    label: 'Aprovado',
+    icon: CheckCircle,
+    cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
+  },
+  PENDING: {
+    label: 'Em análise',
+    icon: Clock,
+    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  },
+  REJECTED: {
+    label: 'Rejeitado',
+    icon: XCircle,
+    cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+  },
+};
 
-function getStatusBadge(status: WithdrawalStatus) {
-  switch (status) {
-    case 'PAID':     return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Pago</Badge>;
-    case 'APPROVED': return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100"><CheckCircle className="h-3 w-3 mr-1" />Aprovado</Badge>;
-    case 'PENDING':  return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
-    case 'REJECTED': return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
-    default: return null;
-  }
-}
-
-// ── Modal de rejeição ─────────────────────────────────────────────────────────
-
-interface RejectModalProps {
-  open:      boolean;
-  onClose:   () => void;
-  onConfirm: (notes: string) => void;
-  loading:   boolean;
-}
-
-function RejectModal({ open, onClose, onConfirm, loading }: RejectModalProps) {
-  const [notes, setNotes] = useState('');
-
-  function handleConfirm() {
-    if (!notes.trim()) {
-      toast.error('Indica o motivo da rejeição.');
-      return;
-    }
-    onConfirm(notes.trim());
-  }
-
-  function handleClose() {
-    setNotes('');
-    onClose();
-  }
-
+function StatusBadge({ status }: { status: WithdrawalStatus }) {
+  const meta = STATUS_META[status];
+  if (!meta) return null;
+  const Icon = meta.icon;
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Rejeitar Saque</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <Label htmlFor="reject-notes">Motivo da rejeição</Label>
-          <Textarea
-            id="reject-notes"
-            placeholder="Ex: Saldo insuficiente, documentação pendente…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={loading}>
-            Cancelar
-          </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
-            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />A rejeitar…</> : 'Confirmar rejeição'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.cls}`}>
+      <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
+      {meta.label}
+    </span>
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+function daysSince(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
 
-export function FinancialControl() {
-  const queryClient = useQueryClient();
+function agoLabel(days: number): string {
+  if (days === 0) return 'hoje';
+  if (days === 1) return 'há 1 dia';
+  return `há ${days} dias`;
+}
 
-  // Estado do modal de rejeição
-  const [rejectId,    setRejectId]    = useState<string | null>(null);
+/** Acima disto, o pedido passa a ser destacado como atrasado. */
+const OVERDUE_DAYS = 3;
 
-  const withdrawalsQ = useQuery({ queryKey: queryKeys.withdrawals.list, queryFn: () => withdrawalsService.list() });
-  const earningsQ    = useQuery({ queryKey: queryKeys.earnings.list,    queryFn: () => earningsService.list() });
-  const usersQ       = useQuery({ queryKey: queryKeys.users.list,       queryFn: () => usersService.list() });
+// ── Métrica ───────────────────────────────────────────────────────────────────
 
-  const isLoading = withdrawalsQ.isLoading || earningsQ.isLoading;
-  const isError   = withdrawalsQ.isError   || earningsQ.isError;
-
-  const { mutate: updateStatus, isPending: updating } = useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: WithdrawalStatus; notes?: string }) =>
-      withdrawalsService.updateStatus(id, { status, notes }),
-    onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
-      toast.success(status === 'APPROVED' ? 'Saque aprovado!' : 'Saque rejeitado.');
-      setRejectId(null);
-    },
-    onError: (err: any) => toast.error(err?.message ?? 'Erro ao processar saque.'),
-  });
-
-  function handleApprove(id: string) {
-    updateStatus({ id, status: 'APPROVED' });
-  }
-
-  function handleRejectConfirm(notes: string) {
-    if (!rejectId) return;
-    updateStatus({ id: rejectId, status: 'REJECTED', notes });
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" /><span>Carregando dados financeiros…</span>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <AlertCircle className="h-10 w-10 text-red-400" />
-        <p className="text-muted-foreground">Erro ao carregar dados financeiros.</p>
-        <Button variant="outline" onClick={() => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
-          queryClient.invalidateQueries({ queryKey: queryKeys.earnings.all });
-        }}>Tentar novamente</Button>
-      </div>
-    );
-  }
-
-  const withdrawals = withdrawalsQ.data?.withdrawals ?? [];
-  const earnings    = earningsQ.data?.earnings       ?? [];
-  const users       = usersQ.data?.users             ?? [];
-
-  const totalEarnings      = earnings.reduce((s, e) => s + Number(e.amount), 0);
-  const platformRevenue    = totalEarnings * FINANCIAL.companyCommission;
-  const pendingWithdrawals = withdrawals.filter(w => w.status === 'PENDING');
-  const paidWithdrawals    = withdrawals.filter(w => w.status === 'PAID');
-  const totalPendingAmount = pendingWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
-  const totalPaidAmount    = paidWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
-
-  const chartData = [
-    { categoria: 'Ganhos',     valor: totalEarnings },
-    { categoria: 'Pagos',      valor: totalPaidAmount },
-    { categoria: 'Plataforma', valor: platformRevenue },
-    { categoria: 'Pendentes',  valor: totalPendingAmount },
-  ];
-
+function Metric({
+  label, value, hint, icon: Icon, tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  hint?: React.ReactNode;
+  icon: typeof Wallet;
+  tone?: 'neutral' | 'success' | 'danger';
+}) {
+  const toneCls =
+    tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-destructive' : 'text-muted-foreground';
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Controle Financeiro</h2>
-        <p className="text-muted-foreground">Gerencie transações e saques da plataforma</p>
+    <Card className="shadow-card">
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <p className="mt-1 text-xl font-bold tabular-nums sm:text-2xl">{value}</p>
+        {hint && <p className={`mt-1 flex items-center gap-1 text-xs ${toneCls}`}>{hint}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function FinancialSkeleton() {
+  return (
+    <div className="space-y-5 sm:space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">A carregar dados financeiros…</span>
+
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="h-4 w-60" />
+        </div>
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Ganhos Totais</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg sm:text-2xl font-bold">{formatCurrency(totalEarnings)}</div>
-            <p className="text-xs text-muted-foreground">Todos os motoristas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Saques Pagos</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-green-600">{formatCurrency(totalPaidAmount)}</div>
-            <p className="text-xs text-muted-foreground">{paidWithdrawals.length} processado(s)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-yellow-600">{formatCurrency(totalPendingAmount)}</div>
-            <p className="text-xs text-muted-foreground">{pendingWithdrawals.length} aguardando</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Receita</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg sm:text-2xl font-bold text-blue-600">{formatCurrency(platformRevenue)}</div>
-            <p className="text-xs text-muted-foreground">Taxa {FINANCIAL.companyCommission * 100}%</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i} className="shadow-card">
+            <CardContent className="space-y-2 p-4 sm:p-5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-28" />
+              <Skeleton className="h-3 w-20" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Gráfico */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Visão Geral Financeira</CardTitle>
-          <CardDescription>Distribuição de valores por categoria</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="categoria" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => [`${formatCurrency(v)}`, 'Valor']} />
-              <Bar dataKey="valor" fill="#108865" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6"><Skeleton className="h-5 w-48" /></CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-8 w-40 shrink-0" />
+            </div>
+          ))}
         </CardContent>
       </Card>
+    </div>
+  );
+}
 
-      {/* Saques pendentes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Solicitações Pendentes</CardTitle>
-          <CardDescription>Aprovações necessárias ({pendingWithdrawals.length})</CardDescription>
+// ── Componente ────────────────────────────────────────────────────────────────
+
+interface Props {
+  /**
+   * Com abas, o cabeçalho sobe para a página e esta tela renderiza só o
+   * conteúdo — mesmo arranjo do AdminSettlements dentro da SettlementsPage.
+   */
+  hideHeader?: boolean;
+}
+
+/**
+ * Pesquisa e paginação de topo de uma secção.
+ *
+ * As três secções desta tela — decidir, transferir, consultar — são tarefas
+ * diferentes e cada uma tem a sua fila. Partilhar pesquisa entre elas obrigaria
+ * a limpar o filtro de uma para trabalhar noutra.
+ *
+ * Extraído porque o mesmo bloco aparece três vezes: sem isto, corrigir um
+ * detalhe do espaçamento exigiria lembrar-se dos três sítios.
+ */
+function SecaoBarra({
+  lista, info, busy, placeholder,
+}: {
+  lista: ReturnType<typeof useListState>;
+  info?: PageInfo;
+  busy: boolean;
+  placeholder: string;
+}) {
+  return (
+    <>
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          placeholder={placeholder}
+          className="pl-9"
+          value={lista.searchInput}
+          onChange={(e) => lista.setSearchInput(e.target.value)}
+          aria-label={placeholder}
+        />
+      </div>
+
+      {info && info.totalPages > 1 && (
+        <Pagination info={info} onChange={lista.setPage} busy={busy} compact />
+      )}
+    </>
+  );
+}
+
+export function FinancialControl({ hideHeader = false }: Props) {
+  const queryClient = useQueryClient();
+  const [rejectTarget, setRejectTarget] = useState<ApiWithdrawal | null>(null);
+  const [payTarget, setPayTarget] = useState<ApiWithdrawal | null>(null);
+  const [payReference, setPayReference] = useState('');
+  // Aprovar deixou de ser um clique: passa por um diálogo, porque é aqui que o
+  // recibo verde é classificado e a escolha é obrigatória.
+  const [approveTarget, setApproveTarget] = useState<ApiWithdrawal | null>(null);
+  const [companyChoice, setCompanyChoice] = useState<CompanyChoice | null>(null);
+  const [rejectNotes, setRejectNotes] = useState('');
+
+  // ─── TRÊS LISTAGENS INDEPENDENTES ─────────────────────────────────────────
+  //
+  // Cada secção é uma tarefa diferente — decidir, transferir, consultar — e com
+  // uma frota grande cada uma tem centenas de registos. Partilhar pesquisa e
+  // página entre elas obrigaria a limpar o filtro de uma para trabalhar noutra.
+  //
+  // O prefixo mantém-nas separadas no endereço: `pend_q`, `transf_page`,
+  // `hist_estado`. Procurar numa não mexe nas outras, e o link continua a
+  // guardar o estado das três.
+  const filaPendentes = useListState({ prefix: 'pend' });
+  const filaTransferir = useListState({ prefix: 'transf' });
+  const lista = useListState({ prefix: 'hist', defaults: { estado: 'all' } });
+
+  // ─── TRÊS CONSULTAS, E NÃO UMA DIVIDIDA EM TRÊS ───────────────────────────
+  //
+  // Antes havia uma só, que descarregava TODAS as retiradas, e as três listas
+  // eram fatias desse array. Isso quebra com paginação: uma página de 25
+  // retiradas misturadas não dá para derivar "as pendentes" — as outras estão
+  // nas páginas seguintes, e a fila apareceria incompleta sem o dizer.
+  //
+  // As duas filas de trabalho são naturalmente curtas: só as que esperam
+  // decisão e as que esperam transferência. O histórico é o que cresce sem fim,
+  // e é o único que pagina.
+
+  const pendingQ = useQuery({
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'PENDING',
+      filaPendentes.search, filaPendentes.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: 'PENDING',
+      search: filaPendentes.search || undefined,
+      page: filaPendentes.page,
+      pageSize: 15,
+    }),
+    placeholderData: (anterior) => anterior,
+  });
+
+  const toTransferQ = useQuery({
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'APPROVED',
+      filaTransferir.search, filaTransferir.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: 'APPROVED',
+      search: filaTransferir.search || undefined,
+      page: filaTransferir.page,
+      pageSize: 15,
+    }),
+    placeholderData: (anterior) => anterior,
+  });
+
+  const historyQ = useQuery({
+    queryKey: [
+      ...queryKeys.withdrawals.list, 'history',
+      lista.filters.estado, lista.search, lista.page,
+    ] as const,
+    queryFn: () => withdrawalsService.list({
+      status: lista.filters.estado !== 'all' ? lista.filters.estado : undefined,
+      search: lista.search || undefined,
+      page: lista.page,
+      pageSize: 25,
+    }),
+    placeholderData: (anterior) => anterior,
+  });
+
+  const withdrawalsQ = historyQ;
+
+  const usersQ = useQuery({
+    queryKey: queryKeys.users.allUnpaged,
+    queryFn: () => usersService.listAll(),
+  });
+
+  // Mesma fonte do painel: agregado em SQL, com a comissão vinda das
+  // configurações. Somar aqui daria dois números para a mesma pergunta.
+  const overviewQ = useQuery({
+    queryKey: queryKeys.analytics.overview,
+    queryFn: () => analyticsService.getOverview(),
+  });
+
+  const historyPage = historyQ.data?.page;
+  const users = usersQ.data?.users ?? [];
+  const finance = overviewQ.data?.overview.finance;
+
+  const driverName = (userId: string) =>
+    users.find((u) => u.id === userId)?.name ?? '—';
+
+  // Quem espera há mais tempo primeiro: é uma fila.
+  const pending = useMemo(
+    () => [...(pendingQ.data?.withdrawals ?? [])]
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
+    [pendingQ.data],
+  );
+  const pendingPage = pendingQ.data?.page;
+  const toTransferPage = toTransferQ.data?.page;
+
+  // O histórico já vem ordenado e filtrado do servidor.
+  const history = historyQ.data?.withdrawals ?? [];
+
+  // Aprovadas e por transferir.
+  //
+  // Merecem lista própria e não uma linha do histórico: são a lista de tarefas
+  // de quem paga. Enquanto estavam misturadas com as pagas e as rejeitadas,
+  // saber a quem ainda se devia dinheiro obrigava a filtrar por Aprovado e a
+  // ler a lista à procura do que faltava.
+  const toTransfer = useMemo(
+    () => [...(toTransferQ.data?.withdrawals ?? [])]
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
+    [toTransferQ.data],
+  );
+
+  // Somas da PÁGINA visível, não da fila inteira.
+  //
+  // O servidor ainda não devolve o somatório destas duas filas — o do
+  // histórico devolve, porque foi construído para o cartão do topo. Enquanto
+  // não devolver, os rótulos dizem quantos pedidos há ao todo e o valor
+  // refere-se ao que está à vista.
+  const pendingTotal = pending.reduce((s, w) => s + Number(w.amount), 0);
+  const toTransferTotal = toTransfer.reduce((s, w) => s + Number(w.amount), 0);
+
+  const { mutate: updateStatus, isPending: updating } = useMutation({
+    mutationFn: ({ id, status, notes, companyId, companyOther }: {
+      id: string; status: WithdrawalStatus; notes?: string;
+      companyId?: string | null; companyOther?: string | null;
+    }) => withdrawalsService.updateStatus(id, { status, notes, companyId, companyOther }),
+    onSuccess: (_r, vars) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+      toast.success(
+        vars.status === 'REJECTED' ? 'Retirada rejeitada.'
+          : vars.status === 'PAID' ? 'Retirada marcada como paga.'
+            : 'Retirada aprovada.',
+      );
+      setRejectTarget(null);
+      setRejectNotes('');
+      setPayTarget(null);
+      setPayReference('');
+      setApproveTarget(null);
+      setCompanyChoice(null);
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Não foi possível atualizar a retirada.'),
+  });
+
+  if (withdrawalsQ.isLoading || overviewQ.isLoading) return <FinancialSkeleton />;
+
+  if (withdrawalsQ.isError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
+        <p className="text-muted-foreground">Erro ao carregar dados financeiros.</p>
+        <Button variant="outline" onClick={() => withdrawalsQ.refetch()}>
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
+
+  const revenueTrend = finance && finance.revenuePrevMonth > 0
+    ? ((finance.revenueThisMonth - finance.revenuePrevMonth) / finance.revenuePrevMonth) * 100
+    : null;
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      {!hideHeader && (
+        <PageHeader
+          title="Financeiro"
+          subtitle="Retiradas dos motoristas e posição da empresa"
+          icon={<DollarSign className="h-5 w-5" />}
+        />
+      )}
+
+      {/* Indicadores */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <Metric
+          label="Receita deste mês"
+          value={formatCurrency(finance?.revenueThisMonth ?? 0)}
+          icon={TrendingUp}
+          tone={revenueTrend !== null && revenueTrend < 0 ? 'danger' : 'success'}
+          hint={
+            revenueTrend !== null ? (
+              <>
+                {revenueTrend >= 0
+                  ? <TrendingUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  : <TrendingDown className="h-3 w-3 shrink-0" aria-hidden="true" />}
+                {Math.abs(Math.round(revenueTrend))}% vs. mês anterior
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                {Math.round((finance?.companyCommission ?? 0) * 100)}% dos ganhos da frota
+              </span>
+            )
+          }
+        />
+        <Metric
+          label="Devido aos motoristas"
+          value={formatCurrency(finance?.owedToDrivers ?? 0)}
+          icon={Wallet}
+          hint={
+            finance && finance.owedByDrivers > 0
+              ? `${formatCurrency(finance.owedByDrivers)} a receber de motoristas`
+              : 'Podem sacar a qualquer momento'
+          }
+        />
+        <Metric
+          label="Pago este mês"
+          value={formatCurrency(finance?.paidThisMonth ?? 0)}
+          icon={CheckCircle}
+          hint={`${finance?.paidCountThisMonth ?? 0} retirada${finance?.paidCountThisMonth !== 1 ? 's' : ''} liquidada${finance?.paidCountThisMonth !== 1 ? 's' : ''}`}
+        />
+        <Metric
+          label="Por processar"
+          value={formatCurrency(pendingTotal)}
+          icon={Clock}
+          hint={`${pendingPage?.total ?? 0} pedido${(pendingPage?.total ?? 0) !== 1 ? 's' : ''} ao todo`}
+        />
+      </div>
+
+      {/* Pendentes */}
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Retiradas por processar</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Quem espera há mais tempo aparece primeiro
+          </p>
         </CardHeader>
-        <CardContent>
-          {pendingWithdrawals.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Nenhum saque pendente.</p>
-          ) : (
-            <>
-              {/* Tabela — md+ */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Motorista</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingWithdrawals.map(w => {
-                      const driver = users.find(u => u.id === w.userId);
-                      return (
-                        <TableRow key={w.id}>
-                          <TableCell>
-                            <p className="font-medium">{driver?.name ?? '—'}</p>
-                            <p className="text-sm text-muted-foreground">{driver?.email}</p>
-                          </TableCell>
-                          <TableCell>{new Date(w.requestedAt).toLocaleDateString('pt-PT')}</TableCell>
-                          <TableCell className="font-bold">{formatCurrency(Number(w.amount))}</TableCell>
-                          <TableCell>{getStatusBadge(w.status)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-2 justify-end">
-                              <Button size="sm" disabled={updating} onClick={() => handleApprove(w.id)}>
-                                {updating ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3 mr-1" />}
-                                Aprovar
-                              </Button>
-                              <Button size="sm" variant="destructive" disabled={updating} onClick={() => setRejectId(w.id)}>
-                                <XCircle className="h-3 w-3 mr-1" />Rejeitar
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          <SecaoBarra
+            lista={filaPendentes}
+            info={pendingPage}
+            busy={pendingQ.isFetching}
+            placeholder="Procurar quem espera decisão…"
+          />
 
-              {/* Cards — mobile */}
-              <div className="md:hidden space-y-3">
-                {pendingWithdrawals.map(w => {
-                  const driver = users.find(u => u.id === w.userId);
-                  return (
-                    <div key={w.id} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{driver?.name ?? '—'}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(w.requestedAt).toLocaleDateString('pt-PT')}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold">{formatCurrency(Number(w.amount))}</p>
-                          {getStatusBadge(w.status)}
-                        </div>
+          {pending.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <CheckCircle className="h-8 w-8 text-success" aria-hidden="true" />
+              <p className="text-sm font-medium">
+                {filaPendentes.search
+                  ? `Nada encontrado para “${filaPendentes.search}”`
+                  : 'Nada por processar'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Todas as retiradas foram decididas.
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {pending.map((w) => {
+                const days = daysSince(w.requestedAt);
+                const overdue = days >= OVERDUE_DAYS;
+                return (
+                  <li key={w.id} className="border-b border-border py-3 last:border-0">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{driverName(w.userId)}</p>
+                        <p
+                          className={`truncate text-xs ${
+                            overdue ? 'font-medium text-destructive' : 'text-muted-foreground'
+                          }`}
+                        >
+                          Pedida {agoLabel(days)}
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="flex-1" disabled={updating} onClick={() => handleApprove(w.id)}>
+
+                      <p className="shrink-0 text-base font-semibold tabular-nums">
+                        {formatCurrency(Number(w.amount))}
+                      </p>
+
+                      <div className="flex shrink-0 gap-2">
+                        {/* O recibo é a razão de o pedido ser multipart: a
+                            empresa não transfere sem fatura. Quem decide tem
+                            de o poder ver antes de aprovar, senão a exigência
+                            serve só para guardar ficheiros. */}
+                        {w.receiptUrl && (
+                          <Button asChild size="sm" variant="outline" className="h-8">
+                            <a href={w.receiptUrl} target="_blank" rel="noopener noreferrer">
+                              <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Recibo
+                            </a>
+                          </Button>
+                        )}
+                        <Button
+                          size="sm" className="h-8" disabled={updating}
+                          onClick={() => { setApproveTarget(w); setCompanyChoice(null); }}
+                        >
+                          <CheckCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                           Aprovar
                         </Button>
-                        <Button size="sm" variant="destructive" className="flex-1" disabled={updating} onClick={() => setRejectId(w.id)}>
+                        <Button
+                          size="sm" variant="outline" className="h-8" disabled={updating}
+                          onClick={() => { setRejectTarget(w); setRejectNotes(''); }}
+                        >
+                          <XCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                           Rejeitar
                         </Button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {pendingPage && (
+            <Pagination
+              info={pendingPage} onChange={filaPendentes.setPage}
+              busy={pendingQ.isFetching}
+            />
           )}
         </CardContent>
       </Card>
 
+      {/* Por transferir — aprovadas que ainda não saíram do banco.
+          
+          O dinheiro já saiu do saldo do motorista na APROVAÇÃO: a vista de
+          saldos conta APPROVED e PAID da mesma maneira. Marcar como paga não
+          mexe em nenhum número; regista que a transferência foi mesmo feita.
+          Sem esta lista, essa distinção não existia em lado nenhum e não havia
+          como saber o que já tinha sido enviado para o banco. */}
+      {(toTransferPage?.total ?? 0) > 0 && (
+        <Card className="shadow-card">
+          <CardHeader className="flex flex-col gap-1 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <Banknote className="h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
+                Por transferir
+              </CardTitle>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Aprovadas — falta fazer a transferência no banco
+              </p>
+            </div>
+            <p className="shrink-0 text-lg font-semibold tabular-nums sm:text-xl">
+              {formatCurrency(toTransferTotal)}
+            </p>
+          </CardHeader>
+
+          <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+            <SecaoBarra
+              lista={filaTransferir}
+              info={toTransferPage}
+              busy={toTransferQ.isFetching}
+              placeholder="Procurar quem espera transferência…"
+            />
+
+            <ul className="divide-y divide-border">
+              {toTransfer.map((w) => (
+                <li key={w.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{driverName(w.userId)}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Aprovada {agoLabel(daysSince(w.processedAt ?? w.requestedAt))}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-base font-semibold tabular-nums">
+                      {formatCurrency(Number(w.amount))}
+                    </p>
+                  </div>
+
+                  {/* O IBAN congelado na aprovação, pronto a colar no
+                      homebanking. É este e não o atual do motorista: se ele
+                      mudou de conta entretanto, a transferência já decidida
+                      continua a ir para onde foi acordado. */}
+                  {w.paidToIban ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-secondary p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="break-all font-mono text-xs tabular-nums">
+                          {formatIban(w.paidToIban)}
+                        </p>
+                        {w.paidToHolder && (
+                          <p className="truncate text-xs text-muted-foreground">{w.paidToHolder}</p>
+                        )}
+                      </div>
+                      <CopyIbanButton iban={w.paidToIban} label="Copiar" />
+                    </div>
+                  ) : (
+                    // Só acontece se a retirada tiver passado a PAID sem passar
+                    // por APPROVED, o que esta tela não permite. Se aparecer,
+                    // alguém chamou a API diretamente.
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      Sem IBAN registado nesta retirada — confirme o destino antes de transferir.
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      size="sm" className="h-8" disabled={updating}
+                      onClick={() => {
+                        setPayTarget(w);
+                        // Trazer a nota existente evita apagá-la sem querer: o
+                        // backend faz `notes: input.notes ?? null`, ou seja,
+                        // enviar sem nota limpa a que lá estiver.
+                        setPayReference(w.notes?.trim() ?? '');
+                      }}
+                    >
+                      <Banknote className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Marcar como paga
+                    </Button>
+                    {w.receiptUrl && (
+                      <Button asChild size="sm" variant="outline" className="h-8">
+                        <a href={w.receiptUrl} target="_blank" rel="noopener noreferrer">
+                          <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Recibo
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm" variant="outline" className="h-8" disabled={updating}
+                      onClick={() => { setRejectTarget(w); setRejectNotes(''); }}
+                    >
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Rejeitar
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {toTransferPage && (
+              <Pagination
+                info={toTransferPage} onChange={filaTransferir.setPage}
+                busy={toTransferQ.isFetching}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Histórico */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Saques</CardTitle>
-          <CardDescription>Todas as movimentações</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Motorista</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[...withdrawals]
-                  .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
-                  .slice(0, 20)
-                  .map(w => {
-                    const driver = users.find(u => u.id === w.userId);
-                    return (
-                      <TableRow key={w.id}>
-                        <TableCell>
-                          <p className="font-medium whitespace-nowrap">{driver?.name ?? '—'}</p>
-                          <p className="text-sm text-muted-foreground whitespace-nowrap">{driver?.email}</p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{new Date(w.requestedAt).toLocaleDateString('pt-PT')}</TableCell>
-                        <TableCell className="font-bold whitespace-nowrap">{formatCurrency(Number(w.amount))}</TableCell>
-                        <TableCell>{getStatusBadge(w.status)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
+      <Card className="shadow-card">
+        <CardHeader className="flex flex-col gap-3 space-y-0 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div>
+            <CardTitle className="text-base sm:text-lg">Histórico de retiradas</CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {historyPage?.total ?? 0} registo{(historyPage?.total ?? 0) !== 1 ? 's' : ''}
+            </p>
           </div>
+          <Select
+            value={lista.filters.estado}
+            onValueChange={(v) => lista.setFilter('estado', v)}
+          >
+            <SelectTrigger className="w-full sm:w-[170px]" aria-label="Filtrar por estado">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="PAID">Pago</SelectItem>
+              <SelectItem value="APPROVED">Aprovado</SelectItem>
+              <SelectItem value="REJECTED">Rejeitado</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          <SecaoBarra
+            lista={lista}
+            info={historyPage}
+            busy={historyQ.isFetching}
+            placeholder="Procurar no histórico…"
+          />
+
+          {history.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhuma retirada neste filtro.
+            </p>
+          ) : (
+            <ul>
+              {history.map((w) => {
+                const note = w.notes?.trim();
+                return (
+                  <li key={w.id} className="border-b border-border py-3 last:border-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-medium">{driverName(w.userId)}</p>
+                          <StatusBadge status={w.status} />
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {new Date(w.requestedAt).toLocaleDateString('pt-PT')}
+                          {w.processedAt && (
+                            <> · decidida em {new Date(w.processedAt).toLocaleDateString('pt-PT')}</>
+                          )}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums">
+                        {formatCurrency(Number(w.amount))}
+                      </p>
+                    </div>
+
+                    {/* O IBAN é copiado na APROVAÇÃO e fica congelado. É este
+                        que se cola no homebanking, e não o atual do motorista:
+                        se ele mudou de conta entretanto, a transferência já
+                        decidida continua a ir para onde foi acordado. */}
+                    {w.paidToIban && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-secondary p-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-all font-mono text-xs tabular-nums">
+                            {formatIban(w.paidToIban)}
+                          </p>
+                          {w.paidToHolder && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {w.paidToHolder}
+                            </p>
+                          )}
+                        </div>
+                        <CopyIbanButton iban={w.paidToIban} label="Copiar" />
+                      </div>
+                    )}
+
+                    {note && (
+                      <p
+                        className={`mt-2 rounded-md p-2 text-xs ${
+                          w.status === 'REJECTED'
+                            ? 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {w.status === 'REJECTED' && <span className="font-medium">Motivo: </span>}
+                        {note}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {historyPage && (
+            <Pagination
+              info={historyPage} onChange={lista.setPage} busy={historyQ.isFetching}
+            />
+          )}
         </CardContent>
       </Card>
 
-      {/* Modal de rejeição */}
-      <RejectModal
-        open={!!rejectId}
-        onClose={() => setRejectId(null)}
-        onConfirm={handleRejectConfirm}
-        loading={updating}
-      />
+      {/* Rejeição — o backend devolve NOTES_REQUIRED sem motivo */}
+      {/* Aprovar — e classificar o recibo verde no mesmo passo.
+          
+          A classificação é obrigatória aqui, com "Nenhum" como escolha
+          explícita. Se fosse um campo opcional a preencher depois, ficaria por
+          preencher nas primeiras semanas e ninguém voltaria atrás: o registo
+          nasceria com buracos exatamente onde interessava.
+          
+          É também o momento em que o IBAN congela, portanto a aprovação passou
+          a ser a decisão que fixa tudo o que esta retirada precisa de saber. */}
+      <Dialog
+        open={!!approveTarget}
+        onOpenChange={(o) => { if (!o) { setApproveTarget(null); setCompanyChoice(null); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aprovar retirada</DialogTitle>
+            <DialogDescription>
+              {approveTarget && (
+                <>
+                  {formatCurrency(Number(approveTarget.amount))} de{' '}
+                  {driverName(approveTarget.userId)}. Ao aprovar, o IBAN do
+                  motorista fica fixado nesta retirada.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-w-0 space-y-4">
+            {approveTarget?.receiptUrl && (
+              <Button asChild variant="outline" size="sm" className="h-8 w-full sm:w-auto">
+                <a href={approveTarget.receiptUrl} target="_blank" rel="noopener noreferrer">
+                  <Receipt className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Ver recibo verde antes de decidir
+                </a>
+              </Button>
+            )}
+
+            <CompanyPicker
+              value={companyChoice}
+              onChange={setCompanyChoice}
+              disabled={updating}
+            />
+          </div>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline" disabled={updating} className="w-full sm:w-auto"
+              onClick={() => { setApproveTarget(null); setCompanyChoice(null); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={updating || !isChoiceComplete(companyChoice)}
+              className="w-full sm:w-auto"
+              onClick={() => updateStatus({
+                id: approveTarget!.id,
+                status: 'APPROVED',
+                companyId: companyChoice?.companyId ?? null,
+                companyOther: companyChoice?.companyOther?.trim() || null,
+              })}
+            >
+              {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Aprovar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Marcar como paga.
+          
+          Um diálogo e não um botão direto, por duas razões. PAID é estado
+          final no backend — não há como voltar atrás depois de confirmar. E a
+          ação regista uma transferência que já foi feita no banco; não é o
+          sistema a enviar dinheiro. Quem clica tem de perceber a diferença,
+          senão marca tudo como pago à espera de que o dinheiro saia sozinho. */}
+      <Dialog
+        open={!!payTarget}
+        onOpenChange={(o) => { if (!o) { setPayTarget(null); setPayReference(''); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Marcar como paga</DialogTitle>
+            <DialogDescription>
+              {payTarget && (
+                <>
+                  {formatCurrency(Number(payTarget.amount))} de {driverName(payTarget.userId)}.
+                  Confirme apenas depois de a transferência estar feita no banco.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-w-0 space-y-4">
+            {payTarget?.paidToIban && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">Destino</p>
+                  <p className="break-all font-mono text-xs tabular-nums">
+                    {formatIban(payTarget.paidToIban)}
+                  </p>
+                </div>
+                <CopyIbanButton iban={payTarget.paidToIban} label="Copiar" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="pay-reference">Referência da transferência (opcional)</Label>
+              <Input
+                id="pay-reference"
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                placeholder="Nº da operação, data, o que ajudar a reconciliar depois"
+              />
+              <p className="text-xs text-muted-foreground">
+                Fica visível para o motorista no histórico dele.
+              </p>
+            </div>
+
+            <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
+              O saldo do motorista não muda com esta ação: o valor saiu da conta
+              dele quando a retirada foi aprovada. Isto regista que o dinheiro
+              chegou ao banco — e não pode ser desfeito.
+            </p>
+          </div>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline" disabled={updating} className="w-full sm:w-auto"
+              onClick={() => { setPayTarget(null); setPayReference(''); }}
+            >
+              Voltar
+            </Button>
+            <Button
+              disabled={updating}
+              className="w-full sm:w-auto"
+              onClick={() => updateStatus({
+                id: payTarget!.id,
+                status: 'PAID',
+                // Sem referência não enviamos campo nenhum: enviar vazio
+                // limparia a nota que já lá estivesse.
+                notes: payReference.trim() || undefined,
+              })}
+            >
+              {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Confirmar pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!rejectTarget}
+        onOpenChange={(o) => { if (!o) { setRejectTarget(null); setRejectNotes(''); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rejeitar retirada</DialogTitle>
+            <DialogDescription>
+              {rejectTarget && (
+                <>
+                  {formatCurrency(Number(rejectTarget.amount))} de {driverName(rejectTarget.userId)},
+                  pedida em {new Date(rejectTarget.requestedAt).toLocaleDateString('pt-PT')}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="reject-notes">Motivo</Label>
+            <Textarea
+              id="reject-notes"
+              value={rejectNotes}
+              onChange={(e) => setRejectNotes(e.target.value)}
+              placeholder="Explique ao motorista por que a retirada foi recusada."
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">
+              O motorista vê este texto no histórico dele e recebe por email.
+            </p>
+          </div>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline" disabled={updating} className="w-full sm:w-auto"
+              onClick={() => { setRejectTarget(null); setRejectNotes(''); }}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={updating || !rejectNotes.trim()}
+              className="w-full sm:w-auto"
+              onClick={() => updateStatus({
+                id: rejectTarget!.id, status: 'REJECTED', notes: rejectNotes.trim(),
+              })}
+            >
+              {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Rejeitar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

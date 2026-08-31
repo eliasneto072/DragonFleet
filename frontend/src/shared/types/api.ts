@@ -22,6 +22,8 @@ export type DocumentType =
   | 'OTHER';
 export type DocumentStatus   = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
 export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+export type EarningStatus    = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type SettlementStatus = 'DRAFT' | 'REGISTERED' | 'CANCELLED';
 export type VehicleStatus    = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'SOLD';
 
 // ---------- Modelos ----------
@@ -34,15 +36,40 @@ export interface ApiUser {
   status:    UserStatus;
   createdAt: string;
   updatedAt: string;
+
+  /**
+   * Documentos por resolver deste motorista — pendentes, rejeitados ou
+   * expirados. Contado na BASE e devolvido com a listagem.
+   *
+   * Existe porque a tela mostrava este distintivo cruzando a lista de
+   * utilizadores com TODOS os documentos descarregados: 8000 registos com
+   * 2000 motoristas, para desenhar um número por linha.
+   *
+   * Opcional: só a listagem paginada o traz.
+   */
+  pendingDocs?: number;
 }
 
+/**
+ * Lançamento comunicado pelo motorista.
+ *
+ * NÃO movimenta saldo em nenhum estado. O dinheiro entra por uma porta só — o
+ * fecho semanal registado pela administração. Isto é o que o motorista diz ter
+ * feito, e serve de conferência a quem fecha a semana.
+ */
 export interface ApiEarning {
   id:        string;
   amount:    number;
   date:      string;
   platform:  EarningPlatform;
+  status:    EarningStatus;
+  /** Justificação do motorista, ou motivo da recusa. */
+  notes:     string | null;
   userId:    string;
+  reviewedById: string | null;
+  reviewedAt:   string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiWithdrawal {
@@ -53,6 +80,104 @@ export interface ApiWithdrawal {
   requestedAt: string;
   processedAt?: string | null;
   userId:      string;
+
+  /** Recibo verde, anexado no momento do pedido. Obrigatório — nunca nulo. */
+  receiptUrl: string;
+  receiptKey: string;
+
+  /**
+   * IBAN de destino, copiado no momento da APROVAÇÃO e congelado aí.
+   *
+   * Nulo enquanto a retirada está por decidir. Se o motorista alterar os dados
+   * bancários depois, uma transferência já decidida não muda de destino sem
+   * ninguém reparar — mesma lógica da percentagem no fecho semanal.
+   */
+  paidToIban?:   string | null;
+  paidToHolder?: string | null;
+
+  /**
+   * A quem foi emitido o recibo verde. Registado na aprovação.
+   *
+   * Quatro estados, e a diferença entre os dois últimos é a que interessa à
+   * tela de Recibos Verdes:
+   *   companyId preenchido                → sociedade da lista
+   *   companyOther preenchido             → outra, escrita à mão
+   *   ambos nulos, companySetAt NÃO nulo  → "Nenhum", escolha deliberada
+   *   ambos nulos, companySetAt nulo      → por classificar
+   */
+  companyId?:      string | null;
+  companyName?:    string | null;
+  companyOther?:   string | null;
+  companySetById?: string | null;
+  companySetAt?:   string | null;
+}
+
+/** Sociedade do grupo a quem os motoristas emitem recibo verde. */
+export interface ApiCompany {
+  id: string;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+
+  /**
+   * Recibos emitidos a esta sociedade: só aprovados e pagos, o mesmo universo
+   * do registo por baixo. Só vem na listagem.
+   */
+  receiptCount?: number;
+
+  /** Soma desses recibos, em euros. Vem somada do servidor, não do browser. */
+  receiptTotal?: number;
+
+  /**
+   * Retiradas ligadas a esta sociedade seja em que estado for — incluindo as
+   * que foram rejeitadas depois de classificadas, que o registo não mostra.
+   *
+   * É este número, e não o receiptCount, que decide se o apagar é possível: a
+   * chave estrangeira é SET NULL e não distingue estados. Uma sociedade pode
+   * ter zero recibos e ainda assim não poder ser apagada.
+   */
+  linkedCount?: number;
+}
+
+/**
+ * Dados bancários de um motorista.
+ *
+ * Dois pares de campos, os em vigor e os pendentes. É essa separação que
+ * permite o IBAN anterior continuar a valer enquanto uma alteração espera
+ * decisão: se submeter apagasse já o valor bom, um engano de digitação deixava
+ * a conta sem destino de pagamento até alguém corrigir.
+ */
+export interface ApiBankAccount {
+  userId: string;
+
+  /** Em vigor. Nulo até à primeira aprovação. */
+  iban:       string | null;
+  holderName: string | null;
+
+  /** Submetido, à espera de decisão. */
+  pendingIban:       string | null;
+  pendingHolderName: string | null;
+  pendingAt:         string | null;
+
+  /** Motivo da última recusa. Uma submissão nova limpa-o. */
+  rejectionReason: string | null;
+
+  reviewedAt: string | null;
+  updatedAt:  string | null;
+
+  /** Derivado no servidor: há alteração à espera de decisão. */
+  hasPending: boolean;
+  /** Derivado no servidor: há IBAN em vigor — o motorista pode pedir retiradas. */
+  isUsable: boolean;
+}
+
+/**
+ * Uma linha da fila de aprovação: a conta, o comprovativo e quem submeteu.
+ * Só o `GET /bank/pending` devolve o comprovativo.
+ */
+export interface ApiPendingBankAccount extends ApiBankAccount {
+  proofUrl: string | null;
+  user: { id: string; name: string; email: string };
 }
 
 export interface ApiDocument {
@@ -88,9 +213,32 @@ export interface ApiVehicle {
   vin:       string | null;
   status:    VehicleStatus;
   activationForced: boolean;
+  /**
+   * Encargo semanal da viatura. Preenche o campo "Viatura" no fecho semanal
+   * como valor sugerido; o fecho grava a sua própria cópia, para que alterar
+   * isto não reescreva semanas já pagas.
+   */
+  weeklyFee: number;
   userId:    string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Histórico visto do lado do motorista: que carros conduziu, e quando. */
+export interface ApiDriverAssignment {
+  id:        string;
+  vehicleId: string;
+  userId:    string | null;
+  startedAt: string;
+  endedAt:   string | null;
+  vehicle?: {
+    id: string;
+    brand: string;
+    model: string;
+    plate: string;
+    year: number;
+    status: VehicleStatus;
+  } | null;
 }
 
 export interface ApiVehicleAssignment {

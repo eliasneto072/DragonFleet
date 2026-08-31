@@ -38,10 +38,6 @@ export const VEHICLE_DOCUMENT_TYPES: DocumentType[] = [
 ];
 
 // Só o Registo Criminal tem regra de validade (90 dias) por agora.
-export function requiresIssueDate(type: DocumentType): boolean {
-  return type === 'REGISTO_CRIMINAL';
-}
-
 export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
   PENDING:  'Pendente',
   APPROVED: 'Aprovado',

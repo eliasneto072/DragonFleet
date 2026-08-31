@@ -5,6 +5,7 @@ import { CreateUserData, UpdateUserData } from './users.repository.types';
 import { usersRepository } from './users.repository';
 import { Actor, IUserPublic } from './users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
+import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
 
 function isAdmin(role?: UserRole) {
   return role === UserRole.ADMIN;
@@ -19,11 +20,57 @@ export class UsersService {
     return user;
   }
 
-  async list(actor: Actor): Promise<IUserPublic[]> {
+  /**
+   * Uma página de utilizadores, com pesquisa e filtros.
+   *
+   * Devolve também as contagens por estado sobre a frota INTEIRA: os cartões
+   * do topo da tela dizem quantos estão ativos e bloqueados, e contá-los a
+   * partir da página faria esses números mudar conforme se navega.
+   */
+  async list(
+    actor: Actor,
+    filter: {
+      role?: string; status?: string; search?: unknown;
+      pending?: string; sort?: string;
+      page?: unknown; pageSize?: unknown;
+    } = {},
+  ) {
     if (!isAdmin(actor.role)) {
       throw new AppError('Forbidden', 403);
     }
 
+    const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
+    const terms = parseSearchTerms(filter.search);
+
+    const [pagina, counts] = await Promise.all([
+      usersRepository.findManyPaged(
+        {
+          role: filter.role,
+          status: filter.status,
+          terms,
+          pending: filter.pending === 'pending' || filter.pending === 'clear'
+            ? filter.pending : undefined,
+          sort: filter.sort === 'recent' ? 'recent' : 'name',
+        },
+        page,
+      ),
+      usersRepository.countDriversByStatus(),
+    ]);
+
+    return { ...pagina, counts };
+  }
+
+  /**
+   * Todos, sem paginar.
+   *
+   * Fica para quem precisa mesmo da lista inteira — o emparelhamento de nomes
+   * da extensão, por exemplo. Não deve ser usado por telas: foi assim que a de
+   * Motoristas acabou a descarregar 2000 registos para mostrar 25.
+   */
+  async listAll(actor: Actor): Promise<IUserPublic[]> {
+    if (!isAdmin(actor.role)) {
+      throw new AppError('Forbidden', 403);
+    }
     return usersRepository.findAll();
   }
 

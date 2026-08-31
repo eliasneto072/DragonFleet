@@ -7,7 +7,9 @@ import { assignmentsRepository } from './assignments.repository';
 import { forceActivation as forceActivationLogic } from './activation.service';
 import { prisma } from '../../config/prisma';
 import { CreateVehicleInput, UpdateVehicleInput } from './vehicles.service.types';
-import { IVehiclePublic, IVehicleAssignmentWithUser } from './vehicles.types';
+import {
+  IVehiclePublic, IVehicleAssignmentWithUser, IVehicleAssignmentWithVehicle,
+} from './vehicles.types';
 
 type Actor = {
   id: string;
@@ -87,6 +89,12 @@ export class VehiclesService {
       year: input.year,
       vin: input.vin,
       status: input.status ?? VehicleStatus.PENDING, // nasce pendente até os documentos serem aprovados
+      // O encargo é o que o motorista paga: só a gestão o define. Sem esta
+      // guarda, ele alteraria o valor que lhe é cobrado ao editar o próprio
+      // veículo, que é uma operação que lhe está permitida.
+      ...(canManageVehicles(actor.role) && input.weeklyFee !== undefined
+        ? { weeklyFee: input.weeklyFee }
+        : {}),
       userId: userId,
     };
 
@@ -104,6 +112,13 @@ export class VehiclesService {
       throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_VEHICLE_STATUS');
     }
 
+    // Mesma razão do create: o encargo é cobrado ao motorista, e ele edita o
+    // próprio veículo. Recusar em vez de ignorar em silêncio — assim quem
+    // tentar percebe porquê.
+    if (!canManageVehicles(actor.role) && input.weeklyFee !== undefined) {
+      throw new AppError('Forbidden', 403, 'CANNOT_CHANGE_VEHICLE_FEE');
+    }
+
     if (input.plate) {
       const existingVehicle = await vehiclesRepository.findByPlate(input.plate);
 
@@ -119,6 +134,7 @@ export class VehiclesService {
       ...(input.year !== undefined ? { year: input.year } : {}),
       ...(input.vin !== undefined ? { vin: input.vin } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.weeklyFee !== undefined ? { weeklyFee: input.weeklyFee } : {}),
     };
 
     return vehiclesRepository.update(id, data);
@@ -210,6 +226,22 @@ export class VehiclesService {
     }
     await this.ensureVehicleExists(vehicleId);
     return assignmentsRepository.listByVehicle(vehicleId);
+  }
+
+  /**
+   * Histórico de veículos de um motorista.
+   *
+   * Restrito à gestão, como o histórico por veículo: é informação operacional
+   * sobre a frota, não dados pessoais do próprio.
+   */
+  async getDriverVehicleHistory(
+    actor: Actor,
+    userId: string,
+  ): Promise<IVehicleAssignmentWithVehicle[]> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+    return assignmentsRepository.listByUser(userId);
   }
 
   // ── Ativação híbrida (só admin/manager) ────────────────────────────────────

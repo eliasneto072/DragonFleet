@@ -40,7 +40,7 @@ export class DocumentsController {
     return ok(res, { document });
   };
 
-  // Serve o arquivo do documento com validação de permissão (dono ou admin/manager).
+  // Serve o ficheiro do documento com validação de permissão (dono ou admin/manager).
   // O frontend nunca mais toca na URL do Cloudinary diretamente — quem decide o
   // acesso é o backend (JWT + ownership), não a obscuridade do link. [RGPD]
   getFile = async (req: AuthRequest, res: Response) => {
@@ -56,7 +56,7 @@ export class DocumentsController {
 
     if (!upstream.ok) {
       throw new AppError(
-        'Não foi possível obter o arquivo. O documento pode precisar de ser reenviado.',
+        'Não foi possível obter o ficheiro. O documento pode precisar de ser reenviado.',
         502,
         'FILE_FETCH_FAILED'
       );
@@ -82,7 +82,6 @@ export class DocumentsController {
   create = async (req: AuthRequest, res: Response) => {
     // req.body vem do multipart, não precisa de Zod aqui
     const type = req.body?.type;
-    const issuedAt = req.body?.issuedAt; // opcional; obrigatório p/ Registo Criminal (validado no service)
     const vehicleId = req.body?.vehicleId || undefined; // presente = documento de veículo
 
     if (!type || !Object.values(DocumentType).includes(type)) {
@@ -90,7 +89,7 @@ export class DocumentsController {
     }
 
     if (!req.file) {
-      throw new AppError('Arquivo não enviado', 400, 'MISSING_FILE');
+      throw new AppError('Ficheiro não enviado', 400, 'MISSING_FILE');
     }
 
     const { fileUrl, fileKey } = await uploadToCloudinary(
@@ -99,11 +98,12 @@ export class DocumentsController {
       'documents'
     );
 
+    // Sem datas no envio: a validade é lida do documento pela administração,
+    // ao rever. Ver documentsService.resolveDates.
     const document = await documentsService.create(getActor(req), {
       type: type as DocumentType,
       fileUrl,
       fileKey,
-      issuedAt,
       vehicleId,
     });
 
@@ -134,7 +134,13 @@ export class DocumentsController {
     const document = await documentsService.updateStatus(
       getActor(req),
       parsed.params.id,
-      parsed.body
+      {
+        ...parsed.body,
+        // O schema aceita null para limpar a nota; o service trabalha com
+        // undefined para "não mexer". São coisas diferentes e a conversão
+        // tem de ser explícita.
+        notes: parsed.body.notes ?? undefined,
+      }
     );
 
     return ok(res, { document });

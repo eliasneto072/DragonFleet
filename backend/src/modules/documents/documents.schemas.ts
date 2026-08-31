@@ -30,12 +30,17 @@ export const updateDocumentSchema = z.object({
     }),
 });
 
-// rota dedicada só pra status (bem profissional)
+// Rota dedicada ao estado. É também aqui que a administração preenche as datas
+// lidas do documento: nullable para permitir limpar ou marcar como sem validade,
+// e opcional para que rejeitar não obrigue a preencher nada.
 export const updateDocumentStatusSchema = z.object({
   params: z.object({
     id: z.string().min(1),
   }),
   body: z.object({
     status: z.nativeEnum(DocumentStatus),
+    notes: z.string().max(2000).optional().nullable(),
+    issuedAt: z.coerce.date().optional().nullable(),
+    expiresAt: z.coerce.date().optional().nullable(),
   }),
 });
