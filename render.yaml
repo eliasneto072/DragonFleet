@@ -1,0 +1,119 @@
+# Infraestrutura do DragonFleet no Render, declarada em ficheiro.
+#
+# Existe para a configuração deixar de viver só no painel. Um serviço montado à
+# mão fica sem registo do que foi escolhido e porquê: daqui a seis meses ninguém
+# sabe se a região é Frankfurt por decisão ou por descuido, e recriá-lo depois de
+# um acidente é reconstruir de memória.
+#
+# COMO USAR
+#   Render → New → Blueprint → apontar a este repositório.
+#   O Render lê este ficheiro e cria a base e o serviço de uma vez.
+#
+# O QUE ELE NÃO CRIA
+#   O frontend. Vive no Cloudflare Pages, que é outro fornecedor e tem a sua
+#   própria configuração — está em docs/05-deploy.md.
+
+databases:
+  - name: dragonfleet-db
+    databaseName: dragonfleet
+    user: dragonfleet
+
+    # Frankfurt, e não Oregon.
+    #
+    # Os motoristas e o escritório estão em Portugal. Cada consulta atravessa o
+    # Atlântico duas vezes se a base estiver nos Estados Unidos, e uma tela que
+    # faça seis consultas paga esse custo seis vezes. É também onde os dados
+    # devem estar: há IBAN, morada e documentos de identificação em jogo, e
+    # mantê-los na UE evita a conversa toda sobre transferência internacional.
+    region: frankfurt
+
+    # O plano gratuito do Render APAGA a base ao fim de 30 dias. Aqui vivem os
+    # fechos semanais e o histórico de pagamentos — é o único sítio onde eles
+    # existem. Não é um sítio para poupar.
+    plan: basic-256mb
+
+    postgresMajorVersion: "16"
+
+    ipAllowList:
+      # Vazio significa: só serviços do Render, pela rede interna.
+      #
+      # Deixar a base aberta à internet é a diferença entre precisar de uma
+      # falha na aplicação para chegar aos dados e poder tentar a palavra-passe
+      # diretamente. Para correr o seed do administrador a partir da sua
+      # máquina, acrescente aqui o seu IP, corra, e volte a tirar.
+      []
+
+services:
+  - type: web
+    name: dragonfleet-api
+    runtime: docker
+    region: frankfurt          # a mesma da base: a ligação interna não sai do datacentre
+    plan: starter
+
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+
+    # Só reconstrói quando o backend muda.
+    #
+    # Sem isto, corrigir uma vírgula no frontend dispara um build de três
+    # minutos de uma imagem idêntica à anterior.
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
+
+    # Sem healthCheckPath, de propósito.
+    #
+    # A aplicação não tem rota GET /health, e apontar para uma que não existe
+    # faz o Render dar o serviço por morto e reiniciá-lo em ciclo. Sem o campo,
+    # ele dá-o por vivo quando a porta abre — que é verdade, mas mais fraco: um
+    # backend de pé com a base inacessível passa na mesma. Acrescentar a rota é
+    # trabalho de minutos e está anotado em docs/05-deploy.md.
+
+    envVars:
+      - key: NODE_ENV
+        value: production        # é este valor que aperta o env.ts
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dragonfleet-db
+          property: connectionString   # a INTERNA; a externa sai para a internet
+
+      # Os dois segredos são gerados pelo Render e nunca chegam a passar por
+      # aqui nem pelo histórico do Git. Sendo gerados em separado, saem
+      # diferentes — que é o que tem de ser: o de refresh vale sete dias e o de
+      # acesso quinze minutos, e partilhá-los faz um token curto valer como
+      # longo.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+
+      # sync: false = o Render pergunta no primeiro deploy e guarda.
+      #
+      # CORS_ORIGINS fica assim porque o endereço do frontend ainda não existe
+      # quando a base e a API são criadas. É de propósito que o backend recuse
+      # arrancar sem ele: é a verificação a funcionar, não uma avaria. Preencher
+      # depois de o Pages estar de pé.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Sem estes três, os recibos verdes e os comprovativos de IBAN não são
+      # guardados em lado nenhum. O env.ts recusa arrancar sem eles.
+      - key: CLOUD_NAME
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: API_SECRET
+        sync: false
+
+      # Email das notificações.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false      # entra nas ligações dos emails; o mesmo do CORS
