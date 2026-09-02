@@ -1,0 +1,30 @@
+# Cabeçalhos de cache no Cloudflare Pages.
+#
+# O Vite põe um hash no nome de tudo o que passa pelo bundler: main-a3f9c1.js
+# muda de nome quando muda de conteúdo, por isso pode ser guardado para sempre
+# sem risco. Os ficheiros de public/ NÃO passam pelo bundler — o favicon.ico
+# chega ao servidor com o mesmo nome que tinha antes.
+#
+# Guardá-los com validade longa é o que transforma uma troca de logótipo num
+# problema de um ano: quem já visitou o site fica com o ícone antigo e nenhum
+# rebuild o alcança. O nginx.conf do docker local tem exatamente esse defeito
+# (expires 1y, immutable, num bloco que apanha .ico e .png) — corrigido no
+# mesmo pacote que este ficheiro.
+#
+# Uma hora é o equilíbrio: poupa pedidos no uso normal e uma troca de marca
+# alastra no mesmo dia.
+
+/*.ico
+  Cache-Control: public, max-age=3600
+
+/*.png
+  Cache-Control: public, max-age=3600
+
+# Os assets com hash no nome, esses sim, podem ficar.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# O index.html nunca pode ser guardado: é ele que aponta para os nomes com
+# hash. Um index.html em cache serve nomes de ficheiros que já não existem.
+/index.html
+  Cache-Control: no-cache
