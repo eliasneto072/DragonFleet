@@ -1,0 +1,15 @@
+# Encaminhamento das rotas do React no Cloudflare Pages.
+#
+# O Pages serve ficheiros estáticos. Abrir /app/admin/financial diretamente —
+# escrito na barra, ou vindo de um marcador, ou depois de F5 — faz o Pages
+# procurar um ficheiro com esse nome, não o encontrar, e devolver 404. A rota
+# existe no React, mas o React só corre depois de o index.html ser servido.
+#
+# É o equivalente ao `try_files $uri $uri/ /index.html` do nginx.conf, que é o
+# que faz isto funcionar no docker local. Sem este ficheiro, a aplicação parece
+# funcionar enquanto se navega por dentro e parte assim que alguém recarrega.
+#
+# O 200 é importante: serve o index.html mantendo o endereço na barra. Um 301
+# ou 302 mandaria o utilizador para a raiz e perdia a rota.
+
+/*    /index.html   200
