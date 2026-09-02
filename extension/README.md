@@ -16,6 +16,38 @@ Lê a tabela de rendimentos da Uber e da Bolt e envia-a para o DragonFleet.
 4. Conferir o que aparece — e sobretudo **quem ficou por emparelhar**
 5. **Enviar**
 
+## O endereço da API
+
+É um campo, não uma constante no código. Escreve-se conforme onde a API está:
+
+| Onde | O que escrever |
+|---|---|
+| Docker local | `http://localhost:3000` |
+| Túnel do ngrok | `https://<subdominio>.ngrok-free.dev/api` |
+| Render | `https://<servico>.onrender.com` |
+| Domínio próprio | conforme a configuração |
+
+**Atrás de um nginx, o endereço termina em `/api`.** É o nginx que encaminha
+`/api/` para o backend e retira o prefixo. Sem o sufixo, os pedidos batem no
+frontend e voltam com HTML — a extensão diz isso por palavras, em vez de
+rebentar com "Unexpected token <".
+
+À primeira vez que se usa um endereço novo, o Chrome pergunta se a extensão pode
+falar com ele. É preciso autorizar: sem isso os pedidos são bloqueados antes de
+saírem. Pergunta uma vez por endereço e não volta a perguntar.
+
+O manifesto **não** fixa o endereço da API de propósito. Fixá-lo obrigaria a
+editar o ficheiro e a reinstalar a extensão em todas as máquinas a cada mudança
+— e este endereço muda pelo menos três vezes entre o desenvolvimento e a
+produção.
+
+### Túneis do ngrok
+
+O plano gratuito devolve uma página de aviso em HTML, em vez da resposta, na
+primeira visita de cada cliente. A extensão manda o cabeçalho
+`ngrok-skip-browser-warning` em todos os pedidos para a saltar. Fora do ngrok o
+cabeçalho é ignorado.
+
 Os lançamentos entram como *por confirmar* e aparecem em **Faturação › Por confirmar**.
 Nada credita saldo: o dinheiro continua a entrar só pelo fecho semanal.
 

@@ -28,6 +28,79 @@ function eur(n) {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(n);
 }
 
+// ─── Falar com o servidor ─────────────────────────────────────────────────────
+
+/**
+ * Pede ao Chrome autorização para falar com o endereço que a pessoa escreveu.
+ *
+ * O manifesto declara `optional_host_permissions` em vez de fixar o endereço da
+ * API. É de propósito: em desenvolvimento a API está em localhost, na
+ * demonstração num túnel do ngrok, depois no Render, e um dia num domínio .pt.
+ * Cada um desses endereços escrito no manifesto obrigaria a editar o ficheiro e
+ * a reinstalar a extensão em todas as máquinas.
+ *
+ * Assim, escreve-se o endereço no campo, o Chrome pergunta uma vez, e acabou.
+ *
+ * O pedido tem de partir de um clique — é a regra do Chrome para não haver
+ * janelas de autorização a aparecer sozinhas. Por isso vive dentro do `entrar`
+ * e não no arranque.
+ */
+async function pedirPermissao(api) {
+  let origem;
+  try {
+    origem = `${new URL(api).origin}/*`;
+  } catch {
+    throw new Error('Endereço da API inválido. Inclua o https:// ou http://.');
+  }
+
+  if (await chrome.permissions.contains({ origins: [origem] })) return;
+
+  const concedida = await chrome.permissions.request({ origins: [origem] });
+  if (!concedida) {
+    throw new Error(
+      `Sem autorização para falar com ${origem}.\n\n` +
+      'Sem ela o Chrome bloqueia os pedidos antes de saírem.',
+    );
+  }
+}
+
+/** Cabeçalhos comuns a todos os pedidos. */
+function cabecalhos(comToken = true) {
+  const h = {
+    'Content-Type': 'application/json',
+    // Um túnel gratuito do ngrok devolve uma página de aviso em HTML em vez da
+    // resposta, na primeira visita de cada cliente. Este cabeçalho salta-a.
+    // Fora do ngrok é ignorado, portanto não faz mal nenhum ficar sempre.
+    'ngrok-skip-browser-warning': 'true',
+  };
+  if (comToken && estado.token) h.Authorization = `Bearer ${estado.token}`;
+  return h;
+}
+
+/**
+ * Lê a resposta, e diz algo útil quando ela não é JSON.
+ *
+ * `res.json()` cru rebenta com "Unexpected token <" quando o que volta é uma
+ * página de HTML — o aviso do ngrok, um proxy pelo meio, ou o endereço apontado
+ * ao frontend em vez da API. Essa mensagem não ajuda ninguém a perceber o que
+ * fazer a seguir.
+ */
+async function respostaJson(res, api) {
+  const texto = await res.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    if (texto.trimStart().startsWith('<')) {
+      throw new Error(
+        'O servidor devolveu uma página de HTML em vez de dados.\n\n' +
+        `Confirme que ${api} aponta para a API. Atrás de um nginx, o endereço ` +
+        'termina em /api.',
+      );
+    }
+    throw new Error(`Resposta ilegível do servidor (HTTP ${res.status}).`);
+  }
+}
+
 // ─── Sessão ───────────────────────────────────────────────────────────────────
 
 async function entrar() {
@@ -39,12 +112,14 @@ async function entrar() {
   if (!api || !email || !password) return erro('Preencha os três campos.');
 
   try {
+    await pedirPermissao(api);
+
     const res = await fetch(`${api}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhos(false),
       body: JSON.stringify({ email, password }),
     });
-    const json = await res.json();
+    const json = await respostaJson(res, api);
     if (!res.ok) throw new Error(json?.message ?? 'Não foi possível entrar.');
 
     const token = json.data?.token ?? json.token;
@@ -149,10 +224,7 @@ async function rever() {
 
     const res = await fetch(`${estado.api}/earnings/ingest/preview`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${estado.token}`,
-      },
+      headers: cabecalhos(),
       body: JSON.stringify({
         platform: dados.platform,
         periodStart: dados.periodo.periodStart,
@@ -160,7 +232,7 @@ async function rever() {
         rows: dados.rows.map((r) => ({ driverName: r.driverName, amount: r.amount })),
       }),
     });
-    const json = await res.json();
+    const json = await respostaJson(res, estado.api);
     if (!res.ok) throw new Error(json?.message ?? 'A simulação falhou.');
 
     estado.previsto = json.data?.result ?? json.result;
@@ -178,10 +250,7 @@ async function enviar() {
     const { dados } = estado;
     const res = await fetch(`${estado.api}/earnings/ingest`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${estado.token}`,
-      },
+      headers: cabecalhos(),
       body: JSON.stringify({
         platform: dados.platform,
         periodStart: dados.periodo.periodStart,
@@ -189,7 +258,7 @@ async function enviar() {
         rows: dados.rows.map((r) => ({ driverName: r.driverName, amount: r.amount })),
       }),
     });
-    const json = await res.json();
+    const json = await respostaJson(res, estado.api);
     if (!res.ok) throw new Error(json?.message ?? 'O envio falhou.');
 
     const r = json.data?.result ?? json.result;

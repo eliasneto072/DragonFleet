@@ -1,17 +1,23 @@
 {
   "manifest_version": 3,
   "name": "DragonFleet — recolha de rendimentos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lê a tabela de rendimentos da Uber e da Bolt e envia-a para o DragonFleet, para conferência.",
-
-  "permissions": ["activeTab", "scripting", "storage"],
-
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://supplier.uber.com/*",
     "https://fleets.bolt.eu/*",
-    "http://localhost/*"
+    "http://localhost/*",
+    "http://localhost:3000/*"
   ],
-
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "action": {
     "default_popup": "src/popup.html",
     "default_title": "Recolher rendimentos"
