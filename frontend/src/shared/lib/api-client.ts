@@ -30,6 +30,24 @@ export const tokenStorage = {
 
 // ── Refresh silencioso ────────────────────────────────────────────────────────
 
+/**
+ * Rotas onde um 401 quer dizer "credenciais erradas", e não "token expirado".
+ *
+ * Sem esta lista, uma palavra-passe errada no login caía no caminho da
+ * renovação: o `doRefresh()` não encontrava refresh token, atirava, e o `catch`
+ * fazia `window.location.href = '/login'`. Como o utilizador JÁ estava em
+ * /login, isso era um recarregamento da página — o formulário esvaziava e a
+ * mensagem de erro desaparecia antes de ser lida.
+ *
+ * O que tornava o problema difícil de ver: o `throw` corre antes de o browser
+ * concluir a navegação, por isso o erro chegava a ser pintado no ecrã. Às vezes
+ * dava para o ler, às vezes não. Parecia intermitente e era determinístico.
+ *
+ * Renovar a sessão de quem ainda não a tem não faz sentido nenhum, portanto o
+ * caminho certo é nunca lá entrar.
+ */
+const ROTAS_SEM_RENOVACAO = ['/auth/login', '/auth/register', '/auth/refresh'];
+
 let isRefreshing   = false;
 let refreshQueue: ((token: string) => void)[] = [];
 
@@ -84,7 +102,7 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   const json = await res.json().catch(() => ({}));
 
   // Access token expirado — tenta renovar uma vez
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && retry && !ROTAS_SEM_RENOVACAO.includes(path)) {
     if (isRefreshing) {
       // Outra request já está a renovar — espera na fila
       return new Promise((resolve, reject) => {
@@ -106,8 +124,14 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     } catch (err) {
       refreshQueue = [];
       isRefreshing = false;
-      // Redireciona para login se o refresh falhar
-      window.location.href = '/login';
+      // Redireciona para login se o refresh falhar.
+      //
+      // Mas só se ainda não estivermos lá: atribuir a location o endereço da
+      // página atual é uma navegação completa, não um no-op, e apaga tudo o
+      // que o utilizador tinha escrito no formulário.
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
+      }
       throw err;
     }
   }
