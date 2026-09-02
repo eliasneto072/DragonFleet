@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { Menu, X } from 'lucide-react';
+import {
+  Menu, X,
+  Calculator, Banknote, FileCheck2, Landmark, Car, Bell,
+} from 'lucide-react';
 import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 
 const floatCSS = [
@@ -78,19 +81,21 @@ export function LandingPage() {
                 fora do DragonFleetLogo; passar a usá-lo fecha a divergência. */}
             <DragonFleetLogo size={30} />
 
-            {/* Nav links — só desktop */}
-            <nav style={{ display: 'none', alignItems: 'center', gap: '4px', flex: 1, marginLeft: '32px' }}
+            {/* Nav — um link, e verdadeiro.
+
+                Eram quatro (Motoristas, Plataforma, Empresa, Suporte) e os
+                quatro apontavam para a mesma âncora, #features. Navegação que
+                não navega ensina a não clicar em nada. */}
+            <nav style={{ display: 'none', alignItems: 'center', flex: 1, marginLeft: '32px' }}
               className="md-nav">
-              {['Motoristas', 'Plataforma', 'Empresa', 'Suporte'].map(label => (
-                <a key={label} href="#features" style={{
-                  color: '#4b5563', textDecoration: 'none',
-                  fontSize: '14px', fontWeight: 500, padding: '6px 12px',
-                  borderRadius: '999px', transition: 'all 0.15s',
-                }}
-                  onMouseEnter={e => { (e.target as HTMLElement).style.color = '#108865'; (e.target as HTMLElement).style.background = 'rgba(16,136,101,0.08)'; }}
-                  onMouseLeave={e => { (e.target as HTMLElement).style.color = '#4b5563'; (e.target as HTMLElement).style.background = 'transparent'; }}
-                >{label}</a>
-              ))}
+              <a href="#features" style={{
+                color: '#4b5563', textDecoration: 'none',
+                fontSize: '14px', fontWeight: 500, padding: '6px 12px',
+                borderRadius: '999px', transition: 'all 0.15s',
+              }}
+                onMouseEnter={e => { (e.target as HTMLElement).style.color = '#108865'; (e.target as HTMLElement).style.background = 'rgba(16,136,101,0.08)'; }}
+                onMouseLeave={e => { (e.target as HTMLElement).style.color = '#4b5563'; (e.target as HTMLElement).style.background = 'transparent'; }}
+              >Como funciona</a>
             </nav>
 
             {/* Botões auth — desktop */}
@@ -113,7 +118,7 @@ export function LandingPage() {
               }}
                 onMouseEnter={e => { (e.target as HTMLElement).style.background = '#108865'; (e.target as HTMLElement).style.color = '#fff'; }}
                 onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.color = '#108865'; }}
-              >Cadastrar</button>
+              >Criar conta</button>
             </div>
 
             {/* Hamburguer — mobile (via inline style + useState) */}
@@ -145,7 +150,7 @@ export function LandingPage() {
                 background: '#108865', border: 'none',
                 color: '#fff', padding: '10px', borderRadius: '8px',
                 fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-              }}>Cadastrar</button>
+              }}>Criar conta</button>
             </div>
           )}
 
@@ -184,23 +189,24 @@ export function LandingPage() {
                 fontWeight: 500, letterSpacing: '0.5px', textTransform: 'uppercase',
               }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#108865', display: 'inline-block' }} />
-                Plataforma de gestão de frota
+                Área do motorista
               </div>
 
               <h1 style={{
                 fontSize: 'clamp(32px, 6vw, 64px)', fontWeight: 800,
                 lineHeight: 1.05, letterSpacing: '-2px', margin: '0 0 20px',
               }}>
-                Gerencie sua<br />frota com<br />
-                <span style={{ color: '#108865' }}>precisão.</span>
+                As contas da<br />sua semana,<br />
+                <span style={{ color: '#108865' }}>à vista.</span>
               </h1>
 
               <p style={{
                 fontSize: 'clamp(15px, 2vw, 18px)', lineHeight: 1.7,
                 color: '#6b7280', margin: '0 0 40px', maxWidth: '440px',
               }}>
-                Uma plataforma completa para motoristas e gestores. Ganhos, retiradas,
-                documentos e frota — tudo em um só lugar.
+                Cada semana fechada mostra o que entrou na Uber e na Bolt, o que saiu
+                em despesas, e quanto fica para si. Sem contas de cabeça e sem esperar
+                pela resposta a uma mensagem.
               </p>
 
               <button
@@ -215,7 +221,7 @@ export function LandingPage() {
                 onMouseEnter={e => (e.target as HTMLElement).style.background = '#0d7557'}
                 onMouseLeave={e => (e.target as HTMLElement).style.background = '#108865'}
               >
-                Acessar plataforma →
+                Entrar →
               </button>
             </div>
 
@@ -227,37 +233,45 @@ export function LandingPage() {
                 borderRadius: '24px', padding: '28px', boxShadow: '0 8px 30px rgba(16,24,40,0.08)',
               }}>
                 <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                  Visão geral do motorista
+                  Fecho da semana · 18–24 ago
                 </p>
-                <div style={{ marginBottom: '20px' }}>
-                  <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Saldo disponível</p>
-                  <p style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 700, letterSpacing: '-1px', color: '#108865' }}>€ 3.240,75</p>
+
+                <div style={{ marginBottom: '18px' }}>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Disponível para retirada</p>
+                  <p style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 700, letterSpacing: '-1px', color: '#108865' }}>€ 884,50</p>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+
+                {/* Ilustração, não um extrato.
+
+                    Antes estavam aqui quatro caixas com "Corridas 847",
+                    "Avaliação 4.9" e "Meta mensal 84%" — nenhuma dessas três
+                    coisas existe no schema nem em qualquer rota.
+
+                    A comissão fica de fora de propósito: os motoristas já
+                    sabem como funciona, e abrir a primeira tela com a
+                    percentagem à frente desanima sem necessidade. Ela aparece
+                    onde tem de aparecer, no fecho semanal dentro da conta.
+
+                    Os números escolhidos fecham na mesma: 620 + 480 menos
+                    215,50 dão os 884,50 do topo. Quem fizer a conta de cabeça
+                    não encontra uma diferença por explicar. */}
+                <div style={{
+                  display: 'grid', gap: '1px', background: '#eceeec',
+                  border: '1px solid #eceeec', borderRadius: '10px', overflow: 'hidden',
+                }}>
                   {[
-                    { label: 'Ganhos do mês', value: '€ 8.420' },
-                    { label: 'Corridas',      value: '847'       },
-                    { label: 'Avaliação',     value: '4.9 ★'    },
-                    { label: 'Documentos',    value: '3 ativos'  },
-                  ].map(({ label, value }) => (
+                    { label: 'Uber',     value: '€ 620,00',   desconto: false },
+                    { label: 'Bolt',     value: '€ 480,00',   desconto: false },
+                    { label: 'Despesas', value: '− € 215,50', desconto: true  },
+                  ].map(({ label, value, desconto }) => (
                     <div key={label} style={{
-                      background: '#f7f8f7',
-                      border: '1px solid #eceeec',
-                      borderRadius: '10px', padding: '12px',
+                      background: '#fff', padding: '10px 12px',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
-                      <p style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '4px' }}>{label}</p>
-                      <p style={{ fontSize: '16px', fontWeight: 600 }}>{value}</p>
+                      <span style={{ fontSize: '12px', color: '#6b7280' }}>{label}</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: desconto ? '#b42318' : '#1a1a1a' }}>{value}</span>
                     </div>
                   ))}
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '11px', color: '#9ca3af' }}>Meta mensal</span>
-                    <span style={{ fontSize: '11px', color: '#108865' }}>84%</span>
-                  </div>
-                  <div style={{ height: '4px', background: '#eceeec', borderRadius: '999px' }}>
-                    <div style={{ width: '84%', height: '100%', background: '#108865', borderRadius: '999px' }} />
-                  </div>
                 </div>
               </div>
             </div>
@@ -273,7 +287,7 @@ export function LandingPage() {
           borderTop: '1px solid #e4e6e4',
         }}>
           <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '2px', color: '#108865', textAlign: 'center', marginBottom: '12px' }}>
-            Funcionalidades
+            O que encontra aqui
           </p>
           <h2 style={{ fontSize: 'clamp(24px, 4vw, 44px)', fontWeight: 700, textAlign: 'center', letterSpacing: '-1px', margin: '0 0 48px' }}>
             Tudo o que precisa
@@ -283,14 +297,26 @@ export function LandingPage() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
             gap: '14px',
           }}>
+            {/* Emoji fora.
+
+                Cada sistema desenha o seu: o do Windows não é o do Android nem
+                o do iPhone, e não há forma de controlar isso. Ícones de traço
+                do lucide-react, que já é dependência e já estava importado
+                aqui para o menu, dão o mesmo desenho em todo o lado.
+
+                Saíram também as duas entradas de administração — "Gestão de
+                frota" e "Analytics avançado". Quem lê esta página é o
+                motorista: é para ele que o registo cria conta, com o papel
+                fixado no servidor. Anunciar-lhe telas que ele nunca vai ver é
+                prometer o que não se entrega. */}
             {[
-              { icon: '💰', title: 'Controle de ganhos',   desc: 'Registre e acompanhe seus ganhos por plataforma — Uber, Bolt e muito mais.' },
-              { icon: '🏦', title: 'Retiradas simplificadas', desc: 'Peça retiradas com poucos cliques. Aprovação rápida e histórico completo.' },
-              { icon: '📄', title: 'Gestão de documentos', desc: 'Envie e acompanhe o status da sua CNH, CRLV e demais documentos obrigatórios.' },
-              { icon: '🚗', title: 'Gestão de frota',      desc: 'Admins têm visão completa da frota: status, manutenção e associação de motoristas.' },
-              { icon: '📊', title: 'Analytics avançado',   desc: 'Dashboards com gráficos de receita, corridas por plataforma e top motoristas.' },
-              { icon: '🔔', title: 'Notificações',         desc: 'Fique por dentro de aprovações, vencimentos de documentos e metas atingidas.' },
-            ].map(({ icon, title, desc }) => (
+              { Icone: Calculator, title: 'Fecho semanal',    desc: 'O que entrou em cada plataforma, o que saiu em despesas e a percentagem aplicada. A comissão incide sobre o lucro, não sobre o bruto.' },
+              { Icone: Banknote,   title: 'Retiradas',        desc: 'Peça a retirada do saldo disponível. Anexa o recibo verde e o dinheiro segue para o IBAN que registou.' },
+              { Icone: FileCheck2, title: 'Documentos',       desc: 'Cartão de cidadão, carta de condução, certificado TVDE e os do veículo. A plataforma avisa antes de cada um caducar.' },
+              { Icone: Landmark,   title: 'Dados bancários',  desc: 'Registe o IBAN uma vez, com comprovativo. Fica congelado em cada retirada aprovada, para o histórico não mudar depois de pago.' },
+              { Icone: Car,        title: 'A sua viatura',    desc: 'A viatura que lhe está associada e o estado dos documentos dela.' },
+              { Icone: Bell,       title: 'Notificações',     desc: 'Fecho publicado, retirada aprovada, documento a caducar.' },
+            ].map(({ Icone, title, desc }) => (
               <div key={title} style={{
                 background: '#fff',
                 border: '1px solid #e4e6e4',
@@ -299,7 +325,9 @@ export function LandingPage() {
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(16,136,101,0.4)'; (e.currentTarget as HTMLElement).style.background = 'rgba(16,136,101,0.04)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#e4e6e4'; (e.currentTarget as HTMLElement).style.background = '#fff'; }}
               >
-                <div style={{ fontSize: '26px', marginBottom: '14px' }}>{icon}</div>
+                <div style={{ marginBottom: '14px', lineHeight: 0 }}>
+                  <Icone size={24} strokeWidth={1.75} color="#108865" />
+                </div>
                 <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px', letterSpacing: '-0.3px' }}>{title}</h3>
                 <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6, margin: 0 }}>{desc}</p>
               </div>
@@ -319,11 +347,16 @@ export function LandingPage() {
             borderRadius: '24px', padding: 'clamp(40px, 8vw, 80px) clamp(20px, 5vw, 48px)',
             textAlign: 'center',
           }}>
-            <h2 style={{ fontSize: 'clamp(24px, 4vw, 48px)', fontWeight: 800, letterSpacing: '-1.5px', margin: '0 0 14px' }}>
-              Pronto para começar?
+            {/* A cor é explícita porque tem de ser: este h2 não a declarava e
+                herdava o escuro do corpo da página, ficando quase preto sobre
+                o verde do painel. O parágrafo abaixo já tinha branco, o que
+                escondia o problema — parecia decisão e era esquecimento. */}
+            <h2 style={{ fontSize: 'clamp(24px, 4vw, 48px)', fontWeight: 800, letterSpacing: '-1.5px', margin: '0 0 14px', color: '#fff' }}>
+              Já conduz connosco?
             </h2>
             <p style={{ fontSize: 'clamp(14px, 2vw, 17px)', color: 'rgba(255,255,255,0.85)', margin: '0 0 32px' }}>
-              Acesse sua conta e tenha controle total da sua operação.
+              Crie a sua conta ou entre com a que já tem. A associação à viatura e aos
+              fechos é feita pela administração.
             </p>
             <button
               onClick={() => navigate('/login')}
@@ -336,7 +369,7 @@ export function LandingPage() {
               onMouseEnter={e => (e.target as HTMLElement).style.background = '#f0f0f0'}
               onMouseLeave={e => (e.target as HTMLElement).style.background = '#fff'}
             >
-              Acessar plataforma →
+              Entrar →
             </button>
           </div>
         </section>
