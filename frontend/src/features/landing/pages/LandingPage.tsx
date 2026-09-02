@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Menu, X } from 'lucide-react';
+import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 
 const floatCSS = [
   '@keyframes float {',
@@ -68,30 +69,14 @@ export function LandingPage() {
             maxWidth: '1200px', margin: '0 auto', padding: '0 20px',
             height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            {/* Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
-                <defs>
-                  <linearGradient id="h-bg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1a4a3a"/>
-                    <stop offset="100%" stopColor="#0d6b4f"/>
-                  </linearGradient>
-                </defs>
-                <rect width="100" height="100" rx="22" fill="url(#h-bg)"/>
-                <rect x="14" y="54" width="72" height="20" rx="8" fill="white"/>
-                <path d="M28 54 C28 54, 32 32, 44 28 L62 28 C72 28, 76 42, 78 54 Z" fill="white"/>
-                <path d="M34 52 C34 52, 37 36, 46 33 L60 33 C67 33, 70 43, 72 52 Z" fill="url(#h-bg)"/>
-                <circle cx="30" cy="76" r="11" fill="url(#h-bg)"/>
-                <circle cx="30" cy="76" r="7" fill="white"/>
-                <circle cx="30" cy="76" r="3" fill="url(#h-bg)"/>
-                <circle cx="70" cy="76" r="11" fill="url(#h-bg)"/>
-                <circle cx="70" cy="76" r="7" fill="white"/>
-                <circle cx="70" cy="76" r="3" fill="url(#h-bg)"/>
-              </svg>
-              <span style={{ fontWeight: 700, fontSize: '16px', letterSpacing: '-0.3px', color: '#1a1a1a' }}>
-                Dragon<span style={{ color: '#108865' }}>Fleet</span>
-              </span>
-            </div>
+            {/* Logo.
+
+                Era um SVG do carro desenhado à mão aqui dentro — a marca
+                anterior, de antes do dragão. Ficou para trás quando os ícones
+                foram trocados, porque esta página não usa o componente e
+                ninguém a comparou com o resto. É a única cópia do logótipo
+                fora do DragonFleetLogo; passar a usá-lo fecha a divergência. */}
+            <DragonFleetLogo size={30} />
 
             {/* Nav links — só desktop */}
             <nav style={{ display: 'none', alignItems: 'center', gap: '4px', flex: 1, marginLeft: '32px' }}
