@@ -143,19 +143,30 @@ SEED_PERF=1 SEED_PERF_ONLY=limpar DATABASE_URL="..." npx tsx prisma/seed-perf.ts
 
 ## Criar o administrador
 
-Corre da sua máquina, com a `DATABASE_URL` externa. Os seeds **não** correm
-dentro do contentor de produção, porque lá não existe `src/`.
+Corre **dentro** do contentor do Render, e é a forma mais simples.
 
-```bash
-cd backend
-DATABASE_URL="..." \
-SEED_ADMIN_EMAIL="admin@dragonfleet.com" \
-SEED_ADMIN_PASSWORD="umaSenhaForte123" \
-npx tsx prisma/seed-admin.ts
-```
+1. No painel do serviço, em **Environment**, acrescentar:
+   ```
+   SEED_ADMIN_EMAIL=admin@dragonfleet.com
+   SEED_ADMIN_PASSWORD=<uma palavra-passe forte, mínimo 8 caracteres>
+   SEED_ADMIN_NAME=Diogo          # opcional
+   ```
+2. Abrir o separador **Shell** do serviço e correr:
+   ```bash
+   node dist/scripts/seed-admin.js
+   ```
+3. **Apagar o `SEED_ADMIN_PASSWORD` das variáveis.** O script é idempotente e
+   nas vezes seguintes diz "já existe, nada a fazer" — a variável fica só a
+   guardar uma palavra-passe que já não serve para nada.
+4. Entrar na aplicação e mudar a palavra-passe no Perfil. A alteração exige a
+   atual, portanto quem a definiu não fica com acesso permanente.
 
-Para isto funcionar, acrescente o seu IP ao `ipAllowList` da base no painel do
-Render. **Tire-o outra vez a seguir.**
+O seed vive em `src/scripts/`, é compilado com o resto para `dist/`, e corre com
+o Node que já está na imagem. Não precisa de `tsx` nem de descarregar nada.
+
+Os outros seeds — `seed-demo` e `seed-perf` — continuam em `prisma/` e correm da
+sua máquina com a `DATABASE_URL` externa. Para isso, acrescente o seu IP ao
+`ipAllowList` da base no painel do Render, e **tire-o outra vez a seguir**.
 
 ---
 

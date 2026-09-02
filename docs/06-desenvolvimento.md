@@ -26,7 +26,7 @@ docker compose build backend
 ```bash
 docker compose exec -e SEED_ADMIN_EMAIL=admin@dragonfleet.com \
   -e SEED_ADMIN_PASSWORD=umaSenhaForte123 backend \
-  npx -y tsx prisma/seed-admin.ts
+  node dist/scripts/seed-admin.js
 ```
 
 ---

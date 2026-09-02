@@ -69,7 +69,7 @@ cp backend/.env.example backend/.env    # preencher; ver docs/06-desenvolvimento
 docker compose up -d --build
 
 docker compose exec -e SEED_ADMIN_EMAIL=admin@dragonfleet.com \
-  -e SEED_ADMIN_PASSWORD=umaSenhaForte123 backend npx -y tsx prisma/seed-admin.ts
+  -e SEED_ADMIN_PASSWORD=umaSenhaForte123 backend node dist/scripts/seed-admin.js
 ```
 
 O frontend fica em `http://localhost` e a API em `http://localhost:3000`.

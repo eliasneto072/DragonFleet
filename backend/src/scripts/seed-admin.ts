@@ -1,12 +1,33 @@
-// backend/prisma/seed-admin.ts
-// Cria um utilizador admin a partir das variáveis de ambiente.
-// Uso: npm run seed:admin
+// backend/src/scripts/seed-admin.ts
 //
-// FIX: as credenciais deixaram de estar hardcoded. Agora vêm do .env:
+// Cria o utilizador administrador a partir das variáveis de ambiente:
 //   SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD e (opcional) SEED_ADMIN_NAME.
-// A password nunca é impressa no terminal. Se as variáveis não estiverem
-// definidas, o script falha com uma mensagem clara em vez de criar um admin
-// com credenciais previsíveis.
+//
+// A palavra-passe nunca é impressa. Sem as variáveis, o script pára com uma
+// mensagem clara em vez de criar um administrador com credenciais previsíveis.
+//
+// ─── POR QUE ESTE FICHEIRO ESTÁ EM src/ E NÃO EM prisma/ ─────────────────────
+//
+// Porque em prisma/ ele não corria em lado nenhum a não ser na máquina de quem
+// o escreveu.
+//
+// O tsconfig compila `src/**/*` para `dist/`, e a imagem de produção leva o
+// `dist/` mas não o `src/`. O `tsx`, que sabe correr TypeScript, é uma
+// devDependency e a produção instala com `--omit=dev`. Estando o seed em
+// prisma/, o ficheiro chegava ao contentor — a pasta é copiada — mas não havia
+// nada lá dentro capaz de o executar. Restava o `npx -y tsx`, que descarrega
+// cinco megabytes na hora para correr trinta linhas, e falha se a rede estiver
+// fechada.
+//
+// Daqui, compila com o resto e corre com o Node que já lá está:
+//
+//   node dist/scripts/seed-admin.js
+//
+// Vale para o contentor local e para o do Render, que são a mesma imagem.
+//
+// Os outros seeds — seed-demo e seed-perf — ficam em prisma/ de propósito: são
+// de desenvolvimento, correm da máquina de quem trabalha, e não têm nada que
+// fazer numa imagem de produção.
 
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
