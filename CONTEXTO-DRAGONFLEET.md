@@ -1,436 +1,152 @@
 # DragonFleet — contexto para continuar
 
-Cola este ficheiro no início de uma conversa nova. Contém tudo o que é preciso
-para retomar sem repetir decisões.
+Cola este ficheiro no início de uma conversa nova.
 
-Atualizado a 21 de agosto de 2026, depois de uma auditoria ao repositório.
+**Atualizado a 1 de setembro de 2026.**
+
+Este documento tem só o que muda: o estado atual e o que vem a seguir. O que é
+estável — modelo de negócio, arquitetura, telas, publicação — vive em
+[`docs/`](./docs/) e não se repete aqui.
+
+- **Como funciona o negócio:** [docs/01-visao-geral.md](./docs/01-visao-geral.md)
+- **As telas:** [docs/02](./docs/02-portal-do-motorista.md) e [docs/03](./docs/03-painel-de-administracao.md)
+- **Stack e decisões:** [docs/04-arquitetura.md](./docs/04-arquitetura.md)
+- **Publicação:** [docs/05-deploy.md](./docs/05-deploy.md)
+- **Convenções de trabalho:** [docs/06-desenvolvimento.md](./docs/06-desenvolvimento.md)
 
 ---
 
-## 1. O projeto
+## 1. O essencial em cinco linhas
 
 Plataforma de gestão de frota TVDE em Portugal. Cliente: **Diogo**.
-Repositório: `github.com/eliasneto072/DragonFleet`
-Branch de trabalho: **`feature/weekly-settlement`**
-Pasta local: `C:\dev\DragonFleet`
-
-**Stack:** React 18 + TypeScript + TailwindCSS v4 + shadcn/ui no frontend.
-Node + Express + Prisma + PostgreSQL no backend. Docker Compose.
-Idioma da interface e dos comentários: **português europeu**.
-
-Ambiente: Windows, Git Bash. Nome do projeto Docker fixo em `dragonfleet`.
+Repositório: `github.com/eliasneto072/DragonFleet` · branch **`main`**
+Pasta local: `C:\dev\DragonFleet` · Windows, Git Bash
+Português europeu na interface e nos comentários.
+Fase atual: **preparação do deploy** (Render + Cloudflare Pages).
 
 ---
 
-## 2. O modelo de negócio — leia isto primeiro
+## 2. Estado verificado
 
-Estas decisões foram tomadas em reunião com o cliente e **não devem ser
-revertidas sem o consultar**.
+Frontend e backend compilam. 75 testes a passar. Os quatro contentores sobem.
 
-### O dinheiro tem uma porta só: o fecho semanal
+### Concluído desde a última atualização
 
-O administrador regista, por semana e por motorista, o que entrou em cada
-plataforma (Uber, Bolt) e o que saiu em despesas (Via Verde, combustível,
-encargo da viatura, outros). A percentagem da empresa incide sobre o **lucro**
-— receitas menos despesas — e não sobre o bruto. O líquido é creditado.
-
-Fórmula, nas palavras do cliente: *"motorista fez 100€ Uber e 100€ Bolt, isso
-dá 200€; gastou 50€ em gasóleo e 50€ em via verde, o resultado é 100€; a
-percentagem vai ser sobre os 100€ de lucro e não dos 200€"*.
-
-### Os lançamentos do motorista NÃO creditam
-
-O motorista pode comunicar valores ("Registar ganho"), mas isso é
-**conferência**, não depósito. O admin confirma ou recusa; confirmar significa
-"confere com o que vou fechar". O saldo só sobe quando a semana fecha.
-
-Se ambos creditassem, a semana seria paga duas vezes.
-
-### Saldo negativo é permitido
-
-Um motorista cujas despesas superem os ganhos fica a dever, e o valor é
-descontado dos fechos seguintes. Houve guardas a impedir isto — foram removidas
-de propósito.
-
-O que **não** é permitido: pedir retirada acima do disponível.
-
-### Valores congelados
-
-Cada fecho grava a percentagem aplicada. Cada retirada aprovada grava o IBAN de
-destino. Recibo não muda depois de emitido: alterar a configuração global não
-pode reescrever contas já pagas.
+- **IBAN e recibo verde, ponta a ponta.** O que estava dado como P0 número 1 —
+  "nenhum motorista consegue pedir retirada" — está resolvido. Existem
+  `bank-account.tsx` no perfil, `bank-approvals.tsx` no Financeiro, o
+  `bank.service.ts`, e o `apiClient.upload()` com suporte a `FormData`.
+- **"Marcar como paga" no Financeiro.** Era o P0 número 3.
+- **Pacote de segurança:** CORS restrito, verificação de ambiente a rebentar
+  antes de abrir a porta, segredos com mínimo de 32 caracteres.
+- **`helmet` e limite de tentativas** em `/auth/login`, `/auth/refresh` e no
+  registo público, com `trust proxy` em 1 para o Render.
+- **O bug do login.** Uma palavra-passe errada recarregava a página e esvaziava
+  o formulário. O `api-client` tratava qualquer 401 como token expirado,
+  incluindo o do próprio login. Ver
+  [docs/04](./docs/04-arquitetura.md#o-cliente-http).
+- **A marca.** Ícones refeitos com contraste — estavam a 1,88:1 e a 16px eram
+  uma mancha verde. O logótipo antigo do carro saiu da página de entrada.
+- **Cache dos assets.** O nginx dava `expires 1y; immutable` a ficheiros sem
+  hash no nome, o que tornava qualquer troca de logótipo invisível durante um
+  ano. Corrigido no nginx e replicado no `_headers` do Pages.
+- **A página de entrada, reescrita.** Falava a um gestor à procura de software,
+  prometia métricas que não existem e usava documentos brasileiros.
+- **`render.yaml` e documentação completa** em `docs/`.
 
 ---
 
-## 3. Estado verificado do repositório
+## 3. O que vem a seguir
 
-Últimos commits em `origin/feature/weekly-settlement`:
+### Antes da demonstração
 
-```
-a3e4569  fix(earnings): a importacao de CSV rejeitava todos os CSV
-9bc028e  fix(frontend): corrigir os erros de tipos que o build nunca viu
-d923424  build(frontend): verificar tipos no build e fixar as dependencias
-bbb6b48  feat(bank): dados bancarios com aprovacao e recibo na retirada
-```
+1. **Publicar.** Seguir [docs/05-deploy.md](./docs/05-deploy.md) pela ordem
+   indicada. Contar hora e meia se nada correr mal, o dobro à primeira vez.
+2. **Testar a extensão** contra um portal, logo a seguir. A origem
+   `chrome-extension://` não é HTTP e pode precisar de entrar no `CORS_ORIGINS`.
 
-Verificado a partir de um clone novo: **frontend e backend compilam ambos sem
-erros**.
+### Logo depois
 
-### Já feito
+3. **Os painéis laterais do login e do registo.** Ficaram com o enquadramento
+   antigo: o login diz *"Controle ganhos, documentos e retiradas dos seus
+   motoristas"* e o registo diz *"Comece a gerir a sua frota hoje"* com um selo
+   "Grátis". Quem se regista é um motorista, não alguém a montar uma frota. É a
+   mesma correção que a página de entrada já levou.
+4. **Uma rota `GET /health`.** Sem ela o `render.yaml` não pode definir
+   `healthCheckPath`, e o Render dá o serviço por vivo assim que a porta abre —
+   um backend de pé com a base inacessível passa na mesma.
+5. **Português do Brasil nas telas.** Restam ocorrências de "saque", "você",
+   "usuário", "arquivo" fora da página de entrada.
+6. **Os CSV reais da Uber e da Bolt.** Pedidos ao cliente, ainda sem resposta. É
+   a primeira coisa a fazer quando chegarem — o risco do parser está descrito em
+   [docs/04](./docs/04-arquitetura.md#o-risco-por-confirmar).
 
-- Fecho semanal completo: schema, backend, formulário do admin, lista com
-  filtros, detalhe, cancelamento com estorno
-- Painel do motorista reconstruído sobre fechos (gráfico semanal, detalhe por
-  semana)
-- Painel do admin como fila de trabalho (8 tipos de pendência)
-- Tela de revisão de lançamentos (aba na Faturação)
-- Redesenho das 7 telas do admin: skeleton, modo escuro, responsividade
-- Validade de documentos preenchida pela administração ao rever
-- Histórico de veículos na ficha do motorista
-- Marca nova (logo do dragão), favicon, metadados
-- View `driver_balances` unificando a fórmula do saldo
-- Comissão vinda das Configurações em todos os cálculos, incluindo o PDF
-- **Backend completo do IBAN e do recibo** (ver secção 4)
-- **Typecheck no build do frontend** e instalação reprodutível (ver secção 6)
-- **Importação de CSV desbloqueada** (ver secção 5)
+### Sem pressa, mas anotado
 
----
-
-## 4. Em curso — IBAN e recibo, interrompido a meio
-
-O cliente pediu três coisas:
-
-1. **Recibo verde obrigatório** no pedido de retirada
-2. **IBAN no perfil do motorista**, com comprovativo, sujeito a aprovação
-3. **IBAN visível no Financeiro** para o admin transferir
-
-### Backend: pronto e publicado
-
-- `schema.prisma` com `BankAccount`, `receiptUrl`/`receiptKey` na retirada,
-  `paidToIban`/`paidToHolder`, e o tipo `COMPROVATIVO_IBAN`
-- Base de dados resetada do zero; duas migrações: `init` e
-  `add_driver_balances_view`. Confirmado que as migrações cobrem o schema — não
-  há deriva
-- Módulo `backend/src/modules/bank/` completo, com `/bank` registado em
-  `routes/routes.ts`. Endpoints: submeter (motorista), `GET /bank/pending`
-  (admin, já traz o comprovativo), aprovar e recusar
-- `POST /withdrawals` exige `upload.single('receipt')` **e** um IBAN aprovado,
-  respondendo `BANK_ACCOUNT_REQUIRED` quando falta
-- IBAN congelado na aprovação da retirada
-
-### Frontend: não existe nada
-
-Nem serviço, nem tela, nem tipos. Consequência directa e **é o P0 número 1**:
-
-> **Nenhum motorista consegue pedir uma retirada hoje.** O
-> `features/driver/services/withdrawals.service.ts` continua a fazer
-> `apiClient.post('/withdrawals', { amount })` em JSON contra uma rota que
-> agora espera multipart com `receipt`. Todos os pedidos levam 400.
-
-Isto **força a ordem do trabalho**: não dá para começar pelo recibo, porque
-mesmo com o recibo anexado o pedido é recusado enquanto não houver IBAN
-aprovado — e não há tela nenhuma onde o motorista submeta o IBAN nem onde o
-admin o aprove. A sequência é: IBAN do motorista → aprovação no admin → recibo
-no pedido → Financeiro.
-
-### Decisões de desenho já tomadas
-
-O utilizador confirmou o primeiro ponto e delegou os restantes ("faça do jeito
-que achar melhor, leve em consideração o que for mais profissional e
-escalável"). Ficaram assim:
-
-- **O IBAN vive no `ProfilePage` do motorista**, numa secção "Dados bancários",
-  mostrando os quatro estados que o backend distingue: sem IBAN, pendente (com
-  o em vigor e o submetido lado a lado), recusado com motivo, e em vigor. Não
-  na tela de Documentos, que ficaria a misturar cartão de cidadão com meio de
-  pagamento.
-- **O admin aprova no Financeiro**, em aba própria — ao lado de onde o dinheiro
-  sai e do IBAN que ele vai copiar para o banco.
-- **O botão "Nova Retirada" fica desativado** quando não há IBAN aprovado, com
-  aviso e atalho para o Perfil. Deixar o motorista preencher o valor e anexar o
-  recibo para depois recusar é a pior versão disto.
-- **O saldo disponível passa a aparecer na tela de retiradas.** Hoje o motorista
-  escolhe o valor às cegas e leva `INSUFFICIENT_BALANCE`. A mesma consulta que
-  diz "tem IBAN" pode trazer o disponível.
-
-### Uma decisão de arquitetura por aplicar
-
-O `api-client.ts` força `Content-Type: application/json`, por isso cada tela de
-upload nasceu com o seu próprio `fetch` cru (ver `documents.service.ts` e
-`earnings-import.service.ts`). Esses fetch repetem o token e o tratamento de
-erro, e **nenhum passa pela renovação silenciosa da sessão** — token expirado
-durante um upload dá 401 em vez de renovar.
-
-A correção certa é o `request()` detetar `FormData` e omitir o Content-Type
-(o browser tem de o definir para incluir o *boundary*), expondo um
-`apiClient.upload(path, form)`. Assim o IBAN e o recibo nascem certos em vez de
-repetirem o padrão.
-
-### Falta ainda
-
-- Frontend do IBAN: formulário no perfil, aprovação no admin
-- Frontend do recibo: anexo no pedido de retirada
-- Financeiro: mostrar IBAN, botão copiar, botão "marcar como paga"
-- Seed para popular a base com cenários de teste
-- Testes automatizados (o utilizador quer aprender a fazê-los "como uma empresa
-  faz")
-
----
-
-## 5. Auditoria priorizada
-
-Feita em agosto de 2026 sobre o código publicado. Os itens riscados já foram
-corrigidos e estão no repositório.
-
-### P0 — parte alguma coisa hoje
-
-1. **Nenhum motorista consegue pedir retirada.** Ver secção 4. É o próximo
-   trabalho.
-2. ~~A importação de CSV rejeitava todos os CSV.~~ **Corrigido** em `a3e4569`.
-3. **Não há como marcar uma retirada como paga.** O Financeiro só tem Aprovar e
-   Rejeitar; nada no frontend emite `PAID`. Duas consequências: o indicador
-   "Pago este mês" filtra `status = PAID` no `analytics.repository` e por isso
-   é sempre 0 €; e não há registo de que a transferência saiu do banco — uma
-   retirada aprovada e uma já transferida são indistinguíveis.
-
-### P1 — a rede de segurança
-
-4. ~~O frontend não tinha TypeScript nem typecheck no build.~~ **Corrigido** em
-   `d923424`. Agora `npm run typecheck` (`tsc -b`) existe e o build é
-   `tsc -b && vite build`. A primeira passagem apanhou 26 erros, 4 deles bugs a
-   sério, corrigidos em `9bc028e`.
-5. ~~O build do frontend não era reprodutível.~~ **Corrigido**: o Dockerfile
-   copiava `pnpm-lock.yaml*`, ficheiro que nunca existiu, e caía no
-   `npm install`. Passou a `npm ci` com o `package-lock.json`. O `react` e o
-   `react-dom` nem sequer estavam declarados — chegavam como dependência
-   transitiva, com `@types/react` 19 sobre um React 18 em execução.
-6. ~~`ApiWithdrawal` sem os campos do recibo.~~ Entra no trabalho do IBAN.
-
-### P2 — em desacordo com as decisões
-
-7. **A importação de ganhos vive no painel do motorista** (`ImportEarnings` no
-   `DriverDashboardPage`). A decisão foi o contrário: o admin recebe os
-   ficheiros dos portais e confere. Combinado deixar onde está até
-   construirmos a receção do admin a sério — nessa altura sai de vez.
-8. **`COMPROVATIVO_IBAN` existe na base e não é usado.** O comprovativo vive em
+7. **`COMPROVATIVO_IBAN` existe na base e não é usado.** O comprovativo vive em
    `bank_accounts.pending_proof_url`, fora da tabela de documentos. Decidir: ou
    passa a ser `Document`, ganhando a tela de revisão que já existe, ou o valor
    sai do enum.
-9. **Português do Brasil nas telas.** 28 ocorrências de "saque", "você",
-   "usuário", "arquivo". A pior é a tela de retiradas: título "Retiradas",
-   subtítulo "Solicite saques e acompanhe seu histórico", toast "Solicitação de
-   saque enviada!".
-10. **O motorista pede às cegas** — sem saldo visível. Entra no trabalho do
-    IBAN (secção 4).
-11. **O Financeiro importa `withdrawalsService` de `features/driver/services/`.**
-    Serviço partilhado alojado na feature errada.
-
-### P3 — limpeza
-
-12. `shared/lib/mock-data.ts` (186 linhas) e `shared/types/index.ts` (162)
-    estão mortos — ninguém os importa. Pior: contêm modelos que contradizem a
-    API real (`method: 'pix' | 'paypal'`, estados em minúsculas). Apagar antes
-    que alguém os importe por engano.
-13. Fila do painel por tipo; a versão por pessoa foi entregue e nunca aplicada.
-14. ~~CRLF a poluir o `git status`.~~ **Não existe do lado do utilizador** — o
-    Git dele tem `core.autocrlf=true` e normaliza sozinho. Era artefacto do
-    ambiente de análise.
-15. 10 vulnerabilidades do `npm audit` por tratar. **Nunca correr
-    `npm audit fix --force`** — ignora os intervalos semver e é capaz de trocar
-    o Vite ou o React por versões incompatíveis. Fazer como assunto próprio,
-    com typecheck e build a confirmar antes e depois. Verificar primeiro
-    `npm audit --omit=dev`, que mostra só o que chega a produção.
-
-### Dívida resolvida
-
-- `FINANCIAL_FALLBACK` já está a zeros e o `useSettings` lê do servidor.
+8. **A importação de ganhos está na tela do motorista.** A decisão foi o
+   contrário — o admin recebe os ficheiros e confere. Fica onde está até existir
+   a receção do lado da administração.
+9. **`withdrawalsService` vive em `features/driver/services/`** e é importado
+   pelo Financeiro. Serviço partilhado alojado na feature errada.
+10. **Código morto:** `shared/lib/mock-data.ts` e `shared/types/index.ts`.
+    Ninguém os importa, e contêm modelos que contradizem a API real
+    (`method: 'pix' | 'paypal'`, estados em minúsculas). Apagar antes que alguém
+    os importe por engano.
+11. **`npm audit`.** Três altas, todas em `prisma → @prisma/config →
+    deepmerge-ts`. Como assunto próprio, com typecheck e build a confirmar antes
+    e depois. **Nunca `npm audit fix --force`.**
+12. **`backend/modelo_dragon_fleet.jpeg`** é o diagrama ER com nome enganador, e
+    está na pasta errada. Devia ser `docs/modelo-de-dados.jpeg`.
 
 ---
 
-## 6. Automatização Uber/Bolt
+## 4. Decisões fechadas — não voltar a debater
 
-O cliente não conseguiu acesso à API. Decidido: **extensão de browser** que lê
-a página que ele já tem aberta nos portais e envia para o DragonFleet.
+**A comissão incide sobre o lucro**, não sobre o bruto. Os lançamentos do
+motorista são conferência e não creditam. Saldo negativo é permitido; pedir
+acima do disponível não é. A percentagem, o IBAN e o recibo congelam depois do
+facto. Detalhe em [docs/01](./docs/01-visao-geral.md).
 
-**A extensão é a via principal. O CSV é a secundária** — serve de alternativa
-quando a extensão falhar ou o portal mudar de aspeto, para carregar semanas
-antigas, e para testar a receção enquanto a extensão não existe. O utilizador
-avisou que **não garante que os portais tenham botão de download**.
+**O registo é público e a conta nasce ativa.** Quem não pertence à frota é
+desativado pelo Diogo na tela de Motoristas. Foi decidido assim de propósito, em
+alternativa a nascer pendente ou a ser por convite.
 
-Nota de vocabulário: a extensão automatiza a **recolha dos valores das
-plataformas**, não o fecho semanal. O fecho continua a ser um ato do
-administrador, que confirma o que entrou e lança as despesas. O que a extensão
-elimina é a transcrição manual.
+**O IBAN vive no Perfil do motorista**, não em Documentos. O admin aprova no
+Financeiro, em aba própria, ao lado de onde o dinheiro sai.
 
-Ordem acordada: **primeiro a receção e a tela de conferência no DragonFleet, a
-extensão depois.** A tela de conferência é a mesma porta de entrada para as
-duas origens.
-
-O que se sabe dos portais:
-- Uber: coluna "Rendimentos líquidos", nomes completos
-- Bolt: coluna "Net earnings", idem
-- Uber escreve "Monica Luis", Bolt escreve "Mónica Luis" — **normalizar acentos
-  ao casar nomes**
-
-### Risco concreto no parser, por confirmar com ficheiros reais
-
-O `csv-parser.ts` casa cabeçalhos por lista de aliases: primeiro por igualdade
-exata, depois por inclusão. A coluna da Uber **é apanhada** — "Rendimentos
-líquidos" contém "rendimento", que está na lista — portanto o alarme que dei
-antes estava errado.
-
-**Mas há um perigo real:** se o ficheiro da Uber tiver também uma coluna de
-bruto do género "Rendimentos brutos", a busca por inclusão devolve a **primeira
-coluna** que contenha "rendimento". Se o bruto vier primeiro, importa-se o
-bruto em vez do líquido, em silêncio, e o fecho fica inflado.
-
-Corrigir isto exige ver um ficheiro real — qualquer alias acrescentado às cegas
-é palpite. **Pedido ao cliente, ainda sem resposta: exportar um CSV de cada
-portal.** É a primeira coisa a fazer quando chegarem.
-
-### Decisão que vai ser precisa na extensão
-
-Ler a página pelo DOM (frágil: a Uber muda o layout e parte) ou usar o botão de
-download do portal e enviar o ficheiro (mais robusto, mas obriga a um clique e
-pode não existir). Deixado para o seu tempo.
+**A extensão de browser é a via principal** para a recolha Uber/Bolt; o CSV é a
+secundária. A receção e a tela de conferência vêm primeiro, a extensão depois.
 
 ---
 
-## 7. Como trabalhamos
+## 5. Como trabalhamos
 
-### Ficheiros completos, sempre — entregues como pacote
+As convenções completas estão em
+[docs/06-desenvolvimento.md](./docs/06-desenvolvimento.md). O que não pode
+falhar:
 
-Entregar **ficheiros inteiros**, nunca fragmentos com "adicione aqui".
-
-O método que funciona: preparar os ficheiros, empacotá-los num zip com a
-**mesma estrutura de pastas do projeto**, e incluir um `aplicar.sh` que copia
-tudo para o sítio certo. O utilizador corre:
+**Ficheiros inteiros, num zip com a estrutura do projeto, mais um `aplicar.sh`.**
+Nunca fragmentos com "adicione aqui". Substituição manual ficheiro a ficheiro
+esquece sempre um.
 
 ```bash
 bash /c/dev/_patch/<pacote>/aplicar.sh /c/dev/DragonFleet
 ```
 
-O script deve validar que o destino é mesmo a raiz do projeto antes de
-escrever, imprimir cada ficheiro que copiou (`cp -v`), e no fim lembrar de
-conferir com `git status --short`. Substituição manual ficheiro a ficheiro
-esquece sempre um — já aconteceu com o `ts.config.json`.
+**Verificar antes de empacotar:** `npm run typecheck` no frontend, `npx tsc
+--noEmit` no backend.
 
-Ficheiros que mudam de nome ou que o Windows não deixa criar (os que começam
-por ponto) vão no pacote com nome neutro e são renomeados pelo script ou à mão,
-com instrução explícita.
+**Contabilidade dos ficheiros.** Antes de empacotar, conseguir apontar a edição
+que produziu cada ficheiro alterado. Do outro lado, passar os olhos pelo `git
+diff` antes de commitar — se aparecer algum que não foi anunciado, parar.
 
-### Verificar antes de entregar
+**Debater antes de implementar**, sobretudo quando envolve dinheiro. Opções com
+prós e contras, uma recomendação, e esperar a decisão. Quando o utilizador
+delega, decidir e **registar a decisão e a razão** — no código e aqui.
 
-O frontend agora tem rede de segurança. **Correr sempre antes de empacotar:**
-
-```bash
-cd frontend && npm run typecheck    # tsc -b
-cd backend  && npx tsc --noEmit
-```
-
-Continua a valer para edições por script:
-- Chavetas e parênteses balanceados
-- Variáveis declaradas antes do uso (React rebenta com `Cannot access before
-  initialization`)
-- Funções chamadas existem de facto (um `replace` que não encontra o texto
-  **não avisa** — já deixou um `<FleetSkeleton />` sem definição)
-- Em `Promise.all`, o número de variáveis no destructuring bate com o número de
-  consultas
-
-**E uma regra nova, depois de um incidente:** antes de empacotar, comparar a
-cópia de trabalho inteira contra a origem e **conseguir apontar a edição que
-produziu cada ficheiro alterado**. Numa sessão apareceram na cópia de trabalho
-ficheiros novos e alterações que não correspondiam a nenhuma edição feita — foi
-apanhado a tempo e nada chegou ao repositório, mas só porque a comparação foi
-feita. O que não se consegue explicar, não sai.
-
-Do lado do utilizador, a contrapartida: **passar os olhos pela lista de
-ficheiros do `git diff` antes de commitar**. Se aparecer algum que não foi
-anunciado, parar.
-
-### Onde está a fonte fiável
-
-O repositório no GitHub, desde que **não haja alterações locais por commitar**.
-Já aconteceu uma correção ser desfeita por se ter partido da versão publicada
-quando havia trabalho local. Se houver, pedir para commitar primeiro — ou pedir
-o zip da pasta.
-
-**Nota técnica:** um clone limpo não consegue gerar o cliente Prisma neste
-ambiente (`binaries.prisma.sh` está bloqueado), e sem ele o `tsc --noEmit` do
-backend falha nos imports do `@prisma/client`. Solução usada: reaproveitar o
-`node_modules/.prisma` de um zip do projeto, **depois de confirmar que o
-`schema.prisma` do zip é idêntico ao do repositório**. Em alternativa, deixar o
-`docker compose build backend` fazer a verificação.
-
-### Commits
-
-Conventional Commits, com corpo a explicar **o problema que existia**, não só a
-mudança. Separar por assunto.
-
-Fornecer sempre a mensagem **em comando pronto a colar, com `-m` repetido** —
-um `-m` por parágrafo. O utilizador está em Git Bash no Windows e o editor por
-omissão é o Vim, que já o prendeu uma vez (sair: `Esc`, `:q!`, Enter). Duas
-notas mais:
-
-- **Sem acentos nas mensagens de commit.** A codificação do terminal troca-os
-  por caracteres estranhos e ficam gravados assim no histórico. Nos ficheiros
-  de código mantém-se o português correto.
-- Um `git add` com vários caminhos **aborta tudo** se um deles não existir.
-
-Exemplo do formato esperado:
-
-```
-fix(analytics): passivo do painel passa a somar os fechos semanais
-
-O "Devido aos motoristas" somava a tabela de ganhos, do tempo em que o
-motorista lançava o próprio saldo. Os lançamentos passaram a ser conferência
-e não creditam nada, por isso o número inflava com valores que não são
-dívida e ignorava os fechos.
-```
-
-### Comentários no código
-
-Explicar **por que**, não o que. Os bons comentários deste projeto registam a
-decisão e o problema que ela evita — por que o IBAN é congelado, por que
-pendente não conta como pendência do motorista, por que a rota `/reported` vem
-antes de `/:id`, por que o CSV tem middleware próprio.
-
-### Debater antes de implementar
-
-O utilizador prefere discutir o desenho antes do código, sobretudo quando
-envolve dinheiro. Apresentar opções com prós e contras, recomendar uma, e
-esperar a decisão. Quando ele delega ("faça como achar melhor"), decidir e
-**registar a decisão e a razão** — no código e aqui.
-
-### Docker
-
-```bash
-docker compose up -d --build               # tudo
-docker compose build --no-cache frontend   # frontend puro (o Vite embute
-                                           # variáveis em build time)
-docker compose build backend               # backend puro
-```
-
-Se o build ficar preso a instalar pacotes, é o `npm ci` — normal, uns minutos.
-
-Criar o admin:
-
-```bash
-docker compose exec -e SEED_ADMIN_EMAIL=admin@dragonfleet.com \
-  -e SEED_ADMIN_PASSWORD=umaSenhaForte123 backend \
-  npx -y tsx prisma/seed-admin.ts
-```
-
----
-
-## 8. Primeiro passo na conversa nova
-
-1. Clonar ou puxar `feature/weekly-settlement` e confirmar que compila:
-   `cd frontend && npm ci && npm run typecheck`
-2. Retomar pelo **P0 número 1**: o IBAN no `ProfilePage`, seguido da aprovação
-   no Financeiro, do recibo no pedido de retirada e do saldo visível. As
-   decisões de desenho estão fechadas na secção 4 — não é preciso voltar a
-   debatê-las.
-3. Aproveitar para incluir o `apiClient.upload()` com suporte a `FormData`,
-   para o IBAN e o recibo não repetirem o padrão dos fetch crus.
-4. A seguir, o P0 número 3: "marcar como paga" no Financeiro.
+**A fonte fiável é o GitHub**, desde que não haja alterações locais por commitar.
+Se houver, pedir para commitar primeiro, ou pedir o zip da pasta.
