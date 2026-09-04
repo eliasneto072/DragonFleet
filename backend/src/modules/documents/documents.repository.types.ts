@@ -16,6 +16,18 @@ export type UpdateDocumentData = {
   fileUrl?: string;
   status?: DocumentStatus;
   notes?: string | null; // persistir o motivo de rejeição
+
+  // As datas lidas do documento pela administração ao rever.
+  //
+  // Faltavam aqui, e o CreateDocumentData e o ReplaceDocumentData logo acima e
+  // abaixo já as tinham — o que mostra que foi esquecimento e não decisão.
+  //
+  // O TypeScript não apanhou. O service constrói o objeto com spreads
+  // (`...this.resolveDates(input)`), e a verificação de propriedades a mais só
+  // corre em literais escritos à mão. Com spread, os campos que o tipo não
+  // declara passam sem uma palavra — e depois eram descartados no repositório.
+  issuedAt?: Date | null;
+  expiresAt?: Date | null;
 };
 
 // Substituição completa de um documento existente (re-upload após rejeição/expiração).

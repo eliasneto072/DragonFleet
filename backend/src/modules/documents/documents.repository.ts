@@ -116,6 +116,20 @@ export class DocumentsRepository implements IDocumentRepository {
           ...(data.fileUrl !== undefined ? { fileUrl: data.fileUrl } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
           ...(data.notes !== undefined ? { notes: data.notes } : {}),
+
+          // Sem estas duas linhas, a validade escrita pela administração era
+          // aceite pelo zod, validada pelo resolveDates, e atirada fora aqui.
+          //
+          // O sintoma visível era a coluna Validade a mostrar "—" em documentos
+          // acabados de aprovar. O invisível era pior: o trabalho agendado que
+          // avisa antes de um documento caducar procura por expiresAt, e sem
+          // ele nenhum motorista era avisado. O primeiro sinal de uma carta de
+          // condução caducada seria um problema a sério, não um aviso.
+          //
+          // O `!== undefined` importa: null é uma decisão — "este documento não
+          // expira" — e tem de chegar à base. Só undefined significa "não mexer".
+          ...(data.issuedAt !== undefined ? { issuedAt: data.issuedAt } : {}),
+          ...(data.expiresAt !== undefined ? { expiresAt: data.expiresAt } : {}),
         },
         select: this.publicSelect,
       });
