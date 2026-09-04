@@ -24,6 +24,23 @@ const SO_ADMIN = new Set([
   '/app/admin/team',            // papéis
 ]);
 
+/**
+ * O que o SUPPORT vê. É uma lista do que ENTRA, e não do que sai.
+ *
+ * Escrita ao contrário das outras de propósito: acrescentar uma tela nova ao
+ * painel não deve dar acesso ao suporte por omissão. Com uma lista de exclusão,
+ * cada tela nova ficaria visível para ele até alguém se lembrar de a excluir —
+ * e ninguém se lembra.
+ *
+ * Ele lê estas quatro e só escreve na última.
+ */
+const VE_SUPORTE = new Set([
+  '/app/admin/drivers',
+  '/app/admin/documents',
+  '/app/admin/financial',
+  '/app/admin/support',
+]);
+
 const NAV_ITEMS: readonly NavItem[] = [
   { to: '/app/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard'     },
   { to: '/app/admin/drivers',       icon: Users,           label: 'Motoristas'    },
@@ -53,9 +70,10 @@ export function AdminLayout() {
     return <Navigate to="/app/driver" replace />;
   }
 
-  const navItems = user?.role === 'ADMIN'
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => !SO_ADMIN.has(item.to));
+  const navItems =
+    user?.role === 'ADMIN'   ? NAV_ITEMS
+  : user?.role === 'SUPPORT' ? NAV_ITEMS.filter((i) => VE_SUPORTE.has(i.to))
+  :                            NAV_ITEMS.filter((i) => !SO_ADMIN.has(i.to));
 
   return (
     // Sem "Ver como Motorista": o botão levava o administrador ao painel do

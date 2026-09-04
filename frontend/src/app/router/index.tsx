@@ -31,7 +31,7 @@ import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
 import { SupportAdminPage } from '@/features/admin/pages/SupportAdminPage';
 import { TeamPage } from '@/features/admin/pages/TeamPage';
-import { AdminOnly } from '@/features/admin/components/AdminOnly';
+import { AdminOnly, NaoSuporte } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
 
@@ -67,17 +67,20 @@ export const router = createBrowserRouter([
         element: <AdminLayout />,
         children: [
           { index: true, element: <Navigate to="dashboard" replace /> },
-          { path: 'dashboard', element: <AdminDashboardPage /> },
+          // Fora do alcance do suporte. As telas que ele lê — drivers,
+          // documents, financial e support — ficam sem guarda, e o backend
+          // decide o resto: ele vê os dados e leva 403 em qualquer ação.
+          { path: 'dashboard', element: <NaoSuporte><AdminDashboardPage /></NaoSuporte> },
           { path: 'drivers', element: <DriversPage /> },
           { path: 'drivers/:id', element: <DriverDetailPage /> }, // ← novo
           { path: 'documents', element: <DocumentsAdminPage /> },
-          { path: 'settlements', element: <SettlementsPage /> },
+          { path: 'settlements', element: <NaoSuporte><SettlementsPage /></NaoSuporte> },
           { path: 'financial', element: <FinancialPage /> },
-          { path: 'green-receipts', element: <GreenReceiptsPage /> },
-          { path: 'fleet', element: <FleetPage /> },
-          { path: 'fleet/:id', element: <VehicleDetailPage /> },
-          { path: 'analytics', element: <AnalyticsPage /> },
-          { path: 'notifications', element: <NotificationsAdminPage /> },
+          { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
+          { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
+          { path: 'fleet/:id', element: <NaoSuporte><VehicleDetailPage /></NaoSuporte> },
+          { path: 'analytics', element: <NaoSuporte><AnalyticsPage /></NaoSuporte> },
+          { path: 'notifications', element: <NaoSuporte><NotificationsAdminPage /></NaoSuporte> },
           { path: 'support', element: <SupportAdminPage /> },
           { path: 'settings', element: <AdminOnly><SettingsPage /></AdminOnly> },
           { path: 'team', element: <AdminOnly><TeamPage /></AdminOnly> },

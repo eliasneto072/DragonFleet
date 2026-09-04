@@ -21,7 +21,9 @@ function isAdmin(role?: UserRole) {
  * faltava.
  */
 function isStaff(role?: UserRole) {
-  return role === UserRole.ADMIN || role === UserRole.MANAGER;
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
 }
 
 export class UsersService {

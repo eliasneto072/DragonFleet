@@ -20,6 +20,24 @@ function canManageWithdrawals(role?: UserRole) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
 }
 
+/**
+ * Ver, e não gerir.
+ *
+ * O SUPPORT entra aqui; o ADMIN e o MANAGER também. A separação existe porque
+ * antes uma única função guardava as duas coisas: as mesmas linhas que decidiam
+ * quem *lê* decidiam quem *aprova*. Acrescentar o suporte a essa função
+ * dava-lhe aprovação de dinheiro.
+ *
+ * A pergunta número um de quem responde a tickets é "onde está o meu dinheiro".
+ * Sem ver, o suporte reencaminha para a administração e não poupa trabalho a
+ * ninguém — só acrescenta um passo.
+ */
+function podeVer(role?: UserRole) {
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
+}
+
 const FINAL_STATUSES: WithdrawalStatus[] = [WithdrawalStatus.PAID, WithdrawalStatus.REJECTED];
 
 const eur = (n: number) =>
@@ -40,7 +58,7 @@ export class WithdrawalsService {
   async list(actor: Actor, filter: {
     status?: string; search?: unknown; page?: unknown; pageSize?: unknown;
   } = {}) {
-    const gere = canManageWithdrawals(actor.role);
+    const gere = podeVer(actor.role);
     const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
 
     return withdrawalsRepository.findManyPaged({
@@ -53,7 +71,7 @@ export class WithdrawalsService {
   }
 
   async listByUser(actor: Actor, userId: string): Promise<IWithdrawalPublic[]> {
-    if (!canManageWithdrawals(actor.role) && actor.id !== userId) {
+    if (!podeVer(actor.role) && actor.id !== userId) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
     await this.ensureUserExists(userId);
@@ -62,7 +80,7 @@ export class WithdrawalsService {
 
   async getById(actor: Actor, id: string): Promise<IWithdrawalPublic> {
     const withdrawal = await this.ensureWithdrawalExists(id);
-    if (!canManageWithdrawals(actor.role) && withdrawal.userId !== actor.id) {
+    if (!podeVer(actor.role) && withdrawal.userId !== actor.id) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
     return withdrawal;

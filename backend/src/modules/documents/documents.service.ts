@@ -55,7 +55,7 @@ export class DocumentsService {
   }
 
   private ensureOwnerOrManager(actor: Actor, ownerId: string) {
-    if (!canManageDocuments(actor.role) && actor.id !== ownerId) {
+    if (!podeVer(actor.role) && actor.id !== ownerId) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
   }
@@ -76,7 +76,7 @@ export class DocumentsService {
    * importa. Ver setValidity em updateStatus.
    */
   async list(actor: Actor): Promise<IDocumentPublic[]> {
-    if (canManageDocuments(actor.role)) return documentsRepository.findAll();
+    if (podeVer(actor.role)) return documentsRepository.findAll();
     return documentsRepository.findByUserId(actor.id);
   }
 
@@ -332,6 +332,24 @@ export class DocumentsService {
     await this.ensureDocumentExists(id);
     return documentsRepository.delete(id);
   }
+}
+
+/**
+ * Ver, e não gerir.
+ *
+ * O SUPPORT entra aqui; o ADMIN e o MANAGER também. A separação existe porque
+ * antes uma única função guardava as duas coisas: as mesmas linhas que decidiam
+ * quem *lê* decidiam quem *aprova*. Acrescentar o suporte a essa função
+ * dava-lhe aprovação de dinheiro.
+ *
+ * A pergunta número um de quem responde a tickets é "onde está o meu dinheiro".
+ * Sem ver, o suporte reencaminha para a administração e não poupa trabalho a
+ * ninguém — só acrescenta um passo.
+ */
+function podeVer(role?: UserRole) {
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
 }
 
 export const documentsService = new DocumentsService();

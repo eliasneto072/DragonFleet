@@ -6,7 +6,11 @@ import { supportRepository } from './support.repository';
 type Actor = { id: string; role?: UserRole };
 
 function isAdmin(role?: UserRole) {
-  return role === UserRole.ADMIN || role === UserRole.MANAGER;
+  // O SUPPORT tem aqui tudo — é o único sítio onde ele escreve. Em todos os
+  // outros módulos vê e não toca.
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
 }
 
 export class SupportService {

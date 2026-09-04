@@ -3,7 +3,7 @@
 
 // ---------- Enums ----------
 
-export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER';
+export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER' | 'SUPPORT';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'AGUARDANDO_REGULARIZACAO';
 
 export type EarningPlatform  = 'UBER' | 'BOLT' | 'FREE_NOW' | 'OTHER';

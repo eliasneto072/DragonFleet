@@ -17,6 +17,14 @@ enum UserRole {
   ADMIN
   DRIVER
   MANAGER
+
+  /// Vê o que precisa para responder a um ticket; não mexe em dinheiro.
+  ///
+  /// Existe porque a pergunta número um do suporte de uma frota é "onde está o
+  /// meu dinheiro", e quem não consegue ver retiradas, fechos e documentos tem
+  /// de ir perguntar à administração — o que não poupa trabalho a ninguém, só
+  /// acrescenta um passo.
+  SUPPORT
 }
 
 enum UserStatus {

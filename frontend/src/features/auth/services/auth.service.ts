@@ -1,11 +1,18 @@
 // src/features/auth/services/auth.service.ts
+import type { UserRole } from '@/shared/types/api';
 import { apiClient, tokenStorage } from '@/shared/lib/api-client';
 
 export interface AuthUser {
   id:        string;
   name:      string;
   email:     string;
-  role:      'ADMIN' | 'DRIVER' | 'MANAGER';
+  // Importado, e não repetido.
+  //
+  // Esta linha era uma segunda cópia da união de papéis, e ficou para trás
+  // quando o SUPPORT entrou no api.ts. O sintoma foi um erro de tipos a dizer
+  // que comparar o papel com 'SUPPORT' não fazia sentido — em duas telas que
+  // liam o utilizador daqui e não de lá.
+  role:      UserRole;
   status:    string;
   createdAt: string;
   updatedAt: string;

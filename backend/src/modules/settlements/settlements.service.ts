@@ -36,6 +36,24 @@ function canManage(role?: UserRole) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
 }
 
+/**
+ * Ver, e não gerir.
+ *
+ * O SUPPORT entra aqui; o ADMIN e o MANAGER também. A separação existe porque
+ * antes uma única função guardava as duas coisas: as mesmas linhas que decidiam
+ * quem *lê* decidiam quem *aprova*. Acrescentar o suporte a essa função
+ * dava-lhe aprovação de dinheiro.
+ *
+ * A pergunta número um de quem responde a tickets é "onde está o meu dinheiro".
+ * Sem ver, o suporte reencaminha para a administração e não poupa trabalho a
+ * ninguém — só acrescenta um passo.
+ */
+function podeVer(role?: UserRole) {
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
+}
+
 /** "2026-07-06" → Date à meia-noite UTC, sem deslocamento de fuso. */
 function parseDay(value: string, field: string): Date {
   const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
@@ -158,7 +176,7 @@ export class SettlementsService {
     } = {},
   ) {
     // Motorista vê apenas os próprios; a gestão vê todos, ou filtra por pessoa.
-    const isManager = canManage(actor.role);
+    const isManager = podeVer(actor.role);
     const userId = isManager ? filter.userId : actor.id;
 
     // O parsePage aplica o teto. Nenhum valor vindo do URL consegue pedir mais
@@ -177,7 +195,7 @@ export class SettlementsService {
   }
 
   async getById(actor: Actor, id: string): Promise<SettlementPublic> {
-    const isManager = canManage(actor.role);
+    const isManager = podeVer(actor.role);
     const found = await settlementsRepository.findById(id, isManager);
     if (!found) throw new AppError('Fecho não encontrado', 404, 'SETTLEMENT_NOT_FOUND');
     if (!isManager && found.userId !== actor.id) {

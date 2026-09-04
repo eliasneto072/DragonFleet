@@ -71,6 +71,17 @@ export class VehiclesService {
   }
 
   async create(actor: Actor, userId: string, input: CreateVehicleInput): Promise<IVehiclePublic> {
+    // O SUPPORT não acrescenta viaturas, nem para si próprio.
+    //
+    // A condição abaixo existe para o motorista poder registar o seu carro, e
+    // é por isso que aceita "para mim". O suporte passava por essa porta sem
+    // ninguém ter pensado nele: um teste apanhou-o a criar uma viatura com um
+    // 201, quando devia ser 403. Não é dinheiro, mas a viatura aparecia na
+    // frota sem ninguém a ter pedido.
+    if (actor.role === UserRole.SUPPORT) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
     if (!canManageVehicles(actor.role) && userId !== actor.id) {
       throw new AppError('Forbidden', 403, 'CANNOT_CREATE_VEHICLE_FOR_ANOTHER_USER');
     }

@@ -31,7 +31,9 @@ import type { ApiUser, UserRole } from '@/shared/types/api';
 const EQUIPA_KEY = ['users', 'equipa'] as const;
 
 /** O que cada papel pode fazer, em português e não em nomes de rotas. */
-const PAPEIS: Record<'ADMIN' | 'MANAGER', { nome: string; resumo: string }> = {
+type PapelEquipa = 'ADMIN' | 'MANAGER' | 'SUPPORT';
+
+const PAPEIS: Record<PapelEquipa, { nome: string; resumo: string }> = {
   ADMIN: {
     nome: 'Administração',
     resumo: 'Tudo, incluindo Configurações, Sociedades, o relatório financeiro e esta tela.',
@@ -40,7 +42,14 @@ const PAPEIS: Record<'ADMIN' | 'MANAGER', { nome: string; resumo: string }> = {
     nome: 'Gestão',
     resumo: 'O dia a dia: documentos, fechos, retiradas, IBANs, viaturas, notificações e suporte.',
   },
+  SUPPORT: {
+    nome: 'Suporte',
+    resumo: 'Vê motoristas, documentos, retiradas e fechos para responder a tickets. '
+          + 'Não aprova nada, e vê os IBANs só com os últimos quatro dígitos.',
+  },
 };
+
+const ORDEM: readonly PapelEquipa[] = ['ADMIN', 'MANAGER', 'SUPPORT'];
 
 export function TeamManagement() {
   const { user: atual } = useAuth();
@@ -56,11 +65,10 @@ export function TeamManagement() {
   const { data: equipa, isLoading } = useQuery({
     queryKey: EQUIPA_KEY,
     queryFn: async () => {
-      const [admins, gestores] = await Promise.all([
-        usersService.list({ role: 'ADMIN', pageSize: 100 }),
-        usersService.list({ role: 'MANAGER', pageSize: 100 }),
-      ]);
-      return [...admins.users, ...gestores.users];
+      const listas = await Promise.all(
+        ORDEM.map((papel) => usersService.list({ role: papel, pageSize: 100 })),
+      );
+      return listas.flatMap((l) => l.users);
     },
   });
 
@@ -132,7 +140,7 @@ export function TeamManagement() {
           <div className="divide-y">
             {(equipa ?? []).map((u) => {
               const eu = u.id === atual?.id;
-              const papel = PAPEIS[u.role as 'ADMIN' | 'MANAGER'];
+              const papel = PAPEIS[u.role as PapelEquipa];
               return (
                 <div key={u.id} className="py-3 flex items-center justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
@@ -151,18 +159,14 @@ export function TeamManagement() {
                     {/* Nada de botões na própria linha. O servidor recusa na
                         mesma — CANNOT_CHANGE_OWN_ROLE — mas oferecer um botão
                         que só serve para dar erro é pior do que não o mostrar. */}
-                    {!eu && u.role === 'MANAGER' && (
-                      <Button variant="outline" size="sm" disabled={isPending}
-                        onClick={() => mudarPapel({ id: u.id, role: 'ADMIN' })}>
-                        Passar a Administração
+                    {/* Os outros dois papéis, sejam quais forem. Com três,
+                        escrever um botão por combinação dava seis ramos. */}
+                    {!eu && ORDEM.filter((p) => p !== u.role).map((p) => (
+                      <Button key={p} variant="outline" size="sm" disabled={isPending}
+                        onClick={() => setPorPromover({ alvo: u, papel: p })}>
+                        Passar a {PAPEIS[p].nome}
                       </Button>
-                    )}
-                    {!eu && u.role === 'ADMIN' && (
-                      <Button variant="outline" size="sm" disabled={isPending}
-                        onClick={() => mudarPapel({ id: u.id, role: 'MANAGER' })}>
-                        Passar a Gestão
-                      </Button>
-                    )}
+                    ))}
                     {!eu && (
                       <Button variant="ghost" size="sm" disabled={isPending}
                         onClick={() => setPorPromover({ alvo: u, papel: 'DRIVER' })}>
@@ -212,14 +216,12 @@ export function TeamManagement() {
                   <p className="text-sm text-muted-foreground truncate">{u.email}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <Button variant="outline" size="sm"
-                    onClick={() => setPorPromover({ alvo: u, papel: 'MANAGER' })}>
-                    Gestão
-                  </Button>
-                  <Button variant="outline" size="sm"
-                    onClick={() => setPorPromover({ alvo: u, papel: 'ADMIN' })}>
-                    Administração
-                  </Button>
+                  {ORDEM.map((p) => (
+                    <Button key={p} variant="outline" size="sm"
+                      onClick={() => setPorPromover({ alvo: u, papel: p })}>
+                      {PAPEIS[p].nome}
+                    </Button>
+                  ))}
                 </div>
               </div>
             ))}
@@ -231,7 +233,7 @@ export function TeamManagement() {
       <Card className="p-5">
         <h2 className="font-semibold mb-4">O que cada papel pode fazer</h2>
         <div className="space-y-3 text-sm">
-          {(['ADMIN', 'MANAGER'] as const).map((p) => (
+          {ORDEM.map((p) => (
             <div key={p}>
               <Badge variant={p === 'ADMIN' ? 'default' : 'secondary'} className="mb-1">
                 {PAPEIS[p].nome}
@@ -249,7 +251,7 @@ export function TeamManagement() {
             <AlertDialogTitle>
               {porPromover?.papel === 'DRIVER'
                 ? 'Retirar o acesso ao painel?'
-                : `Dar acesso de ${porPromover ? PAPEIS[porPromover.papel as 'ADMIN' | 'MANAGER']?.nome : ''}?`}
+                : `Dar acesso de ${porPromover ? PAPEIS[porPromover.papel as PapelEquipa]?.nome : ''}?`}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">

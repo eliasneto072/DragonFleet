@@ -30,6 +30,41 @@ function canManage(role?: UserRole) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
 }
 
+/**
+ * Ver, e não gerir.
+ *
+ * O SUPPORT entra aqui; o ADMIN e o MANAGER também. A separação existe porque
+ * antes uma única função guardava as duas coisas: as mesmas linhas que decidiam
+ * quem *lê* decidiam quem *aprova*. Acrescentar o suporte a essa função
+ * dava-lhe aprovação de dinheiro.
+ *
+ * A pergunta número um de quem responde a tickets é "onde está o meu dinheiro".
+ * Sem ver, o suporte reencaminha para a administração e não poupa trabalho a
+ * ninguém — só acrescenta um passo.
+ */
+function podeVer(role?: UserRole) {
+  return role === UserRole.ADMIN
+      || role === UserRole.MANAGER
+      || role === UserRole.SUPPORT;
+}
+
+/**
+ * Esconde o IBAN, deixando só os últimos quatro dígitos.
+ *
+ * Para o SUPPORT. Ele precisa de confirmar para onde o dinheiro foi quando
+ * alguém pergunta "não recebi" — e para isso os últimos quatro chegam. O IBAN
+ * inteiro não: cada pessoa que o consegue copiar é mais uma superfície, e um
+ * papel que existe para responder a perguntas não precisa de o poder copiar.
+ *
+ * Fica com a mesma forma de um IBAN para a interface não ter de saber disto.
+ */
+function mascaraIban(iban: string | null): string | null {
+  if (!iban) return null;
+  const limpo = iban.replace(/\s/g, '');
+  if (limpo.length <= 4) return limpo;
+  return `${limpo.slice(0, 2)}•• •••• •••• •••• ${limpo.slice(-4)}`;
+}
+
 function toPublic(row: {
   userId: string;
   iban: string | null;
@@ -40,7 +75,7 @@ function toPublic(row: {
   rejectionReason: string | null;
   reviewedAt: Date | null;
   updatedAt: Date;
-} | null, userId: string): BankAccountPublic {
+} | null, userId: string, mascarar = false): BankAccountPublic {
   if (!row) {
     return {
       userId,
@@ -53,9 +88,9 @@ function toPublic(row: {
 
   return {
     userId: row.userId,
-    iban: row.iban,
+    iban: mascarar ? mascaraIban(row.iban) : row.iban,
     holderName: row.holderName,
-    pendingIban: row.pendingIban,
+    pendingIban: mascarar ? mascaraIban(row.pendingIban) : row.pendingIban,
     pendingHolderName: row.pendingHolderName,
     pendingAt: row.pendingAt,
     rejectionReason: row.rejectionReason,
@@ -80,7 +115,7 @@ const publicSelect = {
 
 export class BankService {
   private ensureSelfOrManager(actor: Actor, userId: string) {
-    if (!canManage(actor.role) && actor.id !== userId) {
+    if (!podeVer(actor.role) && actor.id !== userId) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
   }
@@ -93,7 +128,8 @@ export class BankService {
       select: publicSelect,
     });
 
-    return toPublic(row, userId);
+    // Mascarado para o SUPPORT, inteiro para quem gere e para o próprio dono.
+    return toPublic(row, userId, actor.role === UserRole.SUPPORT);
   }
 
   /** Contas com alteração à espera de decisão. Alimenta a fila do painel. */
@@ -111,7 +147,7 @@ export class BankService {
   async listPending(actor: Actor, filter: {
     search?: unknown; page?: unknown; pageSize?: unknown;
   } = {}) {
-    if (!canManage(actor.role)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    if (!podeVer(actor.role)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
 
     const pagina = parsePage({ page: filter.page, pageSize: filter.pageSize });
     const termos = parseSearchTerms(filter.search);
