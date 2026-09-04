@@ -30,6 +30,8 @@ import { NotificationsAdminPage } from '@/features/admin/pages/NotificationsAdmi
 import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
 import { SupportAdminPage } from '@/features/admin/pages/SupportAdminPage';
+import { TeamPage } from '@/features/admin/pages/TeamPage';
+import { AdminOnly } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
 
@@ -77,7 +79,8 @@ export const router = createBrowserRouter([
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'notifications', element: <NotificationsAdminPage /> },
           { path: 'support', element: <SupportAdminPage /> },
-          { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings', element: <AdminOnly><SettingsPage /></AdminOnly> },
+          { path: 'team', element: <AdminOnly><TeamPage /></AdminOnly> },
         ],
       },
     ],

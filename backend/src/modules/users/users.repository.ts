@@ -117,6 +117,23 @@ export class UsersRepository  implements IUserRepository{
         return Object.fromEntries(linhas.map((l) => [String(l.status), l._count._all]))
     }
 
+    /**
+     * Quantas contas ATIVAS existem com um dado papel.
+     *
+     * Serve uma coisa só: saber se o ADMIN que está prestes a ser despromovido,
+     * desativado ou apagado é o último. Sem esta contagem, o sistema fica sem
+     * ninguém capaz de mexer nas Configurações ou de criar outro administrador,
+     * e a recuperação passa por ir à base de dados à mão.
+     *
+     * Conta apenas ACTIVE de propósito: um admin desativado não consegue entrar,
+     * portanto não conta como saída de emergência.
+     */
+    async countActiveByRole(role: string): Promise<number> {
+        return prisma.user.count({
+            where: { role: role as never, status: 'ACTIVE' as never },
+        })
+    }
+
     async findAll(): Promise<IUserPublic[]> {
         try{
             

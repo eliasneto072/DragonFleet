@@ -11,6 +11,19 @@ function isAdmin(role?: UserRole) {
   return role === UserRole.ADMIN;
 }
 
+/**
+ * Quem trabalha no escritório: ADMIN ou MANAGER.
+ *
+ * A divisão entre os dois é esta: o MANAGER opera o dia a dia — documentos,
+ * fechos, retiradas, IBANs, viaturas, notificações, suporte — e o ADMIN mexe
+ * nas regras e nas pessoas: Configurações, Sociedades, o PDF financeiro e os
+ * papéis. Todos os outros módulos já tratavam os dois assim; era este que
+ * faltava.
+ */
+function isStaff(role?: UserRole) {
+  return role === UserRole.ADMIN || role === UserRole.MANAGER;
+}
+
 export class UsersService {
   private async ensureUserExists(id: string): Promise<IUserPublic> {
     const user = await usersRepository.findById(id);
@@ -35,7 +48,13 @@ export class UsersService {
       page?: unknown; pageSize?: unknown;
     } = {},
   ) {
-    if (!isAdmin(actor.role)) {
+    // isStaff e não isAdmin.
+    //
+    // Exigir ADMIN aqui deixava o MANAGER a aprovar retiradas de pessoas que
+    // não conseguia ver: o backend já lhe dava as retiradas, os IBANs e os
+    // documentos, mas a tela de Motoristas devolvia-lhe 403. Um papel que só
+    // funciona em metade das telas é pior do que não existir.
+    if (!isStaff(actor.role)) {
       throw new AppError('Forbidden', 403);
     }
 
@@ -68,14 +87,22 @@ export class UsersService {
    * Motoristas acabou a descarregar 2000 registos para mostrar 25.
    */
   async listAll(actor: Actor): Promise<IUserPublic[]> {
-    if (!isAdmin(actor.role)) {
+    // Também isStaff, pela mesma razão do list acima.
+    //
+    // Esta é a rota que alimenta os seletores de motorista dos formulários e
+    // a tela de Documentos, que precisa dos nomes para os mostrar ao lado de
+    // cada ficheiro. Um MANAGER que pode rever documentos e não consegue
+    // saber de quem eles são fica com a tela em branco.
+    if (!isStaff(actor.role)) {
       throw new AppError('Forbidden', 403);
     }
     return usersRepository.findAll();
   }
 
   async getById(actor: Actor, id: string): Promise<IUserPublic> {
-    if (!isAdmin(actor.role) && actor.id !== id) {
+    // A ficha de um motorista. Sem isto, o MANAGER via a lista e não conseguia
+    // abrir ninguém — que é a mesma meia-funcionalidade que o list tinha.
+    if (!isStaff(actor.role) && actor.id !== id) {
       throw new AppError('Forbidden', 403);
     }
 
@@ -185,6 +212,8 @@ export class UsersService {
       }
     }
 
+    await this.assertRoleChangeIsSafe(actor, current, input);
+
     // currentPassword é credencial de confirmação, não campo persistido.
     const data: UpdateUserData = {
       ...(input.name !== undefined ? { name: input.name } : {}),
@@ -200,12 +229,78 @@ export class UsersService {
     return usersRepository.update(id, data);
   }
 
+  /**
+   * Duas maneiras de o sistema ficar sem administrador, e as duas são um clique.
+   *
+   * A primeira: alguém muda o próprio papel. Não há aviso, não há confirmação
+   * do lado do servidor, e o painel fecha-se atrás dele no pedido seguinte.
+   * Quem se quiser despromover pede a outro administrador — assim há sempre
+   * duas pessoas a saber que aconteceu.
+   *
+   * A segunda: o último ADMIN é despromovido ou desativado por outro. Aí não
+   * fica ninguém capaz de mexer nas Configurações, gerir as Sociedades ou criar
+   * outro administrador, e a única saída é editar a base de dados à mão.
+   *
+   * A contagem é de admins ATIVOS: um admin desativado não consegue entrar,
+   * portanto não serve de saída de emergência.
+   */
+  private async assertRoleChangeIsSafe(
+    actor: Actor,
+    current: IUserPublic,
+    input: { role?: UserRole; status?: UserStatus },
+  ): Promise<void> {
+    const isSelf = actor.id === current.id;
+
+    if (isSelf && input.role !== undefined && input.role !== current.role) {
+      throw new AppError(
+        'Não pode alterar o seu próprio papel. Peça a outro administrador.',
+        400,
+        'CANNOT_CHANGE_OWN_ROLE',
+      );
+    }
+
+    if (isSelf && input.status !== undefined && input.status !== UserStatus.ACTIVE) {
+      throw new AppError(
+        'Não pode desativar a sua própria conta.',
+        400,
+        'CANNOT_DEACTIVATE_SELF',
+      );
+    }
+
+    if (current.role !== UserRole.ADMIN) return;
+
+    const aDespromover = input.role !== undefined && input.role !== UserRole.ADMIN;
+    const aDesativar = input.status !== undefined && input.status !== UserStatus.ACTIVE;
+    if (!aDespromover && !aDesativar) return;
+
+    await this.assertNotLastAdmin(current);
+  }
+
+  private async assertNotLastAdmin(alvo: IUserPublic): Promise<void> {
+    if (alvo.role !== UserRole.ADMIN || alvo.status !== UserStatus.ACTIVE) return;
+
+    const ativos = await usersRepository.countActiveByRole(UserRole.ADMIN);
+    if (ativos <= 1) {
+      throw new AppError(
+        'Este é o único administrador ativo. Promova outra conta antes de mexer nesta.',
+        400,
+        'LAST_ACTIVE_ADMIN',
+      );
+    }
+  }
+
   async remove(actor: Actor, id: string): Promise<void> {
     if (!isAdmin(actor.role)) {
       throw new AppError('Forbidden', 403);
     }
 
-    await this.ensureUserExists(id);
+    const alvo = await this.ensureUserExists(id);
+
+    if (actor.id === id) {
+      throw new AppError('Não pode apagar a sua própria conta.', 400, 'CANNOT_DELETE_SELF');
+    }
+
+    await this.assertNotLastAdmin(alvo);
 
     return usersRepository.delete(id);
   }
