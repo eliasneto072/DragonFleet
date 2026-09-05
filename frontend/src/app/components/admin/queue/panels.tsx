@@ -32,7 +32,7 @@ import { notificationsService } from '@/features/driver/services/notifications.s
 import { usersService } from '@/features/admin/services/users.service';
 import { formatCurrency } from '@/shared/lib/format';
 import { queryKeys } from '@/shared/lib/query-keys';
-import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
+import { DOCUMENT_TYPE_LABELS, formatarValidade } from '@/shared/lib/document-labels';
 import { PANEL_LIMIT, type QueueItem } from './types';
 
 // ── Peças partilhadas ─────────────────────────────────────────────────────────
@@ -309,7 +309,7 @@ function ExpiringPanel({ days }: { days: number }) {
       <ul>
         {visiveis.map((d) => {
           const label = DOCUMENT_TYPE_LABELS[d.type] ?? d.type;
-          const quando = new Date(d.expiresAt!).toLocaleDateString('pt-PT');
+          const quando = formatarValidade(d.expiresAt);
           const jaAvisado = avisados.has(d.userId);
           return (
             <Row key={d.id}>

@@ -44,8 +44,7 @@ import {
 } from './document-validity-fields';
 import type { DocumentStatus, ApiDocument, DocumentType } from '@/shared/types/api';
 import {
-  DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil, VEHICLE_DOCUMENT_TYPES, DRIVER_DOCUMENT_TYPES,
-} from '@/shared/lib/document-labels';
+  DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil, VEHICLE_DOCUMENT_TYPES, DRIVER_DOCUMENT_TYPES, formatarValidade } from '@/shared/lib/document-labels';
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 //
@@ -148,7 +147,7 @@ function ValidityText({ doc }: { doc: ApiDocument }) {
   if (!doc.expiresAt) return <span className="text-muted-foreground">—</span>;
 
   const dias = daysUntil(doc.expiresAt);
-  const dateStr = new Date(doc.expiresAt).toLocaleDateString('pt-PT');
+  const dateStr = formatarValidade(doc.expiresAt);
 
   if (doc.status === 'EXPIRED' || (dias !== null && dias < 0)) {
     return (
@@ -773,35 +772,43 @@ export function AdminDocuments() {
                         <XCircle className="h-4 w-4 mr-2" />Rejeitar
                       </Button>
                     )}
-                    {reviewDoc.status !== 'APPROVED' && (
-                      <Button
-                        className="flex-1 sm:flex-none"
-                        // Aprovar sem decidir a validade deixaria o documento
-                        // para sempre sem avisar ninguém. "Não expira" é uma
-                        // decisão válida; ausência de decisão não é.
-                        disabled={updating || !isValidityDecided(validity)}
-                        title={
-                          isValidityDecided(validity)
-                            ? undefined
-                            : 'Indique a validade ou marque como sem validade'
-                        }
-                        onClick={() =>
-                          updateStatus({
-                            id: reviewDoc.id,
-                            status: 'APPROVED',
-                            dates: {
-                              issuedAt: validity.issuedAt,
-                              expiresAt: validity.neverExpires ? null : validity.expiresAt,
-                            },
-                          })
-                        }
-                      >
-                        {updating
-                          ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          : <CheckCircle className="h-4 w-4 mr-2" />}
-                        Aprovar
-                      </Button>
-                    )}
+                    {/* Um botão que muda de papel, em vez de desaparecer.
+
+                        Antes estava escondido quando o documento já estava
+                        aprovado — e como é o único que envia as datas, a
+                        validade de um documento aprovado ficava editável e sem
+                        forma de gravar. O cliente descreveu-o assim: "consigo
+                        mudar mas não existe nenhum botão para gravar".
+
+                        Reaprovar um documento já aprovado é a operação certa
+                        aqui: o estado não muda, as datas sim. */}
+                    <Button
+                      className="flex-1 sm:flex-none"
+                      // Aprovar sem decidir a validade deixaria o documento
+                      // para sempre sem avisar ninguém. "Não expira" é uma
+                      // decisão válida; ausência de decisão não é.
+                      disabled={updating || !isValidityDecided(validity)}
+                      title={
+                        isValidityDecided(validity)
+                          ? undefined
+                          : 'Indique a validade ou marque como sem validade'
+                      }
+                      onClick={() =>
+                        updateStatus({
+                          id: reviewDoc.id,
+                          status: 'APPROVED',
+                          dates: {
+                            issuedAt: validity.issuedAt,
+                            expiresAt: validity.neverExpires ? null : validity.expiresAt,
+                          },
+                        })
+                      }
+                    >
+                      {updating
+                        ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        : <CheckCircle className="h-4 w-4 mr-2" />}
+                      {reviewDoc.status === 'APPROVED' ? 'Guardar validade' : 'Aprovar'}
+                    </Button>
                   </div>
                 </DialogFooter>
               </>

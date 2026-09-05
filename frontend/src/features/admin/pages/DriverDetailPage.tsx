@@ -38,8 +38,7 @@ import { formatDate } from '@/shared/lib/format';
 import type { UserStatus, DocumentStatus, ApiDocument } from '@/shared/types/api';
 import {
   DOCUMENT_TYPE_LABELS as DOC_TYPE_LABELS, daysUntil,
-  DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES,
-} from '@/shared/lib/document-labels';
+  DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES, formatarValidade } from '@/shared/lib/document-labels';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -265,7 +264,7 @@ export function DriverDetailPage() {
             Enviado {formatDate(doc.createdAt)}
             {doc.expiresAt && (
               <span className={urgente ? 'text-orange-600 font-medium' : ''}>
-                {' · '}Válido até {new Date(doc.expiresAt).toLocaleDateString('pt-PT')}
+                {' · '}Válido até {formatarValidade(doc.expiresAt)}
                 {dias !== null && dias >= 0 ? ` (${dias}d)` : ''}
               </span>
             )}

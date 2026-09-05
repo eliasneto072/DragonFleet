@@ -47,8 +47,7 @@ import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import {
-  DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES, daysUntil,
-} from '@/shared/lib/document-labels';
+  DOCUMENT_TYPE_LABELS, DRIVER_DOCUMENT_TYPES, VEHICLE_DOCUMENT_TYPES, daysUntil, formatarValidade } from '@/shared/lib/document-labels';
 import {
   DocumentStatusIcon, documentStateMeta, type DocumentSlotState,
 } from '@/app/components/ui/document-status';
@@ -130,7 +129,7 @@ function DocumentRow({
   let subline = meta.label;
   if (row.doc?.expiresAt && row.state === 'APPROVED') {
     const dias = daysUntil(row.doc.expiresAt);
-    const data = new Date(row.doc.expiresAt).toLocaleDateString('pt-PT');
+    const data = formatarValidade(row.doc.expiresAt);
     if (dias !== null && dias >= 0) {
       subline = dias <= EXPIRY_WARNING_DAYS
         ? `Aprovado · expira em ${dias} dia${dias === 1 ? '' : 's'}`
