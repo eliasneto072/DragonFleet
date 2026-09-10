@@ -4,6 +4,7 @@ import { usersRepository } from '../users/users.repository';
 import { CreateVehicleData, UpdateVehicleData } from './vehicles.repository.types';
 import { vehiclesRepository } from './vehicles.repository';
 import { assignmentsRepository } from './assignments.repository';
+import { plateCandidates, resolveWindow } from './assignment-lookup';
 import { forceActivation as forceActivationLogic } from './activation.service';
 import { prisma } from '../../config/prisma';
 import { CreateVehicleInput, UpdateVehicleInput } from './vehicles.service.types';
@@ -253,6 +254,68 @@ export class VehiclesService {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
     return assignmentsRepository.listByUser(userId);
+  }
+
+  /**
+   * Fase 1 — quem teve este carro nestas datas.
+   *
+   * Entra pela MATRÍCULA e não pelo id, porque é isso que quem pergunta tem na
+   * mão: um aviso de multa traz a matrícula e a data, e mais nada. Obrigar a
+   * encontrar primeiro o veículo na lista para copiar um id seria pôr a pessoa
+   * a fazer o trabalho que a consulta existe para poupar.
+   *
+   * ─── DUAS AUSÊNCIAS DIFERENTES ────────────────────────────────────────────
+   *
+   * "Esta matrícula não é nossa" e "ninguém tinha este carro nesse dia" são
+   * respostas distintas e a segunda é uma resposta VÁLIDA — um carro parado na
+   * garagem não tem condutor atribuído, e saber isso fecha a investigação. Por
+   * isso a lista vazia devolve 200 com o veículo, e só a matrícula desconhecida
+   * dá 404.
+   *
+   * ─── O QUE ESTA RESPOSTA NÃO GARANTE ──────────────────────────────────────
+   *
+   * O `startedAt` é `@default(now())` e o `unassign` grava `endedAt` na hora em
+   * que alguém clica. Nenhum dos dois se consegue retroagir. Se o carro voltou
+   * na segunda e o registo só foi feito na sexta, a resposta para a
+   * quarta-feira aponta para o motorista errado — e isto vai ser usado para
+   * atribuir multas e acidentes a pessoas.
+   *
+   * Daí o `recordedAt` que vai na resposta: a tela tem de mostrar QUANDO o
+   * registo foi feito, ao lado do período, para quem lê poder julgar se confia.
+   * Uma atribuição fechada meses depois do facto merece outra leitura que uma
+   * fechada no próprio dia.
+   */
+  async lookupAssignmentsByPlate(
+    actor: Actor,
+    input: { plate: string; from: string; to?: string },
+  ): Promise<{
+    vehicle: IVehiclePublic;
+    period: { from: Date; to: Date };
+    assignments: IVehicleAssignmentWithUser[];
+  }> {
+    if (!canManageVehicles(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const candidates = plateCandidates(input.plate);
+    const vehicle = await vehiclesRepository.findByAnyPlate(candidates);
+
+    if (!vehicle) {
+      throw new AppError(
+        `Nenhum veículo com a matrícula ${input.plate.trim()}`,
+        404,
+        'VEHICLE_NOT_FOUND',
+      );
+    }
+
+    const period = resolveWindow(input.from, input.to);
+    const assignments = await assignmentsRepository.listByVehicleInWindow(
+      vehicle.id,
+      period.from,
+      period.to,
+    );
+
+    return { vehicle, period, assignments };
   }
 
   // ── Ativação híbrida (só admin/manager) ────────────────────────────────────

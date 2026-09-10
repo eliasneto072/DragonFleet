@@ -20,7 +20,13 @@ export class AssignmentsRepository {
   private readonly withUserSelect = {
     ...this.publicSelect,
     user: {
-      select: { id: true, name: true, email: true, status: true, role: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true, name: true, email: true,
+        // O contacto e a razao de ser da consulta por matricula: quem investiga
+        // uma multa precisa de LIGAR a alguem, nao de saber o nome.
+        phone: true,
+        status: true, role: true, createdAt: true, updatedAt: true,
+      },
     },
   } as const;
 
@@ -72,6 +78,41 @@ export class AssignmentsRepository {
       }) as unknown as IVehicleAssignmentWithVehicle[];
     } catch (err) {
       logger.error('Erro ao listar histórico de veículos do motorista', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Quem teve este veículo dentro de uma janela de datas.
+   *
+   * A regra de sobreposição está espelhada — e testada — em
+   * `assignment-lookup.ts::overlapsWindow`. Se mexer numa, mexa na outra: a
+   * versão daqui não corre sem Postgres, a de lá corre em qualquer máquina, e é
+   * a de lá que documenta a intenção.
+   *
+   * Ordenado por início ASCENDENTE, ao contrário do `listByVehicle`. Naquele a
+   * pergunta é "o que aconteceu ultimamente" e o mais recente vem primeiro;
+   * aqui está a reconstruir-se um dia, e um dia lê-se de manhã para a noite.
+   */
+  async listByVehicleInWindow(
+    vehicleId: string,
+    from: Date,
+    to: Date,
+  ): Promise<IVehicleAssignmentWithUser[]> {
+    try {
+      return await prisma.vehicleAssignment.findMany({
+        where: {
+          vehicleId,
+          startedAt: { lte: to },
+          // endedAt a nulo = ainda com o carro, portanto cruza qualquer janela
+          // que comece depois do inicio.
+          OR: [{ endedAt: null }, { endedAt: { gte: from } }],
+        },
+        select: this.withUserSelect,
+        orderBy: { startedAt: 'asc' },
+      }) as unknown as IVehicleAssignmentWithUser[];
+    } catch (err) {
+      logger.error('Erro ao consultar atribuicoes por periodo', err);
       throw err;
     }
   }

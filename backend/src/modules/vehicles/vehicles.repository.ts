@@ -72,6 +72,32 @@ export class VehiclesRepository implements IVehicleRepository {
     }
   }
 
+  /**
+   * O primeiro veiculo cuja matricula bata com alguma das formas dadas.
+   *
+   * Existe ao lado do `findByPlate` em vez de o substituir: aquele e um
+   * `findUnique` exato, usado onde ja se sabe a forma gravada. Este e para a
+   * consulta por matricula, onde quem escreve pode pôr ou tirar tracos e nao
+   * tem de acertar no formato — ver `assignment-lookup.ts::plateCandidates`.
+   *
+   * `findFirst` e nao `findMany`: a matricula e unica na tabela, e as variantes
+   * sao formas do MESMO numero. Duas correspondencias so aconteceriam se a base
+   * tivesse o mesmo carro gravado em dois formatos, e ai o problema e outro.
+   */
+  async findByAnyPlate(plates: string[]): Promise<IVehicle | null> {
+    if (plates.length === 0) return null;
+
+    try {
+      const row = await prisma.vehicle.findFirst({
+        where: { plate: { in: plates } },
+      });
+      return row ? (this.toPublic(row) as unknown as IVehicle) : null;
+    } catch (err) {
+      logger.error('Erro ao buscar veiculo por matricula', err);
+      throw err;
+    }
+  }
+
   async findByUserId(userId: string): Promise<IVehiclePublic[]> {
     try {
       const rows = await prisma.vehicle.findMany({

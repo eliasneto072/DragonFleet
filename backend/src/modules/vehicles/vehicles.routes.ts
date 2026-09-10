@@ -16,6 +16,13 @@ export function vehiclesRouter(): Router {
     requireStaff,
     vehiclesController.driverVehicleHistory,
   );
+  // Antes de '/:id' pela mesma razao que as de cima: 'assignments' seria lido
+  // como um identificador de veiculo.
+  router.get(
+    '/assignments/lookup',
+    requireStaff,
+    vehiclesController.assignmentLookup,
+  );
   router.get('/:id', vehiclesController.getById);
   router.get('/:id/assignments', requireStaff, vehiclesController.assignmentHistory);
   router.post('/', vehiclesController.create);

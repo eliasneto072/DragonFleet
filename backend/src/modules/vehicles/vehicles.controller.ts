@@ -9,6 +9,7 @@ import {
   vehicleIdParamSchema,
   userIdParamSchema,
   assignVehicleSchema,
+  assignmentLookupSchema,
 } from './vehicles.schemas';
 
 function getActor(req: AuthRequest) {
@@ -79,6 +80,25 @@ export class VehiclesController {
     const parsed = vehicleIdParamSchema.parse({ params: req.params });
     const vehicle = await vehiclesService.unassign(getActor(req), parsed.params.id);
     return ok(res, { vehicle });
+  };
+
+  /**
+   * GET /vehicles/assignments/lookup?plate=&from=&to=
+   *
+   * O `recordedAt` que vai em cada linha e o `startedAt` da atribuicao. Nao e
+   * redundante com o periodo: e o unico carimbo temporal que a tabela tem, e a
+   * tela precisa dele para poder avisar quem le que um registo feito muito
+   * depois do facto vale menos do que um feito na hora.
+   */
+  assignmentLookup = async (req: AuthRequest, res: Response) => {
+    const parsed = assignmentLookupSchema.parse({ query: req.query });
+
+    const result = await vehiclesService.lookupAssignmentsByPlate(
+      getActor(req),
+      parsed.query,
+    );
+
+    return ok(res, result);
   };
 
   assignmentHistory = async (req: AuthRequest, res: Response) => {
