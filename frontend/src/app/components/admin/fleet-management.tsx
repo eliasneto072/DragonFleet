@@ -7,7 +7,7 @@
 
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -22,7 +22,7 @@ import {
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
   Car, Plus, Loader2, AlertCircle, Search,
-  FileWarning, FileCheck, ChevronRight, Pencil,
+  FileWarning, FileCheck, ChevronRight, Pencil, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
@@ -242,6 +242,16 @@ export function FleetManagement() {
         subtitle="Gerir a frota, documentos e atribuições"
         icon={<Car className="h-5 w-5" />}
         actions={
+          <>
+            {/* O Diogo pediu isto como "filtro carro e datas". Fica aqui, na
+                tela onde já se procura um carro, e não numa entrada de menu
+                própria — quem chega com uma multa na mão vem à Frota. */}
+            <Button variant="outline" asChild>
+              <Link to="/app/admin/fleet/lookup">
+                <History className="h-4 w-4 mr-2" />
+                Quem teve o carro
+              </Link>
+            </Button>
           <Dialog open={open} onOpenChange={(v) => { if (!v) closeForm(); else setOpen(true); }}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-2" />Novo veículo</Button>
@@ -311,6 +321,7 @@ export function FleetManagement() {
               </form>
             </DialogContent>
           </Dialog>
+          </>
         }
       />
 

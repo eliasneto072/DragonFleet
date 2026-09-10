@@ -17,6 +17,14 @@ interface UpdateUserInput {
   email?:    string;
   password?: string;
   /**
+   * Contacto telefónico. `null` apaga-o — o campo é opcional e tem de dar
+   * para o limpar.
+   *
+   * Não exige `currentPassword`: essa reautenticação existe para o email e a
+   * palavra-passe, que são credenciais de acesso. O telefone não é.
+   */
+  phone?:    string | null;
+  /**
    * Obrigatório quando o próprio utilizador altera a palavra-passe ou o email.
    * O backend responde CURRENT_PASSWORD_REQUIRED se faltar e
    * INVALID_CURRENT_PASSWORD se não bater.

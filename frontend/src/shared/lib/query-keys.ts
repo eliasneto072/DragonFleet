@@ -51,6 +51,10 @@ export const queryKeys = {
     list: ['vehicles', 'list'] as const,
     listByUser: (userId: string) => ['vehicles', 'list', userId] as const,
     detail: (id: string) => ['vehicles', 'detail', id] as const,
+    /** Consulta "quem teve este carro" — a chave inclui os parâmetros para
+     *  cada pesquisa ter a sua entrada em cache. */
+    lookup: (plate: string, from: string, to: string) =>
+      ['vehicles', 'lookup', plate, from, to] as const,
   },
 
   // Users (admin)

@@ -32,6 +32,14 @@ export interface ApiUser {
   id:        string;
   name:      string;
   email:     string;
+  /**
+   * Contacto telefónico, preenchido pelo próprio no Perfil. `null` quando
+   * nunca foi indicado — a maioria dos registos antigos está assim.
+   *
+   * O email continua a ser o contacto principal. Isto serve para ligar a
+   * alguém por causa de uma multa ou de um acidente.
+   */
+  phone:     string | null;
   role:      UserRole;
   status:    UserStatus;
   createdAt: string;
@@ -251,5 +259,22 @@ export interface ApiVehicleAssignment {
     id: string;
     name: string;
     email: string;
+    /** Opcional: só as consultas que pedem o contacto o trazem. */
+    phone?: string | null;
+    status?: UserStatus;
   } | null;
+}
+
+/**
+ * Resposta de GET /vehicles/assignments/lookup — quem teve um carro num
+ * período.
+ *
+ * `assignments` vazio NÃO é um erro: quer dizer que ninguém tinha o carro
+ * atribuído nesses dias, o que é uma resposta e fecha a investigação. Só a
+ * matrícula desconhecida devolve 404.
+ */
+export interface ApiAssignmentLookup {
+  vehicle: ApiVehicle;
+  period: { from: string; to: string };
+  assignments: ApiVehicleAssignment[];
 }

@@ -1,7 +1,9 @@
 // src/features/driver/services/vehicles.service.ts
 
 import { apiClient } from '@/shared/lib/api-client';
-import type { ApiVehicle, ApiVehicleAssignment, ApiDriverAssignment, VehicleStatus } from '@/shared/types/api';
+import type {
+  ApiVehicle, ApiVehicleAssignment, ApiDriverAssignment, ApiAssignmentLookup, VehicleStatus,
+} from '@/shared/types/api';
 
 interface CreateVehicleInput {
   brand:   string;
@@ -79,6 +81,21 @@ export const vehiclesService = {
    */
   driverVehicleHistory(userId: string): Promise<{ history: ApiDriverAssignment[] }> {
     return apiClient.get(`/vehicles/driver/${userId}/assignments`);
+  },
+
+  /**
+   * GET /vehicles/assignments/lookup — quem teve este carro nestas datas.
+   *
+   * Entra pela MATRÍCULA e não pelo id porque é o que um aviso de multa traz.
+   * Os formatos com traços, sem traços e em minúsculas encontram todos o mesmo
+   * carro — o servidor trata disso.
+   *
+   * `to` omitido consulta um dia só.
+   */
+  assignmentLookup(input: { plate: string; from: string; to?: string }): Promise<ApiAssignmentLookup> {
+    const params = new URLSearchParams({ plate: input.plate, from: input.from });
+    if (input.to) params.set('to', input.to);
+    return apiClient.get(`/vehicles/assignments/lookup?${params.toString()}`);
   },
 
   // ── Ativação híbrida (admin/manager) ────────────────────────────────────

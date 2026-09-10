@@ -25,6 +25,7 @@ import { FinancialPage } from '@/features/admin/pages/FinancialPage';
 import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
+import { AssignmentLookupPage } from '@/features/admin/pages/AssignmentLookupPage';
 import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
 import { NotificationsAdminPage } from '@/features/admin/pages/NotificationsAdminPage';
 import { SettingsPage } from '@/features/admin/pages/SettingsPage';
@@ -78,6 +79,10 @@ export const router = createBrowserRouter([
           { path: 'financial', element: <FinancialPage /> },
           { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
           { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
+          // Antes de 'fleet/:id' por legibilidade — o React Router ja da
+          // prioridade ao segmento estatico, mas quem le o ficheiro nao tem
+          // de saber isso para perceber que 'lookup' nao e um id.
+          { path: 'fleet/lookup', element: <NaoSuporte><AssignmentLookupPage /></NaoSuporte> },
           { path: 'fleet/:id', element: <NaoSuporte><VehicleDetailPage /></NaoSuporte> },
           { path: 'analytics', element: <NaoSuporte><AnalyticsPage /></NaoSuporte> },
           { path: 'notifications', element: <NaoSuporte><NotificationsAdminPage /></NaoSuporte> },

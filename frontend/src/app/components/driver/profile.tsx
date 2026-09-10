@@ -33,7 +33,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, CalendarDays, Camera, Loader2, Lock, Mail, User,
+  AlertCircle, CalendarDays, Camera, Loader2, Lock, Mail, Phone, User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -331,6 +331,8 @@ export function DriverProfile() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState('');
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [phone, setPhone] = useState('');
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -390,6 +392,10 @@ export function DriverProfile() {
     if (profile) setName(profile.name);
   }, [profile]);
 
+  useEffect(() => {
+    if (profile) setPhone(profile.phone ?? '');
+  }, [profile]);
+
   const { mutate: saveName, isPending: isSavingName } = useMutation({
     mutationFn: () => usersService.update(user!.id, { name: name.trim() }),
     onSuccess: ({ user: updated }) => {
@@ -398,6 +404,19 @@ export function DriverProfile() {
       setIsEditingName(false);
     },
     onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar o nome.'),
+  });
+
+  const { mutate: savePhone, isPending: isSavingPhone } = useMutation({
+    // Vazio grava `null` e nao `''`: o campo e opcional e apagar o numero tem
+    // de o remover, nao de guardar uma cadeia vazia que depois se mostra como
+    // se fosse um contacto.
+    mutationFn: () => usersService.update(user!.id, { phone: phone.trim() || null }),
+    onSuccess: ({ user: updated }) => {
+      queryClient.setQueryData(queryKeys.users.detail(user!.id), updated);
+      toast.success(updated.phone ? 'Telefone atualizado.' : 'Telefone removido.');
+      setIsEditingPhone(false);
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar o telefone.'),
   });
 
   if (isLoading) return <ProfileSkeleton />;
@@ -497,6 +516,88 @@ export function DriverProfile() {
             </Link>
             {photoDoc?.status === 'PENDING' && ' — a atual ainda está em análise.'}
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Contacto.
+          Cartão próprio e não uma linha na Segurança: o telefone não é uma
+          credencial de acesso — não protege a conta e alterá-lo não exige
+          confirmar a palavra-passe. Metê-lo ao lado da palavra-passe sugeriria
+          o contrário. */}
+      <Card className="shadow-card">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Contacto</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Como a administração o encontra quando é preciso
+          </p>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <div className="flex items-center gap-3 border-b border-border py-3">
+            <Mail className="h-[18px] w-[18px] shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Email</p>
+              <p className="truncate text-xs text-muted-foreground">{profile.email}</p>
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">Principal</span>
+          </div>
+
+          {!isEditingPhone ? (
+            <div className="flex items-center gap-3 py-3">
+              <Phone className="h-[18px] w-[18px] shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Telefone</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {profile.phone ?? 'Por indicar'}
+                </p>
+              </div>
+              <Button
+                size="sm" variant="outline" className="h-8 shrink-0"
+                onClick={() => { setPhone(profile.phone ?? ''); setIsEditingPhone(true); }}
+              >
+                {profile.phone ? 'Alterar' : 'Adicionar'}
+              </Button>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => { e.preventDefault(); savePhone(); }}
+              className="space-y-3 py-3"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="phone">Telefone</Label>
+                <Input
+                  id="phone" type="tel" autoComplete="tel"
+                  placeholder="912 345 678"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                {/* Dito de forma explícita porque muitos motoristas são
+                    estrangeiros e assumem que só se aceitam números
+                    portugueses. Deixar de fora um contacto que funciona seria
+                    o pior resultado possível para um campo que existe para
+                    alguém poder ligar. */}
+                <p className="text-xs text-muted-foreground">
+                  Aceita números estrangeiros — comece com{' '}
+                  <span className="font-medium">+</span> e o indicativo do país.
+                  Deixe vazio para remover.
+                </p>
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button" variant="outline" className="w-full sm:w-auto"
+                  onClick={() => { setIsEditingPhone(false); setPhone(profile.phone ?? ''); }}
+                  disabled={isSavingPhone}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit" className="w-full sm:w-auto"
+                  disabled={isSavingPhone || phone.trim() === (profile.phone ?? '')}
+                >
+                  {isSavingPhone && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+                </Button>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
 
