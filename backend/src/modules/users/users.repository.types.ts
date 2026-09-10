@@ -11,6 +11,8 @@ export type CreateUserData = {
 export type UpdateUserData = {
   name?: string;
   email?: string;
+  /** `null` apaga o contacto — o campo e opcional e tem de dar para o limpar. */
+  phone?: string | null;
   password?: string; // já hasheada se vier
   role?: UserRole;
   status?: UserStatus;

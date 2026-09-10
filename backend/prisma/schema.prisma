@@ -117,6 +117,20 @@ model User {
   name      String
   email     String     @unique
   password  String
+
+  /// Contacto telefónico, preenchido pelo próprio no perfil.
+  ///
+  /// Opcional e sem `@unique`. Opcional porque nenhum registo existente o tem e
+  /// tornar obrigatório trancava a conta de toda a gente no próximo arranque.
+  /// Sem `@unique` porque um casal que partilhe um número não é uma anomalia
+  /// que valha a pena impedir — e um índice único aqui rejeitaria o segundo com
+  /// uma mensagem que ninguém saberia explicar.
+  ///
+  /// Guardado normalizado (`+` opcional seguido de dígitos, ver
+  /// `shared/utils/phone.ts`). O email continua a ser o contacto principal:
+  /// isto serve para ligar a alguém por causa de uma multa ou de um acidente.
+  phone     String?
+
   role      UserRole   @default(DRIVER)
   status    UserStatus @default(ACTIVE)
   createdAt DateTime   @default(now()) @map("created_at")

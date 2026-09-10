@@ -7,6 +7,10 @@ import { UserRole, UserStatus } from '../../shared/types/enums';
 
 type AuthUser = {
   id: string; name: string; email: string;
+  // Opcional aqui e nao obrigatorio: quem chama esta funcao nem sempre tem o
+  // registo completo em maos, e um login nao deve falhar por falta de um
+  // contacto que e opcional por definicao.
+  phone?: string | null;
   role: UserRole; status: UserStatus;
   createdAt: Date; updatedAt: Date;
 };
@@ -44,6 +48,7 @@ export function verifyRefreshToken(token: string): { sub: string } {
 export function toPublicUser(user: AuthUser): IUserPublic {
   return {
     id: user.id, name: user.name, email: user.email,
+    phone: user.phone ?? null,
     role: user.role, status: user.status,
     createdAt: user.createdAt, updatedAt: user.updatedAt,
   };

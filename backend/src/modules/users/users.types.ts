@@ -5,6 +5,8 @@ export interface IUser {
   name: string;
   email: string;
   password: string;
+  /** Contacto opcional, normalizado. `null` quando nunca foi preenchido. */
+  phone: string | null;
   createdAt: Date;
   updatedAt: Date;
   role: UserRole;

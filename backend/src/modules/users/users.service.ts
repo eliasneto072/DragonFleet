@@ -187,6 +187,11 @@ export class UsersService {
         'name',
         'email',
         'password',
+        // O telefone é do próprio, e o propósito do campo é ele mantê-lo
+        // atualizado sem ter de pedir a ninguém. Esquecer esta linha dava um
+        // 403 na tela de perfil com a mensagem de "campos restritos", que não
+        // explicaria nada a quem só queria corrigir o número.
+        'phone',
         'currentPassword',
       ];
       const keys = Object.keys(input) as Array<keyof UpdateUserInput>;
@@ -220,6 +225,10 @@ export class UsersService {
     const data: UpdateUserData = {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.email !== undefined ? { email: input.email } : {}),
+      // `null` chega aqui quando o campo foi esvaziado, e tem de passar: o
+      // teste é a `undefined` e não a falsidade, senão apagar o contacto era
+      // silenciosamente ignorado.
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
     };

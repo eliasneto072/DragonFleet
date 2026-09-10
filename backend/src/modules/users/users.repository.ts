@@ -14,6 +14,7 @@ export class UsersRepository  implements IUserRepository{
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         status: true,
         createdAt: true,
@@ -218,6 +219,15 @@ export class UsersRepository  implements IUserRepository{
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.email !== undefined ? { email: data.email } : {}),
           ...(data.password !== undefined ? { password: data.password } : {}),
+          // O terceiro sitio onde o telefone tem de aparecer, depois da
+          // whitelist e do objeto `data` do service. Faltava aqui: o campo
+          // chegava ao repositorio, era ignorado em silencio, e a resposta
+          // devolvia o `phone` que ja la estava — `null`. A tela via null e
+          // anunciava "Telefone removido" a quem o estava a adicionar.
+          //
+          // O TypeScript nao podia ajudar: acrescentar um campo OPCIONAL ao
+          // UpdateUserData nao obriga ninguem a usa-lo.
+          ...(data.phone !== undefined ? { phone: data.phone } : {}),
           ...(data.role !== undefined ? { role: data.role } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
         },
