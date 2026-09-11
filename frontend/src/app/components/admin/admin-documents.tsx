@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
+import { FilterCombobox, type FilterOption } from '@/app/components/ui/filter-combobox';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
@@ -179,6 +180,11 @@ export function AdminDocuments() {
   const [statusFilter, setStatusFilter] = useState<'all' | DocumentStatus>('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [expiryFilter, setExpiryFilter] = useState<'all' | '30' | '15' | '7'>('all');
+  // Fase 2 — o que o Diogo pediu: escolher o motorista e a matricula em vez de
+  // os escrever. Guardam o ID e nao o texto, para dois homonimos nunca
+  // colidirem.
+  const [driverFilter, setDriverFilter] = useState<string>('all');
+  const [vehicleFilter, setVehicleFilter] = useState<string>('all');
 
   // Dialogs
   const [reviewDoc, setReviewDoc] = useState<ApiDocument | null>(null);
@@ -291,6 +297,34 @@ export function AdminDocuments() {
   }, [documents, vehicleCountByUser, category]);
 
   // Contagens (sobre o total, independente dos filtros)
+  // ── Opcoes dos filtros da Fase 2 ──────────────────────────────────────────
+  //
+  // So motoristas. Admins e gestores tambem tem documentos (a carta, por
+  // exemplo), mas quem abre esta tela esta a verificar a conformidade da frota
+  // — misturar o escritorio na lista so a torna mais comprida.
+  //
+  // O email vai como `hint` porque dois "Joao Silva" na mesma frota nao e
+  // hipotese teorica, e escolher o errado aqui nao da erro nenhum: mostra os
+  // documentos de outra pessoa em silencio.
+  const driverOptions = useMemo<FilterOption[]>(() =>
+    users
+      .filter(u => u.role === 'DRIVER')
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+      .map(u => ({ value: u.id, label: u.name, hint: u.email })),
+    [users],
+  );
+
+  // Marca e modelo como `hint`: a matricula e unica, mas nem sempre e o que a
+  // pessoa tem na cabeca quando pensa "o Corolla branco".
+  const vehicleOptions = useMemo<FilterOption[]>(() =>
+    vehicles
+      .slice()
+      .sort((a, b) => a.plate.localeCompare(b.plate, 'pt'))
+      .map(v => ({ value: v.id, label: v.plate, hint: `${v.brand} ${v.model}` })),
+    [vehicles],
+  );
+
   const counts = useMemo(() => {
     const expiringSoon = documents.filter(d => {
       if (!d.expiresAt || d.status === 'EXPIRED') return false;
@@ -323,6 +357,14 @@ export function AdminDocuments() {
         driver.name.toLowerCase().includes(q) ||
         driver.email.toLowerCase().includes(q);
 
+      const matchDriver = driverFilter === 'all' || doc.userId === driverFilter;
+
+      // Compara o ID do veiculo, nao o texto da matricula. Um documento de
+      // motorista tem `vehicleId` nulo, portanto escolher uma matricula
+      // esconde-os todos — o que e correto, mas nao e obvio. O estado vazio
+      // da lista explica-o.
+      const matchVehicle = vehicleFilter === 'all' || doc.vehicleId === vehicleFilter;
+
       const matchCategory = category === 'all' || categoryOf(doc.type) === category;
       const matchStatus = statusFilter === 'all' || doc.status === statusFilter;
       const matchType = typeFilter === 'all' || doc.type === typeFilter;
@@ -336,7 +378,7 @@ export function AdminDocuments() {
           dias !== null && dias >= 0 && dias <= limit;
       }
 
-      return matchSearch && matchCategory && matchStatus && matchType && matchExpiry;
+      return matchSearch && matchDriver && matchVehicle && matchCategory && matchStatus && matchType && matchExpiry;
     }).sort((a, b) => {
       // 1º por urgência; empate → mais recente primeiro
       const ra = urgencyRank(a);
@@ -344,13 +386,16 @@ export function AdminDocuments() {
       if (ra !== rb) return ra - rb;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [documents, users, search, category, statusFilter, typeFilter, expiryFilter]);
+  }, [documents, users, search, driverFilter, vehicleFilter, category, statusFilter, typeFilter, expiryFilter]);
 
   const hasActiveFilters =
-    search !== '' || category !== 'all' || statusFilter !== 'all' || typeFilter !== 'all' || expiryFilter !== 'all';
+    search !== '' || driverFilter !== 'all' || vehicleFilter !== 'all' ||
+    category !== 'all' || statusFilter !== 'all' || typeFilter !== 'all' || expiryFilter !== 'all';
 
   function clearFilters() {
     setSearch('');
+    setDriverFilter('all');
+    setVehicleFilter('all');
     setCategory('all');
     setStatusFilter('all');
     setTypeFilter('all');
@@ -518,6 +563,30 @@ export function AdminDocuments() {
               />
             </div>
 
+            {/* Fase 2 — motorista e matricula. Antes dos filtros de status e
+                tipo porque respondem a perguntas diferentes: estes dizem DE
+                QUEM, os outros dizem EM QUE ESTADO. Quem chega a esta tela
+                costuma ter primeiro um nome ou uma matricula na cabeca. */}
+            <FilterCombobox
+              options={driverOptions}
+              value={driverFilter}
+              onChange={setDriverFilter}
+              placeholder="Motorista"
+              allLabel="Todos os motoristas"
+              className="w-full lg:w-[200px]"
+              emptyLabel="Nenhum motorista com esse nome."
+            />
+
+            <FilterCombobox
+              options={vehicleOptions}
+              value={vehicleFilter}
+              onChange={setVehicleFilter}
+              placeholder="Matrícula"
+              allLabel="Todas as matrículas"
+              className="w-full lg:w-[170px]"
+              emptyLabel="Nenhuma matrícula assim."
+            />
+
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | DocumentStatus)}>
               <SelectTrigger className="w-full lg:w-[170px]"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
@@ -569,9 +638,25 @@ export function AdminDocuments() {
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              {hasActiveFilters ? 'Nenhum documento corresponde aos filtros.' : 'Nenhum documento enviado ainda.'}
-            </p>
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters ? 'Nenhum documento corresponde aos filtros.' : 'Nenhum documento enviado ainda.'}
+              </p>
+
+              {/* Uma matrícula com documentos de motorista nunca dá resultado:
+                  a carta de condução e o cartão de cidadão pertencem à pessoa,
+                  não ao carro, e têm `vehicleId` nulo. É correto que o filtro
+                  os esconda — mas quem só vê "nenhum documento" fica a
+                  procurar um problema que não existe. */}
+              {vehicleFilter !== 'all' && category === 'driver' && (
+                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                  Está a filtrar por matrícula com a aba <strong>Motorista</strong>{' '}
+                  aberta. Os documentos do motorista pertencem à pessoa e não ao
+                  carro, por isso esta combinação não devolve nada. Passe à aba{' '}
+                  <strong>Veículo</strong> ou a <strong>Todos</strong>.
+                </p>
+              )}
+            </div>
           ) : (
             <>
               {/* Tabela — desktop */}

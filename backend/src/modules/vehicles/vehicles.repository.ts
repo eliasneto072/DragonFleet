@@ -114,19 +114,52 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async create(data: CreateVehicleData): Promise<IVehiclePublic> {
     try {
-      const row = await prisma.vehicle.create({
-        data: {
-          brand: data.brand,
-          model: data.model,
-          plate: data.plate,
-          year: data.year,
-          status: data.status,
-          userId: data.userId ?? null,
-          ...(data.vin !== undefined ? { vin: data.vin } : {}),
-          ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
-        },
-        select: this.publicSelect,
+      // ─── PORQUE ISTO É UMA TRANSAÇÃO ───────────────────────────────────────
+      //
+      // Todo o veículo nasce com dono: ou o motorista registou o carro dele, ou
+      // a gestão criou-o para alguém. Mas durante muito tempo o `create`
+      // escrevia só o `userId` na linha do veículo e NÃO abria atribuição — a
+      // tabela `vehicle_assignments` era escrita apenas pelo endpoint de
+      // atribuir.
+      //
+      // O resultado: um carro criado com condutor e nunca reatribuido tinha o
+      // "Motorista atual" preenchido na tela de detalhe e o histórico VAZIO. A
+      // consulta "quem teve o carro" respondia "ninguém" com toda a confiança
+      // sobre um carro que teve condutor desde o primeiro dia.
+      //
+      // Num sistema onde essa resposta serve para imputar multas e sinistros a
+      // pessoas, um "ninguém" errado é pior do que não haver resposta.
+      //
+      // A invariante que passa a valer, e que o `assign` e o `unassign` já
+      // cumpriam: veículo com `userId` preenchido ⟺ existe uma atribuição
+      // aberta para essa pessoa.
+      const row = await prisma.$transaction(async (tx) => {
+        const criado = await tx.vehicle.create({
+          data: {
+            brand: data.brand,
+            model: data.model,
+            plate: data.plate,
+            year: data.year,
+            status: data.status,
+            userId: data.userId ?? null,
+            ...(data.vin !== undefined ? { vin: data.vin } : {}),
+            ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
+          },
+          select: this.publicSelect,
+        });
+
+        if (data.userId) {
+          // `startedAt` fica no `default(now())`, que é o instante da criação —
+          // e neste caso é a verdade, não uma aproximação: o carro passou a
+          // estar com esta pessoa agora.
+          await tx.vehicleAssignment.create({
+            data: { vehicleId: criado.id, userId: data.userId },
+          });
+        }
+
+        return criado;
       });
+
       return this.toPublic(row);
     } catch (err) {
       logger.error('Erro ao criar veículo', err);

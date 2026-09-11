@@ -11,3 +11,5 @@ dist/
 
 # Cache incremental do `tsc -b`.
 *.tsbuildinfo
+.patch-backup/
+.patch-backup/

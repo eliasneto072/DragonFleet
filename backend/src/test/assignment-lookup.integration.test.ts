@@ -304,3 +304,158 @@ describe('as duas implementacoes da regra concordam', () => {
     expect(inicios).toEqual(esperadas.map(([s]) => s.toISOString()).sort());
   });
 });
+
+describe('a invariante: veiculo com condutor tem atribuicao aberta', () => {
+  // ─── O BUG QUE ESTES TESTES FECHAM ────────────────────────────────────────
+  //
+  // O `create` do veiculo gravava o `userId` na linha do veiculo e nao abria
+  // atribuicao. A tela de detalhe mostrava "Motorista atual: X" e o historico
+  // aparecia VAZIO. A consulta respondia "ninguem tinha este carro" sobre um
+  // carro que teve condutor desde o primeiro dia.
+  //
+  // Nada falhava. Nenhum teste ficava vermelho. O 201 saia, o carro aparecia na
+  // frota, e o "Motorista atual" estava certo. Foi descoberto por alguem a usar
+  // a tela e a reparar que as duas metades do mesmo ecra se contradiziam.
+  //
+  // O `assign` e o `unassign` sempre cumpriram a invariante. Era so o `create`.
+
+  it('um veiculo criado pela API aparece na consulta no MESMO dia', async () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    const criado = await request(app)
+      .post('/vehicles')
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ brand: 'Chevrolet', model: 'Monza', plate: 'QQ-11-QQ', year: 2004 })
+      .expect(201);
+
+    expect(criado.body.data.vehicle.userId).toBe(admin.id);
+
+    const r = await request(app)
+      .get(ROTA)
+      .query({ plate: 'QQ-11-QQ', from: hoje })
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    // Antes da correcao isto vinha vazio — e era a resposta que se usava para
+    // dizer a alguem que nao era ele que conduzia o carro da multa.
+    expect(r.body.data.assignments).toHaveLength(1);
+    expect(r.body.data.assignments[0].user.id).toBe(admin.id);
+    expect(r.body.data.assignments[0].endedAt).toBeNull();
+  });
+
+  it('o historico do veiculo NAO contradiz o motorista atual', async () => {
+    const criado = await request(app)
+      .post('/vehicles')
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ brand: 'Renault', model: 'Clio', plate: 'RR-22-RR', year: 2019 })
+      .expect(201);
+
+    const id = criado.body.data.vehicle.id;
+
+    const detalhe = await request(app)
+      .get(`/vehicles/${id}`)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    const historico = await request(app)
+      .get(`/vehicles/${id}/assignments`)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    // As duas metades da tela de detalhe leem daqui. Se uma diz que ha condutor
+    // e a outra diz que nunca houve, uma delas esta a mentir a quem le.
+    // Sem `??` de reserva: o controller devolve `{ history }` e mais nada. Um
+    // teste com alternativas passa mesmo quando a forma muda — passa pela
+    // razao errada, que e pior do que falhar.
+    expect(detalhe.body.data.vehicle.userId).toBeTruthy();
+    expect(historico.body.data.history).toHaveLength(1);
+    expect(historico.body.data.history[0].userId).toBe(detalhe.body.data.vehicle.userId);
+  });
+
+  it('criar e depois atribuir a outro deixa os dois no historico, por ordem', async () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    const criado = await request(app)
+      .post('/vehicles')
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ brand: 'Dacia', model: 'Logan', plate: 'SS-33-SS', year: 2020 })
+      .expect(201);
+
+    await request(app)
+      .post(`/vehicles/${criado.body.data.vehicle.id}/assign`)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ userId: motorista.id })
+      .expect(200);
+
+    const r = await request(app)
+      .get(ROTA)
+      .query({ plate: 'SS-33-SS', from: hoje })
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    // Duas linhas: a do criador, ja fechada, e a do motorista, aberta. Antes da
+    // correcao aparecia so a segunda, e o periodo inicial do carro nao existia.
+    expect(r.body.data.assignments).toHaveLength(2);
+
+    const [primeira, segunda] = r.body.data.assignments;
+    expect(primeira.user.id).toBe(admin.id);
+    expect(primeira.endedAt).not.toBeNull();
+    expect(segunda.user.id).toBe(motorista.id);
+    expect(segunda.endedAt).toBeNull();
+  });
+
+  it('desatribuir fecha a atribuicao e a consulta deixa de dar condutor amanha', async () => {
+    const criado = await request(app)
+      .post('/vehicles')
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ brand: 'Fiat', model: 'Punto', plate: 'TT-44-TT', year: 2015 })
+      .expect(201);
+
+    await request(app)
+      .post(`/vehicles/${criado.body.data.vehicle.id}/unassign`)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+    const r = await request(app)
+      .get(ROTA)
+      .query({ plate: 'TT-44-TT', from: amanha })
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    expect(r.body.data.assignments).toHaveLength(0);
+  });
+
+  it('reatribuir a MESMA pessoa nao duplica a linha', async () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    const criado = await request(app)
+      .post('/vehicles')
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({ brand: 'Opel', model: 'Corsa', plate: 'UU-55-UU', year: 2018 })
+      .expect(201);
+
+    // Duas vezes a mesma pessoa. O `assign` tem uma guarda para isto, e ela
+    // importa: duas atribuicoes abertas no mesmo carro fariam a consulta
+    // devolver DOIS condutores para o mesmo dia — ambiguidade exatamente na
+    // pergunta que tem de ser inequivoca.
+    for (let i = 0; i < 2; i++) {
+      await request(app)
+        .post(`/vehicles/${criado.body.data.vehicle.id}/assign`)
+        .set(authHeader(admin.id, UserRole.ADMIN))
+        .send({ userId: motorista.id })
+        .expect(200);
+    }
+
+    const r = await request(app)
+      .get(ROTA)
+      .query({ plate: 'UU-55-UU', from: hoje })
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200);
+
+    const abertas = r.body.data.assignments.filter((a: any) => a.endedAt === null);
+    expect(abertas).toHaveLength(1);
+    expect(abertas[0].user.id).toBe(motorista.id);
+  });
+});
