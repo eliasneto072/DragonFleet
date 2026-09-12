@@ -70,6 +70,17 @@ describe('SUPPORT — o que vê', () => {
     await request(app).get(`/balance/${motorista.id}`).set(comoSuporte()).expect(200);
   });
 
+  it('o extrato de um motorista', async () => {
+    // O extrato explica o mesmo saldo que o suporte ja pode ver, e herda a
+    // regra do `getSummary` em vez de a reescrever. Este teste fixa isso: se
+    // alguem apertar ou alargar a permissao de um dos dois, o outro tem de
+    // acompanhar ou isto fica vermelho.
+    await request(app)
+      .get(`/balance/${motorista.id}/ledger`)
+      .set(comoSuporte())
+      .expect(200);
+  });
+
   it('os tickets, que sao o trabalho dele', async () => {
     await request(app).get('/support').set(comoSuporte()).expect(200);
   });

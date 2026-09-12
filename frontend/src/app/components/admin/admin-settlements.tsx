@@ -39,6 +39,9 @@ import {
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
 import { reportsService } from '@/features/admin/services/reports.service';
+import { usersService } from '@/features/admin/services/users.service';
+import { FilterCombobox, type FilterOption } from '@/app/components/ui/filter-combobox';
+import { DriverLedger } from '@/app/components/admin/driver-ledger';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import type { SettlementStatus } from '@/shared/types/api';
@@ -342,6 +345,16 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  // ─── FASE 4 ────────────────────────────────────────────────────────────────
+  //
+  // O motorista escolhido, por ID e nao por texto. A caixa de pesquisa ao lado
+  // continua a existir para procurar; esta e para ESCOLHER.
+  //
+  // A distincao importa: um extrato acumulado de "Silva" que apanhasse quatro
+  // pessoas somaria movimentos de contas diferentes e daria um saldo que nao
+  // corresponde a conta nenhuma.
+  const [driverId, setDriverId] = useState<string>('all');
+
 
 
   /**
@@ -358,6 +371,11 @@ export function AdminSettlements({ hideHeader = false }: Props) {
         from: params.from,
         to: params.to,
         status: params.status,
+        // O motorista escolhido TEM de ir. Sem esta linha, exportar com um
+        // motorista filtrado dava um ficheiro da frota inteira — e a folha de
+        // resumo diria "Motorista: Todos" enquanto o ecra mostrava um so. O
+        // `params` e a fonte unica dos filtros justamente para isto.
+        userId: params.userId,
         search: lista.search || undefined,
       });
       toast.success('Ficheiro descarregado.');
@@ -403,15 +421,37 @@ export function AdminSettlements({ hideHeader = false }: Props) {
     </>
   );
 
+  // Todos os utilizadores, para o seletor. O mesmo padrao da tela de
+  // Documentos, e o mesmo componente.
+  const usersQ = useQuery({
+    queryKey: queryKeys.users.list,
+    queryFn: () => usersService.listAll(),
+    staleTime: 60_000,
+  });
+
+  const driverOptions = useMemo<FilterOption[]>(() => {
+    const users = usersQ.data?.users ?? [];
+    return users
+      .filter((u) => u.role === 'DRIVER')
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+      // O email desambigua homonimos. Escolher o "Joao Silva" errado aqui
+      // mostraria o extrato financeiro de outra pessoa, sem aviso nenhum.
+      .map((u) => ({ value: u.id, label: u.name, hint: u.email }));
+  }, [usersQ.data]);
+
+  const driverSelecionado = driverOptions.find((o) => o.value === driverId);
+
   const params = useMemo(() => {
     const range = period === 'custom'
       ? { from: customFrom || undefined, to: customTo || undefined }
       : periodRange(period);
     return {
       status: statusFilter === 'all' ? undefined : statusFilter,
+      userId: driverId === 'all' ? undefined : driverId,
       ...range,
     };
-  }, [statusFilter, period, customFrom, customTo]);
+  }, [statusFilter, period, customFrom, customTo, driverId]);
 
   // A página vive no estado da tela e entra na chave da consulta, para o
   // React Query tratar cada página como um resultado próprio e conseguir
@@ -557,7 +597,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
             E deixa de ser preciso descarregar os 2000 nomes só para desenhar
             o menu. */}
         <div className="min-w-[220px] flex-1 space-y-1.5">
-          <Label htmlFor="filter-search">Motorista</Label>
+          <Label htmlFor="filter-search">Procurar</Label>
           <div className="relative">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -582,6 +622,21 @@ export function AdminSettlements({ hideHeader = false }: Props) {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Escolher UM motorista destranca o extrato. A caixa ao lado procura;
+            esta escolhe. Sao coisas diferentes e ambas fazem falta. */}
+        <div className="min-w-[200px] flex-1 space-y-1.5 sm:flex-none">
+          <Label>Motorista</Label>
+          <FilterCombobox
+            options={driverOptions}
+            value={driverId}
+            onChange={(v) => { setDriverId(v); lista.setPage(1); }}
+            placeholder="Todos os motoristas"
+            allLabel="Todos os motoristas"
+            className="w-full sm:w-[220px]"
+            emptyLabel="Nenhum motorista com esse nome."
+          />
         </div>
 
         <div className="min-w-[170px] flex-1 space-y-1.5 sm:flex-none">
@@ -637,6 +692,44 @@ export function AdminSettlements({ hideHeader = false }: Props) {
           </Select>
         </div>
       </div>
+
+      {/* ─── FASE 4: O EXTRATO ────────────────────────────────────────────────
+          Só aparece com UM motorista escolhido, e é uma restrição de
+          significado e não de desempenho: um acumulado que somasse movimentos
+          de pessoas diferentes daria um número que não corresponde a conta
+          nenhuma.
+
+          Fica ACIMA da lista porque responde à pergunta que trouxe a pessoa
+          aqui — "com quanto é que ele ficou" — e a lista de fechos é o detalhe
+          de uma das quatro origens desse número. */}
+      {driverId !== 'all' && driverSelecionado && (
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-base font-semibold sm:text-lg">
+              Extrato de {driverSelecionado.label}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Todos os movimentos da conta, por ordem, e o saldo depois de cada um
+            </p>
+          </div>
+
+          <DriverLedger userId={driverId} driverName={driverSelecionado.label} />
+
+          <div className="pt-2">
+            <h2 className="text-base font-semibold sm:text-lg">
+              Fechos de {driverSelecionado.label}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {/* Dito explicitamente: o extrato não é filtrado pelo período nem
+                  pelo estado, porque um acumulado parcial não acumula nada. A
+                  lista abaixo sim. */}
+              A lista abaixo respeita o período e o estado escolhidos. O extrato
+              acima cobre sempre o histórico completo — um saldo acumulado a
+              meio não explicaria como se chegou ao total.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Paginação também em cima: com 25 linhas, obrigar a rolar até ao fim
           para mudar de página é atrito a cada consulta. A variante compacta

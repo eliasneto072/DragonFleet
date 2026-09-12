@@ -106,8 +106,15 @@ export function DriverWithdrawalsCard({ userId }: Props) {
     onSuccess: (_res, vars) => {
       // O saldo muda com a decisão, por isso é invalidado junto: aprovar move
       // o valor de "pendente" para "sacado" no cálculo do disponível.
+      //
+      // O prefixo `balance.all` e não o `balance.summary(userId)` que aqui
+      // estava. A chave estreita deixava o EXTRATO desatualizado: aprovar uma
+      // retirada fazia-a entrar no extrato, mas `['balance','ledger',userId]`
+      // não bate com `['balance','summary',userId]` e a tela continuava a
+      // mostrar a versão anterior. Os outros dois sítios que decidem retiradas
+      // já usavam o prefixo.
       queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.balance.summary(userId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.balance.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
       toast.success(
         vars.status === 'REJECTED' ? 'Retirada rejeitada.' : 'Retirada aprovada.',

@@ -41,7 +41,58 @@ interface CreateAdjustmentInput {
   reason?: string;
 }
 
+export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL';
+
+export interface LedgerEntry {
+  id: string;
+  kind: LedgerKind;
+  /**
+   * A data que ancora a linha: a semana no fecho, a data do PEDIDO na retirada.
+   *
+   * Nunca a data da decisão — essa é reescrita a cada mudança de estado, e uma
+   * linha ancorada nela muda de sítio quando a retirada passa de aprovada a
+   * paga, arrastando o saldo de todas as linhas pelo meio.
+   */
+  date: string;
+  label: string;
+  detail?: string | null;
+  /** Assinado: positivo entra, negativo sai. */
+  amount: number;
+  /** O saldo em conta DEPOIS deste movimento. */
+  balance: number;
+  settlementId?: string;
+}
+
+export interface LedgerReconciliation {
+  /** A última linha do extrato. NÃO é o disponível — ver nota abaixo. */
+  accountBalance: number;
+  pendingWithdrawals: number;
+  /** O que o portal do motorista mostra como "disponível para retirada". */
+  availableToWithdraw: number;
+}
+
 export const balanceService = {
+  /**
+   * GET /balance/:userId/ledger — os movimentos e o saldo depois de cada um.
+   *
+   * ─── PORQUE HÁ TRÊS NÚMEROS E NÃO UM ─────────────────────────────────────
+   *
+   * O extrato inclui as retiradas pagas e aprovadas, e NÃO as pendentes: uma
+   * pendente ainda pode ser recusada, e uma linha que pode desaparecer é pior
+   * do que não a mostrar.
+   *
+   * A consequência é que a última linha não é o saldo disponível — é o
+   * disponível MAIS o que está reservado por pedidos por decidir. Por isso a
+   * coluna se chama "Saldo em conta" e nunca "disponível", e por isso a tela
+   * mostra os três juntos.
+   */
+  getLedger(userId: string): Promise<{
+    entries: LedgerEntry[];
+    reconciliation: LedgerReconciliation;
+  }> {
+    return apiClient.get(`/balance/${userId}/ledger`);
+  },
+
   /** GET /balance/:userId */
   getSummary(userId: string): Promise<{ balance: BalanceSummary }> {
     return apiClient.get(`/balance/${userId}`);

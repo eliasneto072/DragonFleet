@@ -78,6 +78,9 @@ export const queryKeys = {
     all: ['balance'] as const,
     summary: (userId: string) => ['balance', 'summary', userId] as const,
     adjustments: (userId: string) => ['balance', 'adjustments', userId] as const,
+    /** O extrato acumulado. Sob 'balance' de proposito: e a mesma conta que o
+     *  resumo, explicada linha a linha — invalidar um deve invalidar o outro. */
+    ledger: (userId: string) => ['balance', 'ledger', userId] as const,
   },
 
   // Dados bancários
