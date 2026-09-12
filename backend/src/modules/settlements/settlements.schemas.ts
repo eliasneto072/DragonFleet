@@ -45,18 +45,38 @@ export const settlementIdParamSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
 });
 
+/**
+ * Os filtros que a LISTA e a EXPORTAÇÃO partilham.
+ *
+ * Estão aqui, num sítio só, pela mesma razão que o `buildSettlementWhere` está
+ * no repositório: se a exportação tiver a sua própria definição de filtros, um
+ * dia a tela mostra um total e o ficheiro que vai para o contabilista mostra
+ * outro, e ninguém consegue dizer qual está certo.
+ *
+ * A paginação NÃO entra aqui — é da lista e não faz sentido num ficheiro, que
+ * leva sempre a seleção inteira.
+ */
+export const settlementFiltersShape = {
+  userId: z.string().min(1).optional(),
+  status: z.nativeEnum(SettlementStatus).optional(),
+  from: dayString.optional(),
+  to: dayString.optional(),
+  search: z.string().max(120).optional(),
+} as const;
+
 export const listSettlementsSchema = z.object({
   query: z.object({
-    userId: z.string().min(1).optional(),
-    status: z.nativeEnum(SettlementStatus).optional(),
-    from: dayString.optional(),
-    to: dayString.optional(),
+    ...settlementFiltersShape,
     // Chegam como texto na query string. O parsePage trata dos valores
     // absurdos e aplica o teto; aqui basta deixá-los passar.
-    search: z.string().max(120).optional(),
     page: z.string().optional(),
     pageSize: z.string().optional(),
   }),
+});
+
+/** GET /reports/settlements.xlsx — os mesmos filtros, sem paginação. */
+export const exportSettlementsSchema = z.object({
+  query: z.object(settlementFiltersShape),
 });
 
 export const createSettlementSchema = z.object({

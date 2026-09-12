@@ -34,10 +34,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileText, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileSpreadsheet, FileText, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
+import { reportsService } from '@/features/admin/services/reports.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import type { SettlementStatus } from '@/shared/types/api';
@@ -339,8 +340,68 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [cancelTarget, setCancelTarget] = useState<ApiSettlement | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
+  const [exporting, setExporting] = useState(false);
 
 
+
+  /**
+   * Exporta para Excel com os filtros que estao aplicados na tela.
+   *
+   * Passa `params` e a pesquisa — exatamente o que alimenta a listagem. Nao ha
+   * uma segunda nocao de filtros aqui: o servidor recebe os mesmos e usa o
+   * `settlementFiltersShape` que partilha com o endpoint da lista.
+   */
+  async function exportarExcel() {
+    setExporting(true);
+    try {
+      await reportsService.downloadSettlementsXlsx({
+        from: params.from,
+        to: params.to,
+        status: params.status,
+        search: lista.search || undefined,
+      });
+      toast.success('Ficheiro descarregado.');
+    } catch (err: any) {
+      // As mensagens do servidor chegam intactas: "a selecao tem N fechos e o
+      // maximo e M, estreite o periodo" diz a quem clicou o que fazer, e um
+      // "nao foi possivel exportar" generico nao dizia nada.
+      toast.error(err?.message ?? 'Nao foi possivel exportar.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /**
+   * Os botoes de acao, definidos uma vez e usados nos DOIS ramos do cabecalho.
+   *
+   * ─── PORQUE ISTO NAO ESTA ESCRITO INLINE ─────────────────────────────────
+   *
+   * Esta tela tem dois cabecalhos: um proprio, e um ramo reduzido para quando a
+   * SettlementsPage a embrulha em abas e passa `hideHeader`. A primeira versao
+   * do botao de exportar foi para o PageHeader — que com abas NUNCA e
+   * renderizado. O botao existia no codigo, compilava, e nao aparecia no ecra.
+   *
+   * Definido aqui, e impossivel acrescentar uma acao a um dos ramos e esquecer
+   * o outro.
+   */
+  const acoes = (
+    <>
+      <Button
+        variant="outline"
+        className="w-full sm:w-auto"
+        onClick={exportarExcel}
+        disabled={exporting}
+      >
+        {exporting
+          ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          : <FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />}
+        Exportar Excel
+      </Button>
+      <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
+        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
+      </Button>
+    </>
+  );
 
   const params = useMemo(() => {
     const range = period === 'custom'
@@ -473,21 +534,15 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   return (
     <div className="space-y-5 sm:space-y-6">
       {hideHeader ? (
-        <div className="flex justify-end">
-          <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
-            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
-          </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {acoes}
         </div>
       ) : (
         <PageHeader
           title="Registo semanal de faturação"
           subtitle="Fechos por motorista e por semana"
           icon={<ReceiptText className="h-5 w-5" />}
-          actions={
-            <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
-              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
-            </Button>
-          }
+          actions={acoes}
         />
       )}
 

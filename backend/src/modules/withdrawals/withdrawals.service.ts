@@ -57,6 +57,7 @@ export class WithdrawalsService {
 
   async list(actor: Actor, filter: {
     status?: string; search?: unknown; page?: unknown; pageSize?: unknown;
+    companyId?: string;
   } = {}) {
     const gere = podeVer(actor.role);
     const page = parsePage({ page: filter.page, pageSize: filter.pageSize });
@@ -67,6 +68,9 @@ export class WithdrawalsService {
       userId: gere ? undefined : actor.id,
       status: filter.status,
       terms: gere ? parseSearchTerms(filter.search) : [],
+      // So a gestao filtra por sociedade: o motorista ve as proprias e a
+      // sociedade a quem emitiu nao e uma dimensao que lhe interesse cortar.
+      companyId: gere ? filter.companyId : undefined,
     }, page);
   }
 

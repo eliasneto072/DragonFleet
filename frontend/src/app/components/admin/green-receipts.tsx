@@ -30,7 +30,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  AlertCircle, Building2, Download, ExternalLink, FileText, Loader2, Pencil, Plus, Power, Search, Trash2,
+  AlertCircle, Building2, Download, ExternalLink, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Power, Search, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
@@ -47,6 +47,8 @@ import { invalidateAfterCompany } from '@/shared/lib/invalidate';
 import type { ApiWithdrawal, ApiCompany } from '@/shared/types/api';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { Pagination } from '@/app/components/ui/list-toolbar';
+import { saveBlob } from '@/shared/lib/api-client';
+import { reportsService } from '@/features/admin/services/reports.service';
 
 const ALL = '__all__';
 const UNCLASSIFIED = '__unclassified__';
@@ -250,6 +252,7 @@ export function GreenReceipts() {
   // Pesquisa, filtro de sociedade e página no endereço.
   const lista = useListState({ defaults: { sociedade: ALL } });
   const [editing, setEditing] = useState<ApiWithdrawal | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [choice, setChoice] = useState<CompanyChoice | null>(null);
 
   // Só as decididas geram recibo: uma pendente ainda pode ser rejeitada, e uma
@@ -264,6 +267,11 @@ export function GreenReceipts() {
     queryFn: () => withdrawalsService.list({
       status: 'PAID',
       search: lista.search || undefined,
+      // A sociedade vai no PEDIDO. Estava apenas na chave da consulta, e o
+      // filtro era depois aplicado as 25 linhas da pagina enquanto o pager
+      // continuava a contar as 2004 — escolher uma sociedade com dois recibos
+      // mostrava zero linhas.
+      companyId: lista.filters.sociedade === ALL ? undefined : lista.filters.sociedade,
       page: lista.page,
       pageSize: 25,
     }),
@@ -307,17 +315,15 @@ export function GreenReceipts() {
   // este filtro afina o que está à vista — e é por isso que o rótulo diz
   // "nesta página" em vez de fingir que cobre tudo.
   const pageInfo = withdrawalsQ.data?.page;
-  const rows = useMemo(() => {
-    const soc = lista.filters.sociedade;
-    return (withdrawalsQ.data?.withdrawals ?? []).filter((w) => {
-      if (soc === ALL) return true;
-      if (soc === UNCLASSIFIED) return !w.companySetAt;
-      return w.companyId === soc;
-    });
-  }, [withdrawalsQ.data, lista.filters.sociedade]);
+  // Sem filtragem no cliente: o servidor ja devolve o que o filtro pede, e o
+  // `pageInfo` conta o mesmo conjunto. Antes discordavam.
+  const rows = withdrawalsQ.data?.withdrawals ?? [];
 
-  const unclassified = (withdrawalsQ.data?.withdrawals ?? [])
-    .filter((w) => !w.companySetAt).length;
+  // Do servidor, e nao contado sobre a pagina carregada. A versao anterior
+  // percorria os 25 registos da pagina e anunciava "22 retiradas sem sociedade"
+  // quando a base tinha 2000 — quem lia fechava a tela a pensar que estava
+  // quase a acabar.
+  const unclassified = withdrawalsQ.data?.totals?.unclassified ?? 0;
 
   /**
    * Soma do que esta filtrado.
@@ -338,31 +344,170 @@ export function GreenReceipts() {
   /**
    * Exportação para o contabilista.
    *
-   * Feita no cliente sobre o que está filtrado: o que ele leva é o que está a
-   * ver, sem uma segunda consulta ao servidor a poder devolver outra coisa.
-   * O BOM à cabeça é o que faz o Excel abrir os acentos corretamente.
+   * ─── ISTO LEVAVA 25 LINHAS ────────────────────────────────────────────────
+   *
+   * A versão anterior exportava o `rows` desta tela — que é UMA PÁGINA de 25
+   * registos. O comentário dizia que "o que ele leva é o que está a ver", e era
+   * verdade no sentido literal e errado no sentido que importa: o contabilista
+   * que pedia o mês recebia vinte e cinco linhas, num ficheiro chamado
+   * `recibos-verdes-<data>.csv`, sem nada que o avisasse. Nem ele nem quem
+   * exportou tinham como saber que faltava o resto.
+   *
+   * Agora percorre as páginas todas antes de escrever. O teto do servidor é
+   * 200 por pedido (MAX_PAGE_SIZE), portanto para um mês típico é um ou dois
+   * pedidos.
+   *
+   * O filtro de sociedade continua a ser aplicado AQUI, e não no pedido, porque
+   * o servidor ainda não sabe filtrar por sociedade. É a razão pela qual esta
+   * exportação não foi para o servidor como a da Faturação foi.
+   *
+   * O BOM à cabeça é o que faz o Excel abrir os acentos corretamente, e o
+   * ponto-e-vírgula com vírgula decimal é a convenção portuguesa. Isto é CSV —
+   * no `.xlsx` da Faturação a regra é a oposta, números a sério e formato
+   * aplicado pelo Excel.
    */
-  function exportCsv() {
-    const head = ['Data', 'Motorista', 'Valor', 'Sociedade', 'Estado'];
-    const body = rows.map((w) => [
+  async function exportCsv() {
+    let todas: ApiWithdrawal[] = [];
+
+    try {
+      const TAMANHO = 200;
+      for (let pagina = 1; ; pagina++) {
+        const r = await withdrawalsService.list({
+          status: 'PAID',
+          search: lista.search || undefined,
+          companyId: lista.filters.sociedade === ALL ? undefined : lista.filters.sociedade,
+          page: pagina,
+          pageSize: TAMANHO,
+        });
+        todas = todas.concat(r.withdrawals ?? []);
+        if (!r.page?.hasMore) break;
+        // Cinto de segurança: cinquenta páginas são dez mil recibos. Se algum
+        // dia a base crescer para além disto, é melhor o ficheiro sair
+        // incompleto com aviso do que o separador congelar num ciclo.
+        if (pagina >= 50) {
+          toast.warning('Muitos recibos — o ficheiro leva os primeiros 10 000.');
+          break;
+        }
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Não foi possível obter os recibos para exportar.');
+      return;
+    }
+
+    // Sem filtro no cliente: o pedido ja leva a sociedade.
+    const selecionadas = todas;
+
+    if (selecionadas.length === 0) {
+      toast.error('Nada para exportar com os filtros aplicados.');
+      return;
+    }
+
+    escreverCsv(selecionadas);
+    toast.success(`${selecionadas.length} recibo(s) exportado(s).`);
+  }
+
+  /** Excel, gerado no servidor com os filtros da tela. */
+  async function exportarExcel() {
+    setExporting(true);
+    try {
+      await reportsService.downloadReceiptsXlsx({
+        companyId: lista.filters.sociedade === ALL ? undefined : lista.filters.sociedade,
+        search: lista.search || undefined,
+      });
+      toast.success('Ficheiro descarregado.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Nao foi possivel exportar.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function escreverCsv(linhas: ApiWithdrawal[]) {
+    // ─── ORDEM CRESCENTE ─────────────────────────────────────────────────────
+    //
+    // A tela mostra o mais recente primeiro, que e o que interessa a quem olha
+    // para o ecra. Um documento contabilistico le-se ao contrario: do inicio do
+    // periodo para o fim, como um extrato. O contabilista vai conferir contra
+    // outros registos que tambem estao por ordem cronologica.
+    const ordenadas = [...linhas].sort(
+      (a, b) => new Date(a.requestedAt).getTime() - new Date(b.requestedAt).getTime(),
+    );
+
+    const head = ['Data', 'Motorista', 'Valor', 'Sociedade', 'Estado', 'Referência'];
+
+    // `ordenadas`, nao `rows`. O `rows` e a pagina visivel — usa-lo aqui era
+    // exatamente o bug que esta funcao acabou de deixar de ter.
+    const body = ordenadas.map((w) => [
       ymd(w.requestedAt),
       driverName(w.userId),
       Number(w.amount).toFixed(2).replace('.', ','),
       describeCompany(w).label,
       w.status === 'PAID' ? 'Pago' : 'Aprovado',
+      // A referencia torna cada linha rastreavel. Sem ela, "este recibo de
+      // 96,84 EUR de que retirada e?" nao tem resposta — e num ficheiro de duas
+      // mil linhas essa pergunta aparece.
+      w.id,
     ]);
 
-    const csv = [head, ...body]
+    // ─── LINHA DE TOTAL ──────────────────────────────────────────────────────
+    //
+    // Duas mil linhas sem total obriga quem recebe a soma-las. Vai no fim, com
+    // a contagem, e as colunas que nao se somam ficam vazias em vez de repetir
+    // rotulos.
+    const somaTotal = ordenadas.reduce((acc, w) => acc + Number(w.amount), 0);
+    const total = [
+      `TOTAL (${ordenadas.length} recibos)`,
+      '',
+      somaTotal.toFixed(2).replace('.', ','),
+      '', '', '',
+    ];
+
+    const csv = [head, ...body, total]
       .map((line) => line.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
       .join('\r\n');
 
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recibos-verdes-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // `saveBlob` do api-client em vez de repetir o createObjectURL aqui. O
+    // comentario naquele ficheiro conta a historia: havia duas copias disto no
+    // projeto e uma revogava o URL de imediato, o que cancela o download em
+    // alguns browsers. Esta era a copia que faltava juntar.
+    saveBlob(
+      new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }),
+      nomeDoFicheiro(ordenadas),
+    );
+  }
+
+  /**
+   * O nome leva o PERIODO dos dados, nao a data em que foi gerado.
+   *
+   * O nome anterior era `recibos-verdes-<hoje>.csv`. Num ficheiro cujos dados
+   * iam de agosto de 2025 a agosto de 2026, isso nao dizia nada: quem o abrisse
+   * seis meses depois nao sabia o que continha, e dois ficheiros gerados no
+   * mesmo dia com filtros diferentes eram indistinguiveis.
+   *
+   * As datas saem das linhas exportadas — ja ordenadas, portanto a primeira e a
+   * ultima sao os extremos do periodo.
+   */
+  function nomeDoFicheiro(ordenadas: ApiWithdrawal[]): string {
+    const iso = (v: string) => new Date(v).toISOString().slice(0, 10);
+    const de = iso(ordenadas[0].requestedAt);
+    const ate = iso(ordenadas[ordenadas.length - 1].requestedAt);
+
+    const base = de === ate ? `recibos-verdes-${de}` : `recibos-verdes-${de}-a-${ate}`;
+
+    // A sociedade filtrada entra no nome: quem exporta por entidade acaba com
+    // varios ficheiros do mesmo periodo na pasta.
+    const soc = lista.filters.sociedade;
+    if (soc === UNCLASSIFIED) return `${base}-por-classificar.csv`;
+    if (soc !== ALL) {
+      const nome = companiesQ.data?.companies.find((c) => c.id === soc)?.name;
+      if (nome) {
+        const limpo = nome.toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        return `${base}-${limpo}.csv`;
+      }
+    }
+    return `${base}.csv`;
   }
 
   if (withdrawalsQ.isLoading) {
@@ -392,10 +537,20 @@ export function GreenReceipts() {
         subtitle="A que sociedade cada motorista emitiu recibo"
         icon={<FileText className="h-5 w-5" />}
         actions={
-          <Button variant="outline" className="w-full sm:w-auto" onClick={exportCsv}>
-            <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-            Exportar CSV
-          </Button>
+          <>
+            {/* Excel primeiro: e o que se abre para ler. O CSV fica ao lado
+                para quem tenha uma importacao que o consome. */}
+            <Button className="w-full sm:w-auto" onClick={exportarExcel} disabled={exporting}>
+              {exporting
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                : <FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />}
+              Exportar Excel
+            </Button>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={exportCsv}>
+              <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+              CSV
+            </Button>
+          </>
         }
       />
 

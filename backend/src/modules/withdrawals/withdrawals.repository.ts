@@ -7,6 +7,16 @@ import {
   buildPageInfo, buildSearchWhere, type PageParams, type Paged,
 } from '../../shared/http/pagination';
 
+/**
+ * Valor especial do filtro de sociedade: retiradas ainda sem sociedade
+ * registada.
+ *
+ * Vive aqui e e exportado porque o `where` desta camada e o seletor da tela tem
+ * de concordar no valor exato. Uma constante duplicada dos dois lados divergia
+ * no dia em que alguem a mudasse num so.
+ */
+export const UNCLASSIFIED = '__unclassified__';
+
 export class WithdrawalsRepository implements IWithdrawalRepository {
   private readonly publicSelect = {
     id: true,
@@ -48,18 +58,51 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
    * A pesquisa atravessa a relação: a retirada não tem nome, o utilizador tem.
    */
   async findManyPaged(
-    filter: { userId?: string; status?: string; terms?: string[] },
+    filter: {
+      userId?: string;
+      status?: string;
+      terms?: string[];
+      /**
+       * Sociedade a que o recibo foi emitido.
+       *
+       * `UNCLASSIFIED` apanha as que ainda nao tem sociedade registada. Aceita
+       * um valor especial em vez de um booleano separado porque na tela e UM
+       * seletor: "todas", "por classificar", ou uma das sociedades.
+       */
+      companyId?: string;
+    },
     page: PageParams,
-  ): Promise<Paged<IWithdrawalPublic>> {
+  ): Promise<Paged<IWithdrawalPublic> & { totals: { unclassified: number } }> {
     try {
       const termos = filter.terms ?? [];
-      const where = {
+
+      // ─── PORQUE O FILTRO DE SOCIEDADE VEIO PARA CA ─────────────────────────
+      //
+      // Estava no cliente: a tela pedia uma pagina de 25 e depois filtrava-a
+      // em memoria. O `pageInfo` continuava a contar as 2004 retiradas.
+      //
+      // O resultado era um filtro avariado. Escolher "Renas e Elfos", que tem
+      // dois recibos, mostrava ZERO linhas com o pager a dizer "1-25 de 2004":
+      // os dois recibos estavam em alguma das 81 paginas, e so se chegava la
+      // percorrendo-as uma a uma. E como a sociedade estava na chave da
+      // consulta sem ir no pedido, trocar de filtro refazia o pedido e dava a
+      // impressao de que algo tinha acontecido.
+      const porSociedade =
+        filter.companyId === undefined
+          ? {}
+          : filter.companyId === UNCLASSIFIED
+            ? { companySetAt: null }
+            : { companyId: filter.companyId };
+
+      const base = {
         ...(filter.userId ? { userId: filter.userId } : {}),
         ...(filter.status ? { status: filter.status as never } : {}),
         ...(termos.length > 0 ? { user: buildSearchWhere(termos, ['name', 'email']) } : {}),
       };
 
-      const [rows, total] = await Promise.all([
+      const where = { ...base, ...porSociedade };
+
+      const [rows, total, semSociedade] = await Promise.all([
         prisma.withdrawal.findMany({
           where,
           select: this.publicSelect,
@@ -68,11 +111,29 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
           take: page.pageSize,
         }),
         prisma.withdrawal.count({ where }),
+
+        // ─── PORQUE ISTO E CONTADO EM SQL ────────────────────────────────────
+        //
+        // A tela dos Recibos Verdes contava as retiradas sem sociedade a
+        // percorrer a PAGINA carregada. Com 25 por pagina, o aviso dizia
+        // "22 retiradas sem sociedade registada" quando a base tinha 2000.
+        //
+        // E o pior tipo de numero errado: subestima trabalho pendente. Quem le
+        // acha que tem vinte e dois recibos para classificar, fecha a tela, e
+        // tem dois mil. Um numero que mente por defeito e pior do que numero
+        // nenhum, porque parece informacao.
+        //
+        // Sobre `base` e nao sobre `where`: este numero e uma LISTA DE TAREFAS,
+        // nao uma descricao do que esta no ecra. Filtrar por "Renas e Elfos"
+        // nao faz desaparecer o trabalho de classificar as outras — se usasse
+        // o `where`, o aviso dava zero e quem lesse pensava que estava feito.
+        prisma.withdrawal.count({ where: { ...base, companySetAt: null } }),
       ]);
 
       return {
         items: rows.map((w) => this.toPublic(w) as IWithdrawalPublic),
         page: buildPageInfo(page, total),
+        totals: { unclassified: semSociedade },
       };
     } catch (err) {
       logger.error('Erro ao obter retiradas paginadas', err);

@@ -81,6 +81,53 @@ function toPublic(r: Row, includeInternal = false): SettlementPublic {
   };
 }
 
+
+/** Os filtros que a lista e a exportacao partilham. */
+export interface SettlementFilter {
+  userId?: string;
+  status?: SettlementStatus;
+  from?: Date;
+  to?: Date;
+  /** Termos a casar contra o NOME do motorista do fecho. */
+  terms?: string[];
+}
+
+/**
+ * O `where` dos fechos, num sitio so.
+ *
+ * ─── PORQUE ESTA FUNCAO EXISTE ─────────────────────────────────────────────
+ *
+ * A tela de Faturacao e a exportacao para Excel tem de responder exatamente a
+ * mesma pergunta. Enquanto o `where` estava escrito dentro do findManyPaged, a
+ * exportacao teria de o reescrever — e duas construcoes da mesma condicao
+ * divergem no dia em que alguem corrige uma e esquece a outra.
+ *
+ * O sintoma seria o pior possivel: a tela mostra um total, o ficheiro que vai
+ * para o contabilista mostra outro, e ninguem consegue dizer qual esta certo.
+ *
+ * Partilhando isto, divergirem deixa de ser possivel.
+ */
+export function buildSettlementWhere(filter: SettlementFilter) {
+  const termos = filter.terms ?? [];
+  const porNome = termos.length > 0
+    ? { user: buildSearchWhere(termos, ['name', 'email']) }
+    : {};
+
+  return {
+    ...(filter.userId ? { userId: filter.userId } : {}),
+    ...(filter.status ? { status: filter.status } : {}),
+    ...porNome,
+    ...(filter.from || filter.to
+      ? {
+          weekStart: {
+            ...(filter.from ? { gte: filter.from } : {}),
+            ...(filter.to ? { lte: filter.to } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export const settlementsRepository = {
   async findById(id: string, includeInternal = false): Promise<SettlementPublic | null> {
     const row = await prisma.weeklySettlement.findUnique({ where: { id }, include });
@@ -117,24 +164,7 @@ export const settlementsRepository = {
     // lista rolável — para encontrar alguém a meio do alfabeto era preciso
     // rolar centenas de linhas. Escrever três letras é mais rápido do que
     // qualquer lista, por melhor ordenada que esteja.
-    const termos = filter.terms ?? [];
-    const porNome = termos.length > 0
-      ? { user: buildSearchWhere(termos, ['name', 'email']) }
-      : {};
-
-    const where = {
-      ...(filter.userId ? { userId: filter.userId } : {}),
-      ...(filter.status ? { status: filter.status } : {}),
-      ...porNome,
-      ...(filter.from || filter.to
-        ? {
-            weekStart: {
-              ...(filter.from ? { gte: filter.from } : {}),
-              ...(filter.to ? { lte: filter.to } : {}),
-            },
-          }
-        : {}),
-    };
+    const where = buildSettlementWhere(filter);
 
     const [rows, total, somas] = await Promise.all([
       prisma.weeklySettlement.findMany({
@@ -177,6 +207,49 @@ export const settlementsRepository = {
    *
    * Cancelados não contam: a semana volta a ficar livre.
    */
+  /**
+   * Conta os fechos que um filtro apanha, sem os trazer.
+   *
+   * Serve o tecto da exportacao: o servico no Render tem 512 MB, e a base de
+   * desempenho tem dois mil motoristas. Cinquenta e duas semanas de cada um sao
+   * mais de cem mil linhas — o exceljs em memoria derruba a API e leva o site
+   * atras. Contar primeiro custa uma consulta e evita isso.
+   */
+  async countForExport(filter: SettlementFilter): Promise<number> {
+    try {
+      return await prisma.weeklySettlement.count({ where: buildSettlementWhere(filter) });
+    } catch (err) {
+      logger.error('Erro ao contar fechos para exportacao', err);
+      throw err;
+    }
+  },
+
+  /**
+   * Todos os fechos de um filtro, sem paginacao.
+   *
+   * Ordenados ASCENDENTE por semana, ao contrario da lista. Na tela a pergunta
+   * e "o que aconteceu ultimamente" e o mais recente vem primeiro; num
+   * documento contabilistico le-se do inicio do periodo para o fim, como um
+   * extrato.
+   *
+   * O `includeInternal` fica FALSO e nao e parametro. Ver a nota no servico de
+   * exportacao: um ficheiro sai do sistema e deixa de haver controlo sobre quem
+   * o abre.
+   */
+  async findManyForExport(filter: SettlementFilter): Promise<SettlementPublic[]> {
+    try {
+      const rows = await prisma.weeklySettlement.findMany({
+        where: buildSettlementWhere(filter),
+        orderBy: [{ weekStart: 'asc' }, { user: { name: 'asc' } }],
+        include,
+      });
+      return rows.map((r) => toPublic(r as Row, false));
+    } catch (err) {
+      logger.error('Erro ao buscar fechos para exportacao', err);
+      throw err;
+    }
+  },
+
   async findOverlapping(
     userId: string,
     weekStart: Date,

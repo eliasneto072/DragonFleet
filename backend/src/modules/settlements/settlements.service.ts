@@ -55,7 +55,9 @@ function podeVer(role?: UserRole) {
 }
 
 /** "2026-07-06" → Date à meia-noite UTC, sem deslocamento de fuso. */
-function parseDay(value: string, field: string): Date {
+/** Exportado para a exportacao de Faturacao interpretar as datas da mesma
+ *  maneira que a lista. */
+export function parseDay(value: string, field: string): Date {
   const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
   if (!y || !m || !d) {
     throw new AppError(`Data inválida em ${field}`, 400, 'INVALID_DATE');

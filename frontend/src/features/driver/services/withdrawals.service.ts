@@ -23,12 +23,32 @@ export const withdrawalsService = {
    */
   list(params: {
     status?: string; search?: string; page?: number; pageSize?: number;
-  } = {}): Promise<{ withdrawals: ApiWithdrawal[]; page: PageInfo }> {
+    /**
+     * Sociedade. Aceita o valor especial de "por classificar" — o mesmo que o
+     * servidor conhece. Vive no pedido e nao no cliente desde que se descobriu
+     * que filtrar a pagina carregada mostrava zero linhas com o pager a dizer
+     * "1-25 de 2004".
+     */
+    companyId?: string;
+  } = {}): Promise<{
+    withdrawals: ApiWithdrawal[];
+    page: PageInfo;
+    /**
+     * Totais do FILTRO INTEIRO, nao da pagina.
+     *
+     * `unclassified` sao as retiradas sem sociedade registada. Vem contado em
+     * SQL porque a tela dos Recibos Verdes o contava percorrendo a pagina, e
+     * anunciava 22 quando a base tinha 2000 — um numero que subestimava
+     * trabalho pendente.
+     */
+    totals?: { unclassified: number };
+  }> {
     const q = new URLSearchParams();
     if (params.status) q.set('status', params.status);
     if (params.search) q.set('search', params.search);
     if (params.page && params.page > 1) q.set('page', String(params.page));
     if (params.pageSize) q.set('pageSize', String(params.pageSize));
+    if (params.companyId) q.set('companyId', params.companyId);
     const qs = q.toString();
     return apiClient.get(`/withdrawals${qs ? `?${qs}` : ''}`);
   },

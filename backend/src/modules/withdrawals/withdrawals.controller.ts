@@ -22,13 +22,16 @@ function getActor(req: AuthRequest) {
 
 export class WithdrawalsController {
   list = async (req: AuthRequest, res: Response) => {
-    const { items, page } = await withdrawalsService.list(getActor(req), {
+    const { items, page, totals } = await withdrawalsService.list(getActor(req), {
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
       search: req.query.search,
       page: req.query.page,
       pageSize: req.query.pageSize,
+      companyId: typeof req.query.companyId === 'string' ? req.query.companyId : undefined,
     });
-    return ok(res, { withdrawals: items, page });
+    // `totals.unclassified` cobre o FILTRO INTEIRO e nao a pagina — e o numero
+    // que o aviso dos Recibos Verdes mostra. Ver a nota no repositorio.
+    return ok(res, { withdrawals: items, page, totals });
   };
 
   listByUser = async (req: AuthRequest, res: Response) => {
