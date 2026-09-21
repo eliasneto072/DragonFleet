@@ -12,8 +12,8 @@
 // A tela responde às três perguntas dele, por esta ordem: quanto tenho, como
 // correu cada semana, e o que já comuniquei.
 
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -44,6 +44,11 @@ import { formatCurrency, formatCurrencyCompact } from '@/shared/lib/format';
 import { PLATFORM_OPTIONS, platformLabel } from '@/shared/lib/platform-labels';
 import { WalletIllustration } from '@/app/components/ui/wallet-illustration';
 import type { ApiEarning, EarningPlatform, EarningStatus } from '@/shared/types/api';
+import type { LedgerEntry, LedgerReconciliation } from '@/features/admin/services/balance.service';
+import {
+  AccountMovementsCard, BalanceBeforeAfter, MovementDetailDialog, findAdjustment,
+  useMyLedger, type MovementLink,
+} from '@/app/components/driver/account-movements';
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'var(--popover)',
@@ -225,7 +230,12 @@ function WeekRow({ label, value, muted, strong, negative }: {
   );
 }
 
-function WeekDetail({ s }: { s: ApiSettlement }) {
+function WeekDetail({ s, entry, reconciliation }: {
+  s: ApiSettlement;
+  /** A linha deste fecho no extrato. Falta enquanto o extrato carrega. */
+  entry?: LedgerEntry;
+  reconciliation?: LedgerReconciliation;
+}) {
   return (
     <div className="space-y-4 text-sm">
       <p className="text-muted-foreground">
@@ -297,6 +307,17 @@ function WeekDetail({ s }: { s: ApiSettlement }) {
         </dl>
       </div>
 
+      {/* Pedido dos motoristas: saber quanto tinham antes deste fecho e com
+          quanto ficaram. Vem do extrato, para bater com o que o escritório vê
+          linha a linha. */}
+      {entry && (
+        <BalanceBeforeAfter
+          entry={entry}
+          reconciliation={reconciliation}
+          movementLabel="Este fecho"
+        />
+      )}
+
       {s.notes?.trim() && (
         <div className="rounded-lg bg-secondary p-3">
           <p className="text-xs font-medium text-muted-foreground">Observações do escritório</p>
@@ -350,6 +371,8 @@ export function DriverDashboard() {
   const [reportOpen, setReportOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [weekDetail, setWeekDetail] = useState<ApiSettlement | null>(null);
+  const [movementDetail, setMovementDetail] = useState<LedgerEntry | null>(null);
+  const location = useLocation();
 
   const settlementsQuery = useQuery({
     queryKey: queryKeys.settlements.list(user?.id, 'REGISTERED'),
@@ -367,6 +390,10 @@ export function DriverDashboard() {
     queryKey: queryKeys.earnings.list,
     queryFn: () => earningsService.list(),
   });
+
+  const ledgerQuery = useMyLedger();
+  const ledgerEntries = ledgerQuery.data?.entries ?? [];
+  const reconciliation = ledgerQuery.data?.reconciliation;
 
   const settlements = settlementsQuery.data?.settlements ?? [];
   const summary = balanceQuery.data?.balance;
@@ -391,6 +418,29 @@ export function DriverDashboard() {
   );
 
   const pendingEarnings = earnings.filter((e) => e.status === 'PENDING');
+
+  // Vindo de uma notificação: abrir o fecho ou o ajuste de que ela fala. Espera
+  // pelos dados de que precisa e limpa o pedido do histórico, para um refresh
+  // ou um "voltar" não reabrir o detalhe.
+  const pendingLink = (location.state as { openMovement?: MovementLink } | null)?.openMovement;
+  useEffect(() => {
+    if (!pendingLink) return;
+    if (pendingLink.kind === 'SETTLEMENT') {
+      if (!settlementsQuery.isSuccess) return;
+      const s = settlements.find((x) => x.weekStart.slice(0, 10) === pendingLink.weekStart);
+      if (s) setWeekDetail(s);
+    } else {
+      if (!ledgerQuery.isSuccess) return;
+      const e = findAdjustment(ledgerEntries, pendingLink);
+      if (e) setMovementDetail(e);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingLink, settlementsQuery.isSuccess, ledgerQuery.isSuccess]);
+
+  const weekEntry = weekDetail
+    ? ledgerEntries.find((e) => e.settlementId === weekDetail.id)
+    : undefined;
 
   if (settlementsQuery.isLoading) return <DashboardSkeleton />;
 
@@ -682,6 +732,15 @@ export function DriverDashboard() {
         </CardContent>
       </Card>
 
+      {/* Movimentos da conta */}
+      <AccountMovementsCard
+        onOpenSettlement={(id) => {
+          const s = settlements.find((x) => x.id === id);
+          if (s) setWeekDetail(s);
+        }}
+        onOpenMovement={setMovementDetail}
+      />
+
       {/* Comunicações */}
       {earnings.length > 0 && (
         <Card className="shadow-card">
@@ -728,7 +787,9 @@ export function DriverDashboard() {
             <DialogTitle>Detalhe da semana</DialogTitle>
             <DialogDescription>Tudo o que entrou e saiu neste período</DialogDescription>
           </DialogHeader>
-          {weekDetail && <WeekDetail s={weekDetail} />}
+          {weekDetail && (
+            <WeekDetail s={weekDetail} entry={weekEntry} reconciliation={reconciliation} />
+          )}
           <DialogFooter>
             <Button
               variant="outline" className="w-full sm:w-auto"
@@ -739,6 +800,13 @@ export function DriverDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Detalhe de um crédito, desconto ou retirada */}
+      <MovementDetailDialog
+        entry={movementDetail}
+        reconciliation={reconciliation}
+        onClose={() => setMovementDetail(null)}
+      />
     </div>
   );
 }
