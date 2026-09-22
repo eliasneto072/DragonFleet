@@ -54,7 +54,9 @@ const fixo = (opts: { annualRate?: number; termDays?: number; penalty?: number }
     earlyWithdrawalPenalty: opts.penalty ?? 2,
   });
 
-async function aplica(planId: string, amount: number, userId = motorista.id) {
+// SEM `async`: um `async` embrulhava o pedido numa Promise simples e perdia o
+// `.expect()` do supertest — foi o erro de tipos na primeira ida à CI.
+function aplica(planId: string, amount: number, userId = motorista.id) {
   return request(app).post('/investments').set(asDriver(userId)).send({ planId, amount });
 }
 
