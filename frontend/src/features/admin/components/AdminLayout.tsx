@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck,
+  ShieldCheck, PiggyBank,
 } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -32,12 +32,13 @@ const SO_ADMIN = new Set([
  * cada tela nova ficaria visível para ele até alguém se lembrar de a excluir —
  * e ninguém se lembra.
  *
- * Ele lê estas quatro e só escreve na última.
+ * Ele lê estas e só escreve no suporte.
  */
 const VE_SUPORTE = new Set([
   '/app/admin/drivers',
   '/app/admin/documents',
   '/app/admin/financial',
+  '/app/admin/investments',
   '/app/admin/support',
 ]);
 
@@ -53,6 +54,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   // Logo a seguir ao Financeiro porque é a mesma tarefa vista de outro ângulo:
   // ali decide-se e classifica-se, aqui consulta-se o que ficou registado.
   { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes' },
+  { to: '/app/admin/investments',   icon: PiggyBank,       label: 'Investimentos' },
   { to: '/app/admin/fleet',         icon: Car,             label: 'Frotas'        },
   { to: '/app/admin/analytics',     icon: TrendingUp,      label: 'Análises'      },
   { to: '/app/admin/notifications', icon: Bell,            label: 'Notificações'  },

@@ -78,6 +78,19 @@ export function invalidateAfterSettlement(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
 }
 
+/**
+ * Aplicação ou resgate de investimento.
+ *
+ * Move dinheiro entre o saldo principal e a aplicação: o saldo e o extrato
+ * mudam, e o passivo do painel também (o aplicado continua a ser devido).
+ */
+export function invalidateAfterInvestment(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: queryKeys.investments.all });
+  qc.invalidateQueries({ queryKey: queryKeys.balance.all });
+  qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
+  qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
+}
+
 /** Ajuste manual de saldo. */
 export function invalidateAfterAdjustment(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.balance.all });

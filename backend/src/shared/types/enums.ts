@@ -12,4 +12,7 @@ export {
   TicketCategory,
   AdjustmentType,
   SettlementStatus,
+  InvestmentPlanType,
+  InvestmentStatus,
+  InvestmentCloseReason,
 } from '@prisma/client';

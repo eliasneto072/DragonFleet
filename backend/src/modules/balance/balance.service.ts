@@ -3,6 +3,7 @@
 // Cálculo canônico do saldo do motorista:
 //   disponível = fechos semanais + créditos − débitos
 //                − levantados (APPROVED/PAID) − reservados (PENDING)
+//                − aplicado em investimentos + devolvido nos resgates
 //
 // Levantamentos PENDING reservam o valor (evita pedir duas vezes o mesmo dinheiro);
 // REJECTED devolve ao saldo automaticamente (não entra na soma).
@@ -58,6 +59,12 @@ export interface BalanceSummary {
   totalDebits: number;
   totalWithdrawn: number;   // APPROVED + PAID
   pendingWithdrawals: number; // PENDING (reservado)
+  /** Tudo o que alguma vez foi aplicado em investimentos (sai do saldo). */
+  totalInvested: number;
+  /** O que voltou dos investimentos nos resgates (entra no saldo). */
+  totalInvestmentReturns: number;
+  /** O que está aplicado neste momento. Informativo: já está dentro das duas de cima. */
+  investedActive: number;
   available: number;
 }
 
@@ -110,6 +117,9 @@ export class BalanceService {
         pending_withdrawals: number;
         reported_earnings: number;
         available: number;
+        invested: number;
+        investment_returns: number;
+        invested_active: number;
       }[]>`
         SELECT
           CAST(settlements         AS FLOAT) AS settlements,
@@ -118,7 +128,10 @@ export class BalanceService {
           CAST(withdrawn           AS FLOAT) AS withdrawn,
           CAST(pending_withdrawals AS FLOAT) AS pending_withdrawals,
           CAST(reported_earnings   AS FLOAT) AS reported_earnings,
-          CAST(available           AS FLOAT) AS available
+          CAST(available           AS FLOAT) AS available,
+          CAST(invested            AS FLOAT) AS invested,
+          CAST(investment_returns  AS FLOAT) AS investment_returns,
+          CAST(invested_active     AS FLOAT) AS invested_active
         FROM driver_balances
         WHERE user_id = ${userId}
       `;
@@ -136,6 +149,9 @@ export class BalanceService {
         totalDebits: round(r?.debits ?? 0),
         totalWithdrawn: round(r?.withdrawn ?? 0),
         pendingWithdrawals: round(r?.pending_withdrawals ?? 0),
+        totalInvested: round(r?.invested ?? 0),
+        totalInvestmentReturns: round(r?.investment_returns ?? 0),
+        investedActive: round(r?.invested_active ?? 0),
         available: round(r?.available ?? 0),
       };
     } catch (err) {

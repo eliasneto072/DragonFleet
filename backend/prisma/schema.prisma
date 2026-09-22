@@ -151,6 +151,7 @@ model User {
   earningsReviewed   Earning[]           @relation("earningsReviewed")
   bankAccount        BankAccount?
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
+  investments        Investment[]
 
   @@map("users")
 }
@@ -569,4 +570,173 @@ model WeeklySettlement {
   @@index([weekStart])
   @@index([status])
   @@map("weekly_settlements")
+}
+
+
+/* =========================
+   INVESTIMENTOS
+   =========================
+
+   O motorista aplica parte do saldo num plano e o valor rende todos os dias.
+
+   ─── ONDE O DINHEIRO ESTÁ ───────────────────────────────────────────────────
+
+   Aplicar TIRA do saldo principal (o `principal` da aplicação é subtraído na
+   view `driver_balances`), e resgatar DEVOLVE (o `payout` é somado). Entre uma
+   coisa e outra o dinheiro vive aqui, e os ganhos diários acumulam-se na
+   própria aplicação — NÃO no saldo principal. Só entram no saldo principal no
+   resgate, como parte do `payout`.
+
+   ─── JUROS SIMPLES ──────────────────────────────────────────────────────────
+
+   Decisão do cliente: cada dia rende sobre o valor aplicado, nunca sobre os
+   ganhos já acumulados. Ganho de um dia = principal × taxa anual ÷ 100 ÷ 365.
+
+   ─── PORQUE HÁ UMA LINHA POR DIA ────────────────────────────────────────────
+
+   `investment_accruals` guarda cada dia com a taxa que se aplicou nesse dia.
+   Nos planos flexíveis a taxa muda; recalcular o passado com a taxa de hoje
+   mudaria ganhos que o motorista já viu. Com uma linha por dia, o passado fica
+   escrito e o `@@unique([investmentId, day])` impede que o job, corrido duas
+   vezes, pague o mesmo dia duas vezes.
+*/
+
+enum InvestmentPlanType {
+  /// Taxa fixa, congelada no momento da aplicação, com prazo.
+  FIXED
+  /// Taxa definida pela administração e alterável; o histórico fica em
+  /// `investment_plan_rates`.
+  FLEXIBLE
+}
+
+enum InvestmentStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum InvestmentCloseReason {
+  /// Plano fixo que chegou ao fim do prazo. Sem penalização.
+  MATURED
+  /// Plano fixo resgatado antes do prazo. Aplica a penalização do plano.
+  EARLY
+  /// Plano flexível resgatado pelo titular.
+  WITHDRAWN
+}
+
+model InvestmentPlan {
+  id          String             @id @default(cuid())
+  name        String
+  description String?
+  type        InvestmentPlanType
+
+  /// Taxa anual em percentagem (2.5 = 2,5% ao ano).
+  ///
+  /// Nos FIXOS é a taxa oferecida a quem aplicar a partir de agora — quem já
+  /// aplicou fica com a que estava em vigor (copiada para a aplicação).
+  /// Nos FLEXÍVEIS é a taxa em vigor hoje; a que conta para cada dia vem do
+  /// histórico em `investment_plan_rates`.
+  annualRate  Decimal            @map("annual_rate") @db.Decimal(6, 3)
+
+  /// Só FIXED: duração em dias.
+  termDays    Int?               @map("term_days")
+
+  /// Só FIXED: penalização por resgate antecipado, em % do valor aplicado.
+  earlyWithdrawalPenalty Decimal? @map("early_withdrawal_penalty") @db.Decimal(5, 2)
+
+  minAmount   Decimal            @default(0) @map("min_amount") @db.Decimal(12, 2)
+
+  /// Desativar deixa de aceitar aplicações novas; as que existem continuam.
+  active      Boolean            @default(true)
+
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  rates       InvestmentPlanRate[]
+  investments Investment[]
+
+  @@map("investment_plans")
+}
+
+/// Histórico de taxas de um plano. Cada linha vale a partir de `effectiveFrom`
+/// até à linha seguinte. Nunca se altera um dia que já foi pago: o serviço só
+/// aceita `effectiveFrom` de hoje em diante.
+model InvestmentPlanRate {
+  id            String   @id @default(cuid())
+  planId        String   @map("plan_id")
+  annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  plan InvestmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, effectiveFrom])
+  @@map("investment_plan_rates")
+}
+
+model Investment {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  planId    String   @map("plan_id")
+
+  /// O valor aplicado. Sai do saldo principal no momento da aplicação.
+  principal Decimal  @db.Decimal(12, 2)
+
+  /// Copiados do plano no momento da aplicação, e congelados. Mudar o plano
+  /// depois não muda o que foi prometido a quem já aplicou.
+  /// `annualRate` só nos FIXOS; nos FLEXÍVEIS fica nulo e a taxa de cada dia
+  /// vem do histórico do plano.
+  planType    InvestmentPlanType @map("plan_type")
+  annualRate  Decimal?           @map("annual_rate") @db.Decimal(6, 3)
+  termDays    Int?               @map("term_days")
+  penaltyRate Decimal?           @map("penalty_rate") @db.Decimal(5, 2)
+
+  /// Dia (em Lisboa) em que foi aplicado. Rende a partir deste dia, inclusive.
+  startDate    DateTime  @map("start_date") @db.Date
+  /// Só FIXED: startDate + termDays. Rende até à véspera; neste dia fecha.
+  maturityDate DateTime? @map("maturity_date") @db.Date
+
+  /// Último dia já pago em `investment_accruals`. Nulo = nenhum.
+  accruedThrough DateTime? @map("accrued_through") @db.Date
+  /// Soma das linhas diárias, com seis casas: arredondar cada dia ao cêntimo
+  /// perderia até meio cêntimo por dia, e num ano isso nota-se.
+  accrued        Decimal   @default(0) @db.Decimal(16, 6)
+
+  status      InvestmentStatus       @default(ACTIVE)
+  closeReason InvestmentCloseReason? @map("close_reason")
+
+  /// O que voltou ao saldo principal: principal + ganhos − penalização,
+  /// arredondado ao cêntimo. É este valor que a view soma.
+  payout        Decimal?  @db.Decimal(12, 2)
+  penaltyAmount Decimal?  @map("penalty_amount") @db.Decimal(12, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  closedAt  DateTime? @map("closed_at")
+
+  /// Cascade como os fechos e os ajustes: apagar um utilizador leva o histórico
+  /// dele. O serviço de utilizadores RECUSA apagar quem tem aplicações ativas —
+  /// isso seria apagar dinheiro que a empresa deve.
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     InvestmentPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  accruals InvestmentAccrual[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([planId])
+  @@map("investments")
+}
+
+model InvestmentAccrual {
+  id           String   @id @default(cuid())
+  investmentId String   @map("investment_id")
+  day          DateTime @db.Date
+  /// A taxa que se aplicou neste dia. Guardada para o extrato explicar o valor.
+  annualRate   Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  amount       Decimal  @db.Decimal(16, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+
+  @@unique([investmentId, day])
+  @@map("investment_accruals")
 }

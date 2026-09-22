@@ -425,7 +425,9 @@ export function DriverDashboard() {
   const pendingLink = (location.state as { openMovement?: MovementLink } | null)?.openMovement;
   useEffect(() => {
     if (!pendingLink) return;
-    if (pendingLink.kind === 'SETTLEMENT') {
+    if (pendingLink.kind === 'INVESTMENTS') {
+      // Não vem por aqui (a notificação navega direto), mas o tipo admite-o.
+    } else if (pendingLink.kind === 'SETTLEMENT') {
       if (!settlementsQuery.isSuccess) return;
       const s = settlements.find((x) => x.weekStart.slice(0, 10) === pendingLink.weekStart);
       if (s) setWeekDetail(s);
@@ -476,6 +478,14 @@ export function DriverDashboard() {
           : []),
         ...(summary.pendingWithdrawals > 0
           ? [{ label: 'Retiradas em análise', value: summary.pendingWithdrawals, sign: '−' as const }]
+          : []),
+        // Investimentos: o aplicado sai, o resgatado volta. Mostrados em
+        // separado para a conta bater linha a linha com o que o motorista fez.
+        ...(summary.totalInvested > 0
+          ? [{ label: 'Aplicado em investimentos', value: summary.totalInvested, sign: '−' as const }]
+          : []),
+        ...(summary.totalInvestmentReturns > 0
+          ? [{ label: 'Resgatado de investimentos', value: summary.totalInvestmentReturns, sign: '+' as const }]
           : []),
       ]
     : [];

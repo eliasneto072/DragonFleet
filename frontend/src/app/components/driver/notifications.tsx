@@ -163,7 +163,8 @@ export function Notifications() {
               }`}
               onClick={() => {
                 if (!notification.read) markAsRead(notification.id);
-                if (link) navigate('/app/driver/dashboard', { state: { openMovement: link } });
+                if (link?.kind === 'INVESTMENTS') navigate('/app/driver/investments');
+                else if (link) navigate('/app/driver/dashboard', { state: { openMovement: link } });
               }}
             >
               <CardContent className="p-4">

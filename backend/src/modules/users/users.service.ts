@@ -6,6 +6,7 @@ import { usersRepository } from './users.repository';
 import { Actor, IUserPublic } from './users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
 import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
+import { prisma } from '../../config/prisma';
 
 function isAdmin(role?: UserRole) {
   return role === UserRole.ADMIN;
@@ -312,6 +313,17 @@ export class UsersService {
     }
 
     await this.assertNotLastAdmin(alvo);
+
+    // Apagar a conta apagaria as aplicações em cascata — e com elas dinheiro
+    // que a empresa deve a esta pessoa. Primeiro resgata-se, depois apaga-se.
+    const ativas = await prisma.investment.count({ where: { userId: id, status: 'ACTIVE' } });
+    if (ativas > 0) {
+      throw new AppError(
+        'Este utilizador tem aplicações em investimentos ativas. Resgate-as antes de apagar a conta.',
+        400,
+        'HAS_ACTIVE_INVESTMENTS',
+      );
+    }
 
     return usersRepository.delete(id);
   }

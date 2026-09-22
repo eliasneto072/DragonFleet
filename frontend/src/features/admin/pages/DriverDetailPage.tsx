@@ -7,7 +7,7 @@
 //   cada seção com barra de progresso enviados/exigidos
 
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -422,6 +422,17 @@ export function DriverDetailPage() {
                     <p className="font-semibold mt-1">{eur(balance.pendingWithdrawals)}</p>
                   </div>
                 </div>
+
+                {/* O que está aplicado já saiu do disponível mas continua a
+                    ser dele. Sem esta linha, um saldo que desceu 1000 € de um
+                    dia para o outro parecia um erro. */}
+                {(balance.investedActive ?? 0) > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Tem ainda <span className="font-medium text-foreground">{eur(balance.investedActive)}</span> aplicados
+                    em investimentos (fora do saldo disponível) — ver em{' '}
+                    <Link to="/app/admin/investments" className="font-medium text-accent hover:underline">Investimentos</Link>.
+                  </p>
+                )}
 
                 {/* Extrato de ajustes */}
                 <div>

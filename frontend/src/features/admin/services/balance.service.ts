@@ -16,6 +16,12 @@ export interface BalanceSummary {
   totalDebits: number;
   totalWithdrawn: number;
   pendingWithdrawals: number;
+  /** Tudo o que foi aplicado em investimentos (sai do saldo). */
+  totalInvested: number;
+  /** O que voltou nos resgates (entra no saldo). */
+  totalInvestmentReturns: number;
+  /** O que está aplicado neste momento. */
+  investedActive: number;
   available: number;
 }
 
@@ -41,7 +47,7 @@ interface CreateAdjustmentInput {
   reason?: string;
 }
 
-export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL';
+export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'REDEMPTION';
 
 export interface LedgerEntry {
   id: string;
@@ -61,6 +67,8 @@ export interface LedgerEntry {
   /** O saldo em conta DEPOIS deste movimento. */
   balance: number;
   settlementId?: string;
+  /** Nas aplicações e resgates de investimentos. */
+  investmentId?: string;
 }
 
 export interface LedgerReconciliation {

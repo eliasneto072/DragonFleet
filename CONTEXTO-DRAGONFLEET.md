@@ -100,6 +100,43 @@ partilhado) e `SEED_ADMIN_PASSWORD` apagada do Render.
 
 ---
 
+## 2.1 Setembro de 2026 — trabalho feito sem o programador
+
+O cliente passou a fazer alterações com o Claude (Anthropic), diretamente nos
+ficheiros. Registo do que entrou e das decisões:
+
+**Saldo antes e depois (frontend apenas).** O detalhe da semana mostra "Tinha
+antes / Este fecho / Ficou com", e o painel ganhou "Movimentos da conta", um
+extrato clicável (fechos, ajustes, retiradas, investimentos). Vem do mesmo
+`GET /balance/:userId/ledger` da administração — o dono já podia lê-lo. As
+notificações de ajuste e de fecho abrem o movimento a que se referem
+(ligação pelo texto da mensagem; a tabela `notifications` não guarda ligação).
+
+**Investimentos.** O motorista aplica parte do saldo num plano e rende todos
+os dias. Decisões do cliente:
+
+- **Juros simples**: ganho do dia = principal × taxa ÷ 100 ÷ 365.
+- **Fixos**: taxa, prazo e penalização congelados na aplicação. Resgate
+  antecipado permitido com **penalização em % do valor aplicado**. No fim do
+  prazo o job fecha e devolve ao saldo.
+- **Flexíveis**: taxa mudada pelo admin com data (`investment_plan_rates`),
+  nunca para o passado. Resgate **a qualquer momento**.
+- Rende do dia da aplicação (inclusive) ao dia do resgate (exclusive), em
+  dias civis de **Lisboa**. Uma linha por dia em `investment_accruals`, com
+  única (aplicação, dia): correr o job duas vezes não paga duas vezes.
+- A view `driver_balances` passou a subtrair `invested` e somar
+  `investment_returns`; o passivo do painel soma o aplicado ativo e os ganhos.
+- Job às 00:15 de Lisboa e também no arranque; recupera dias em falta.
+- Só `ADMIN` cria/edita planos; `MANAGER` e `SUPPORT` veem; só `DRIVER`
+  aplica; o titular ou o `ADMIN` resgata.
+- Contas de **investidor** (subdomínio próprio) ficam para uma segunda fase.
+
+Testes: `investments.math.test.ts` (unitários, corridos) e
+`investments.integration.test.ts` (integração, **escritos mas não corridos
+fora da CI** — o ambiente onde foram escritos não tinha npm).
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está

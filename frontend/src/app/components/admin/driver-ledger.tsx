@@ -27,7 +27,7 @@ import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/app/components/ui/table';
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Info, Minus, Plus } from 'lucide-react';
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Info, Minus, PiggyBank, Plus } from 'lucide-react';
 import { balanceService, type LedgerEntry, type LedgerKind } from '@/features/admin/services/balance.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
@@ -42,6 +42,8 @@ const ICONE: Record<LedgerKind, typeof Plus> = {
   CREDIT: Plus,
   DEBIT: Minus,
   WITHDRAWAL: ArrowDownRight,
+  INVESTMENT: PiggyBank,
+  REDEMPTION: PiggyBank,
 };
 
 function dataCurta(iso: string): string {

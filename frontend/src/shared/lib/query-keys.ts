@@ -73,6 +73,20 @@ export const queryKeys = {
     allUnpaged: ['users', 'all'] as const,
   },
 
+  // Investimentos. Sob a mesma raiz tudo o que muda quando se aplica ou
+  // resgata: invalidar `investments.all` refresca planos (totais do admin),
+  // as aplicações do motorista e a vista geral de uma vez.
+  investments: {
+    all: ['investments'] as const,
+    plans: (all: boolean) => ['investments', 'plans', all] as const,
+    mine: ['investments', 'mine'] as const,
+    forUser: (userId: string) => ['investments', 'user', userId] as const,
+    overview: (status: string, planId: string, search: string) =>
+      ['investments', 'overview', status, planId, search] as const,
+    detail: (id: string) => ['investments', 'detail', id] as const,
+    rates: (planId: string) => ['investments', 'rates', planId] as const,
+  },
+
   // Balance (admin)
   balance: {
     all: ['balance'] as const,

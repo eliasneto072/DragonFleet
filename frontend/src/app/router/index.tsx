@@ -16,6 +16,7 @@ import VehiclesPage from '@/features/driver/pages/VehiclesPage';
 import ProfilePage from '@/features/driver/pages/ProfilePage';
 import NotificationsPage from '@/features/driver/pages/NotificationsPage';
 import SupportPage from '@/features/driver/pages/SupportPage';
+import InvestmentsPage from '@/features/driver/pages/InvestmentsPage';
 
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { DriversPage } from '@/features/admin/pages/DriversPage';
@@ -32,6 +33,7 @@ import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
 import { SupportAdminPage } from '@/features/admin/pages/SupportAdminPage';
 import { TeamPage } from '@/features/admin/pages/TeamPage';
+import { InvestmentsAdminPage } from '@/features/admin/pages/InvestmentsAdminPage';
 import { AdminOnly, NaoSuporte } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
@@ -55,6 +57,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="dashboard" replace /> },
           { path: 'dashboard', element: <DriverDashboardPage /> },
           { path: 'withdrawals', element: <WithdrawalsPage /> },
+          { path: 'investments', element: <InvestmentsPage /> },
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'vehicles', element: <VehiclesPage /> },
           { path: 'profile', element: <ProfilePage /> },
@@ -77,6 +80,9 @@ export const router = createBrowserRouter([
           { path: 'documents', element: <DocumentsAdminPage /> },
           { path: 'settlements', element: <NaoSuporte><SettlementsPage /></NaoSuporte> },
           { path: 'financial', element: <FinancialPage /> },
+          // Sem guarda: o suporte lê (a pergunta "quanto tenho aplicado" chega-lhe
+          // a ele). Só o ADMIN escreve — a tela esconde os botões e o servidor recusa.
+          { path: 'investments', element: <InvestmentsAdminPage /> },
           { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
           { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
           // Antes de 'fleet/:id' por legibilidade — o React Router ja da

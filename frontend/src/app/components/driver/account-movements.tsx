@@ -23,6 +23,7 @@
 // não bate sem explicação é precisamente o telefonema que isto quer evitar.
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -31,7 +32,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import {
-  ArrowDownToLine, CalendarCheck, ChevronRight, MinusCircle, PlusCircle,
+  ArrowDownToLine, CalendarCheck, ChevronRight, MinusCircle, PiggyBank, PlusCircle,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import {
@@ -87,6 +88,16 @@ const KIND_META: Record<LedgerKind, {
     icon: ArrowDownToLine,
     iconCls: 'text-muted-foreground',
   },
+  INVESTMENT: {
+    title: 'Aplicação em investimento',
+    icon: PiggyBank,
+    iconCls: 'text-muted-foreground',
+  },
+  REDEMPTION: {
+    title: 'Resgate de investimento',
+    icon: PiggyBank,
+    iconCls: 'text-brand-700 dark:text-emerald-300',
+  },
 };
 
 /** "2026-09-05T14:03:00.000Z" → "05/09/2026". Os fechos trazem dia puro
@@ -105,6 +116,9 @@ function lineTitle(e: LedgerEntry): string {
     if (from && to) return `Semana de ${dayOf(from)} a ${dayOf(to)}`;
   }
   if (e.kind === 'WITHDRAWAL') return e.label; // "Retirada paga" / "aprovada"
+  if ((e.kind === 'INVESTMENT' || e.kind === 'REDEMPTION') && e.detail) {
+    return `${e.label} · ${e.detail}`;
+  }
   return KIND_META[e.kind].title;
 }
 
@@ -174,6 +188,7 @@ export function MovementDetailDialog({
   onClose: () => void;
 }) {
   const meta = entry ? KIND_META[entry.kind] : null;
+  const navigate = useNavigate();
 
   return (
     <Dialog open={!!entry} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -185,6 +200,8 @@ export function MovementDetailDialog({
             {entry?.kind === 'DEBIT' && 'Valor descontado da sua conta pelo escritório'}
             {entry?.kind === 'WITHDRAWAL' && 'Dinheiro que saiu da conta para o seu IBAN'}
             {entry?.kind === 'SETTLEMENT' && 'Resultado da semana creditado na conta'}
+            {entry?.kind === 'INVESTMENT' && 'Dinheiro que saiu do saldo para um investimento'}
+            {entry?.kind === 'REDEMPTION' && 'Dinheiro que voltou de um investimento, com os ganhos'}
           </DialogDescription>
         </DialogHeader>
 
@@ -208,9 +225,24 @@ export function MovementDetailDialog({
                 entry.kind === 'CREDIT' ? 'Crédito'
                   : entry.kind === 'DEBIT' ? 'Desconto'
                   : entry.kind === 'WITHDRAWAL' ? 'Retirada'
+                  : entry.kind === 'INVESTMENT' ? 'Aplicado'
+                  : entry.kind === 'REDEMPTION' ? 'Resgatado'
                   : 'Este fecho'
               }
             />
+
+            {entry.investmentId && (
+              <Button
+                variant="outline" size="sm" className="w-full"
+                onClick={() => {
+                  onClose();
+                  navigate('/app/driver/investments', { state: { openInvestment: entry.investmentId } });
+                }}
+              >
+                <PiggyBank className="mr-2 h-4 w-4" aria-hidden="true" />
+                Ver o investimento
+              </Button>
+            )}
           </div>
         )}
 
@@ -351,12 +383,18 @@ export function AccountMovementsCard({
  */
 export type MovementLink =
   | { kind: 'SETTLEMENT'; weekStart: string }
-  | { kind: 'CREDIT' | 'DEBIT'; amount: number; at: string };
+  | { kind: 'CREDIT' | 'DEBIT'; amount: number; at: string }
+  /** Notificações de investimentos: abrem a página dos investimentos. */
+  | { kind: 'INVESTMENTS' };
 
 export function linkFromNotification(n: {
   title: string; message: string; createdAt: string;
 }): MovementLink | null {
   const title = n.title.toLowerCase();
+
+  if (title.startsWith('aplicação em investimento') || title.startsWith('investimento ')) {
+    return { kind: 'INVESTMENTS' };
+  }
 
   if (title.startsWith('fecho semanal')) {
     const m = n.message.match(/(\d{2})\/(\d{2})\/(\d{4})/);

@@ -14,7 +14,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  LayoutDashboard, Wallet, FileText, User, Bell, MessageCircle, Car,
+  LayoutDashboard, Wallet, FileText, User, Bell, MessageCircle, Car, PiggyBank,
 } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -78,6 +78,7 @@ export function DriverLayout() {
       items: [
         { to: '/app/driver/dashboard', icon: LayoutDashboard, label: 'Início' },
         { to: '/app/driver/withdrawals', icon: Wallet, label: 'Retiradas' },
+        { to: '/app/driver/investments', icon: PiggyBank, label: 'Investimentos' },
       ],
     },
     {

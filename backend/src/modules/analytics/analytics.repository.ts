@@ -411,9 +411,22 @@ export const analyticsRepository = {
       // mais dois sítios, e uma correção chegou a ser aplicada a uma cópia e
       // esquecida noutra — o painel divergiu das contas individuais até alguém
       // reparar. Com a view não há segunda definição para ficar para trás.
+      //
+      // O dinheiro aplicado em investimentos SAI do `available` mas continua a
+      // ser devido: está só trancado. Sem as duas parcelas de baixo, cada
+      // aplicação faria o passivo descer no painel como se a dívida tivesse
+      // sido paga. Entram o principal ativo e os ganhos já acumulados.
       prisma.$queryRaw<{ owed_to: number; owed_by: number }[]>`
         SELECT
-          CAST(COALESCE(SUM(CASE WHEN available > 0 THEN available ELSE 0 END), 0) AS FLOAT) AS owed_to,
+          CAST(
+            COALESCE(SUM(CASE WHEN available > 0 THEN available ELSE 0 END), 0)
+            + COALESCE(SUM(b.invested_active), 0)
+            + COALESCE((
+                SELECT SUM(i.accrued) FROM investments i
+                JOIN users iu ON iu.id = i.user_id AND iu.role = 'DRIVER'
+                WHERE i.status = 'ACTIVE'
+              ), 0)
+          AS FLOAT) AS owed_to,
           CAST(COALESCE(SUM(CASE WHEN available < 0 THEN -available ELSE 0 END), 0) AS FLOAT) AS owed_by
         FROM driver_balances b
         JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
