@@ -34,6 +34,7 @@ import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
 import { SupportAdminPage } from '@/features/admin/pages/SupportAdminPage';
 import { TeamPage } from '@/features/admin/pages/TeamPage';
 import { InvestmentsAdminPage } from '@/features/admin/pages/InvestmentsAdminPage';
+import { RanksPage } from '@/features/admin/pages/RanksPage';
 import { AdminOnly, NaoSuporte } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
           // Sem guarda: o suporte lê (a pergunta "quanto tenho aplicado" chega-lhe
           // a ele). Só o ADMIN escreve — a tela esconde os botões e o servidor recusa.
           { path: 'investments', element: <InvestmentsAdminPage /> },
+          { path: 'ranks', element: <RanksPage /> },
           { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
           { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
           // Antes de 'fleet/:id' por legibilidade — o React Router ja da

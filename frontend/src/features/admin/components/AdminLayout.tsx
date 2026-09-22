@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck, PiggyBank,
+  ShieldCheck, PiggyBank, Trophy,
 } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -39,6 +39,7 @@ const VE_SUPORTE = new Set([
   '/app/admin/documents',
   '/app/admin/financial',
   '/app/admin/investments',
+  '/app/admin/ranks',
   '/app/admin/support',
 ]);
 
@@ -55,6 +56,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   // ali decide-se e classifica-se, aqui consulta-se o que ficou registado.
   { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes' },
   { to: '/app/admin/investments',   icon: PiggyBank,       label: 'Investimentos' },
+  { to: '/app/admin/ranks',         icon: Trophy,          label: 'Níveis'        },
   { to: '/app/admin/fleet',         icon: Car,             label: 'Frotas'        },
   { to: '/app/admin/analytics',     icon: TrendingUp,      label: 'Análises'      },
   { to: '/app/admin/notifications', icon: Bell,            label: 'Notificações'  },

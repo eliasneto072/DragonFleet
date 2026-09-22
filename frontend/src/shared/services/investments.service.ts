@@ -6,6 +6,7 @@
 // Financeiro, não se repete aqui.
 
 import { apiClient } from '@/shared/lib/api-client';
+import type { Tier } from '@/shared/services/ranks.service';
 
 export type PlanType = 'FIXED' | 'FLEXIBLE';
 export type InvestmentStatus = 'ACTIVE' | 'CLOSED';
@@ -21,6 +22,10 @@ export interface InvestmentPlan {
   termDays: number | null;
   earlyWithdrawalPenalty: number | null;
   minAmount: number;
+  /** Nível mínimo para aplicar. Nulo = aberto a todos. */
+  minRank: Tier | null;
+  /** Só na lista do motorista: ele já tem o nível exigido? */
+  unlocked?: boolean;
   active: boolean;
   createdAt: string;
   activeCount?: number;
@@ -92,6 +97,7 @@ export interface PlanInput {
   termDays?: number | null;
   earlyWithdrawalPenalty?: number | null;
   minAmount?: number;
+  minRank?: Tier | null;
   active?: boolean;
 }
 

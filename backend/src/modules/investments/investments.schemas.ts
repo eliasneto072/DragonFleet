@@ -7,6 +7,8 @@ const rate = z.coerce.number()
   .min(0, 'A taxa não pode ser negativa.')
   .max(100, 'A taxa anual não pode passar de 100%.');
 
+const tier = z.enum(['TIER_1', 'TIER_2', 'TIER_3', 'TIER_4', 'TIER_5']);
+
 const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD.');
 
 export const idParamSchema = z.object({
@@ -26,6 +28,7 @@ export const createPlanSchema = z.object({
     termDays: z.coerce.number().int().min(1).max(3650).optional().nullable(),
     earlyWithdrawalPenalty: z.coerce.number().min(0).max(100).optional().nullable(),
     minAmount: z.coerce.number().min(0).optional(),
+    minRank: tier.optional().nullable(),
     active: z.boolean().optional(),
   }),
 });
@@ -39,6 +42,7 @@ export const updatePlanSchema = z.object({
     termDays: z.coerce.number().int().min(1).max(3650).optional().nullable(),
     earlyWithdrawalPenalty: z.coerce.number().min(0).max(100).optional().nullable(),
     minAmount: z.coerce.number().min(0).optional(),
+    minRank: tier.optional().nullable(),
     active: z.boolean().optional(),
   }),
 });

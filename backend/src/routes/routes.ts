@@ -16,6 +16,7 @@ import { settlementsRouter } from '../modules/settlements/settlements.routes';
 import { bankRouter } from '../modules/bank/bank.routes';
 import { companiesRouter } from '../modules/companies/companies.routes';
 import { investmentsRouter } from '../modules/investments/investments.routes';
+import { ranksRouter } from '../modules/ranks/ranks.routes';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/settlements', settlementsRouter());
 router.use('/bank', bankRouter());
 router.use('/companies', companiesRouter());
 router.use('/investments', investmentsRouter());
+router.use('/ranks', ranksRouter());
 
 export { router };

@@ -37,6 +37,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import {
   investmentsService, type InvestmentPlan, type PlanInput, type PlanType,
 } from '@/shared/services/investments.service';
+import { ranksService, type Tier } from '@/shared/services/ranks.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import {
@@ -69,6 +70,15 @@ function PlanDialog({ plan, open, onClose }: {
   const [termDays, setTermDays] = useState(plan?.termDays ? String(plan.termDays) : '90');
   const [penalty, setPenalty] = useState(plan?.earlyWithdrawalPenalty != null ? String(plan.earlyWithdrawalPenalty) : '0');
   const [minAmount, setMinAmount] = useState(plan ? String(plan.minAmount) : '0');
+  const [minRank, setMinRank] = useState<Tier | 'NONE'>(plan?.minRank ?? 'NONE');
+
+  // A escada, para o seletor de nível mínimo. É o que liga os dois sistemas:
+  // os melhores planos ficam para quem sobe de nível.
+  const ranksQ = useQuery({
+    queryKey: queryKeys.ranks.configs,
+    queryFn: () => ranksService.configs(),
+    staleTime: 5 * 60 * 1000,
+  });
   const [active, setActive] = useState(plan?.active ?? true);
 
   const fixed = type === 'FIXED';
@@ -79,6 +89,7 @@ function PlanDialog({ plan, open, onClose }: {
         name: name.trim(),
         description: description.trim() || null,
         minAmount: n(minAmount) || 0,
+        minRank: minRank === 'NONE' ? null : minRank,
         active,
       };
       const fixos = fixed
@@ -167,6 +178,22 @@ function PlanDialog({ plan, open, onClose }: {
               </p>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label>Nível mínimo</Label>
+            <Select value={minRank} onValueChange={(v) => setMinRank(v as Tier | 'NONE')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Aberto a todos os motoristas</SelectItem>
+                {(ranksQ.data?.configs ?? []).map((c) => (
+                  <SelectItem key={c.tier} value={c.tier}>A partir de {c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Quem não tiver o nível vê o plano trancado, com o nível que lhe falta.
+            </p>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="pl-min">Valor mínimo por aplicação (€)</Label>
@@ -470,6 +497,12 @@ export function InvestmentsAdmin() {
                       <dd className="text-right tabular-nums">{formatCurrency(p.activePrincipal ?? 0)}</dd>
                       <dt className="text-muted-foreground">Mínimo</dt>
                       <dd className="text-right tabular-nums">{formatCurrency(p.minAmount)}</dd>
+                      {p.minRank && (
+                        <>
+                          <dt className="text-muted-foreground">Nível mínimo</dt>
+                          <dd className="text-right">{p.minRank}</dd>
+                        </>
+                      )}
                       {p.type === 'FIXED' && (
                         <>
                           <dt className="text-muted-foreground">Penalização antecipada</dt>

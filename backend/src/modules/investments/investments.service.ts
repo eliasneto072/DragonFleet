@@ -40,6 +40,8 @@ import {
   accrualEnd, addDays, computePayout, dateToDay, dayToDate, lisbonDay,
   pendingAccruals, rateOn, round2, type Day, type PayoutResult, type RatePoint,
 } from './investments.math';
+import { ranksService } from '../ranks/ranks.service';
+import { tierIndex, type Tier } from '../ranks/ranks.math';
 
 type Actor = { id: string; role?: UserRole };
 type Tx = Prisma.TransactionClient;
@@ -77,6 +79,10 @@ export interface PlanPublic {
   termDays: number | null;
   earlyWithdrawalPenalty: number | null;
   minAmount: number;
+  /** Nível mínimo para aplicar. Nulo = aberto a todos. */
+  minRank: Tier | null;
+  /** Só na lista do motorista: ele já tem o nível exigido? */
+  unlocked?: boolean;
   active: boolean;
   createdAt: Date;
   /** Só para a administração: quantas aplicações ativas e quanto está lá. */
@@ -266,6 +272,9 @@ export class InvestmentsService {
   async listPlans(actor: Actor, opts: { includeInactive?: boolean } = {}): Promise<PlanPublic[]> {
     const staff = podeVer(actor.role);
     const today = lisbonDay();
+    // O nível de quem pergunta, para a tela poder mostrar os planos trancados
+    // em vez de os esconder: um plano que não se vê não motiva ninguém a subir.
+    const meuTier = staff ? null : await ranksService.currentTier(actor.id);
 
     const plans = await prisma.investmentPlan.findMany({
       where: staff && opts.includeInactive ? {} : { active: true },
@@ -296,6 +305,10 @@ export class InvestmentsService {
         termDays: p.termDays,
         earlyWithdrawalPenalty: p.earlyWithdrawalPenalty == null ? null : num(p.earlyWithdrawalPenalty),
         minAmount: num(p.minAmount),
+        minRank: (p.minRank as Tier | null) ?? null,
+        ...(meuTier
+          ? { unlocked: !p.minRank || tierIndex(meuTier) >= tierIndex(p.minRank as Tier) }
+          : {}),
         active: p.active,
         createdAt: p.createdAt,
         ...(staff ? { activeCount: t?._count._all ?? 0, activePrincipal: num(t?._sum.principal) } : {}),
@@ -305,7 +318,8 @@ export class InvestmentsService {
 
   async createPlan(actor: Actor, input: {
     name: string; description?: string | null; type: InvestmentPlanType; annualRate: number;
-    termDays?: number | null; earlyWithdrawalPenalty?: number | null; minAmount?: number; active?: boolean;
+    termDays?: number | null; earlyWithdrawalPenalty?: number | null; minAmount?: number;
+    minRank?: Tier | null; active?: boolean;
   }) {
     if (!isAdmin(actor.role)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
     const fixed = input.type === InvestmentPlanType.FIXED;
@@ -326,6 +340,7 @@ export class InvestmentsService {
         termDays: fixed ? input.termDays : null,
         earlyWithdrawalPenalty: fixed ? (input.earlyWithdrawalPenalty ?? 0) : null,
         minAmount: input.minAmount ?? 0,
+        minRank: input.minRank ?? null,
         active: input.active ?? true,
         rates: { create: { annualRate: input.annualRate, effectiveFrom: dayToDate(today), createdBy: actor.id } },
       },
@@ -345,7 +360,8 @@ export class InvestmentsService {
    */
   async updatePlan(actor: Actor, id: string, input: {
     name?: string; description?: string | null; annualRate?: number; termDays?: number | null;
-    earlyWithdrawalPenalty?: number | null; minAmount?: number; active?: boolean;
+    earlyWithdrawalPenalty?: number | null; minAmount?: number; minRank?: Tier | null;
+    active?: boolean;
   }) {
     if (!isAdmin(actor.role)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
     const plan = await prisma.investmentPlan.findUnique({ where: { id } });
@@ -369,6 +385,7 @@ export class InvestmentsService {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
         ...(input.minAmount !== undefined ? { minAmount: input.minAmount } : {}),
+        ...(input.minRank !== undefined ? { minRank: input.minRank } : {}),
         ...(input.active !== undefined ? { active: input.active } : {}),
         ...(fixed && input.annualRate !== undefined ? { annualRate: input.annualRate } : {}),
         ...(fixed && input.termDays !== undefined ? { termDays: input.termDays } : {}),
@@ -459,6 +476,12 @@ export class InvestmentsService {
 
     const today = lisbonDay();
 
+    // O nível é lido FORA da transação, de propósito: o `recompute` escreve
+    // (métricas, eventos, notificações) e não tem nada que correr dentro de uma
+    // transação que está a segurar a linha do utilizador. Um nível acabado de
+    // subir já conta, porque a tela recalcula-o quando o motorista a abre.
+    const meuTier = await ranksService.currentTier(actor.id);
+
     const id = await prisma.$transaction(async (tx) => {
       // Fila por utilizador: ver a nota de concorrência no topo.
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR UPDATE`;
@@ -469,6 +492,16 @@ export class InvestmentsService {
       }
       if (amount < num(plan.minAmount)) {
         throw new AppError(`O valor mínimo deste plano é ${eur(num(plan.minAmount))}.`, 400, 'BELOW_MIN_AMOUNT');
+      }
+      if (plan.minRank && tierIndex(meuTier) < tierIndex(plan.minRank as Tier)) {
+        const nivel = await tx.rankConfig.findUnique({
+          where: { tier: plan.minRank }, select: { label: true },
+        });
+        throw new AppError(
+          `Este plano é a partir do nível ${nivel?.label ?? plan.minRank}.`,
+          400,
+          'RANK_TOO_LOW',
+        );
       }
 
       // O MESMO disponível que as retiradas verificam: lido da view, dentro

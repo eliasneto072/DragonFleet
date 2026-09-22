@@ -152,6 +152,8 @@ model User {
   bankAccount        BankAccount?
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
   investments        Investment[]
+  rank               DriverRank?
+  rankEvents         RankEvent[]
 
   @@map("users")
 }
@@ -645,6 +647,9 @@ model InvestmentPlan {
 
   minAmount   Decimal            @default(0) @map("min_amount") @db.Decimal(12, 2)
 
+  /// Rank mínimo para aplicar neste plano. Nulo = aberto a todos.
+  minRank     RankTier?          @map("min_rank")
+
   /// Desativar deixa de aceitar aplicações novas; as que existem continuam.
   active      Boolean            @default(true)
 
@@ -739,4 +744,136 @@ model InvestmentAccrual {
 
   @@unique([investmentId, day])
   @@map("investment_accruals")
+}
+
+
+/* =========================
+   RANKS
+   =========================
+
+   Cinco níveis, do mais baixo para o mais alto. Os nomes e as cores são
+   editáveis no painel — nascem como Dragon Driver, Dragon Elite, Dragon Leader,
+   Dragon Manager e Dragon Master — e o código usa sempre TIER_1..TIER_5, para
+   mudar um nome não obrigar a uma migração.
+
+   ─── COMO SE SOBE E SE DESCE ────────────────────────────────────────────────
+
+   As metas contam dentro de uma TEMPORADA de dois meses do calendário
+   (janeiro–fevereiro, março–abril, …). Durante a temporada o rank acompanha as
+   metas em tempo real: atinge, sobe e ganha os benefícios nesse momento; deixa
+   de cumprir, desce e perde-os.
+
+   ─── A PROTEÇÃO DE 30 DIAS ──────────────────────────────────────────────────
+
+   No fim da temporada, o rank com que terminou fica GARANTIDO COMO MÍNIMO
+   durante 30 dias. Em março ninguém fica abaixo do que conquistou até 28 de
+   fevereiro, mesmo começando a nova temporada do zero. Para cima não há
+   travão: se as metas novas derem um rank melhor, esse vale de imediato.
+
+   Guarda-se `floorTier` e `floorUntil`, e o rank efetivo é o maior dos dois.
+*/
+
+enum RankTier {
+  TIER_1
+  TIER_2
+  TIER_3
+  TIER_4
+  TIER_5
+}
+
+enum RankEventKind {
+  /// Subiu de rank dentro da temporada.
+  UP
+  /// Desceu de rank dentro da temporada.
+  DOWN
+  /// Fim de temporada: o rank alcançado passou a mínimo garantido.
+  SEASON_END
+  /// Acabaram os 30 dias de proteção.
+  FLOOR_EXPIRED
+}
+
+/// As metas e os benefícios de cada nível. Uma linha por nível, sempre cinco.
+model RankConfig {
+  tier  RankTier @id
+  label String
+  /// Cor base em hexadecimal, usada no cartão e no emblema.
+  color String
+
+  // ── Metas. Zero = não conta. ──
+  /// Faturação (bruto dos fechos) acumulada DENTRO da temporada.
+  minSeasonRevenue Decimal @default(0) @map("min_season_revenue") @db.Decimal(12, 2)
+  /// Valor aplicado em investimentos, neste momento.
+  minInvested      Decimal @default(0) @map("min_invested") @db.Decimal(12, 2)
+  /// Saldo disponível em banca, neste momento.
+  minBalance       Decimal @default(0) @map("min_balance") @db.Decimal(12, 2)
+  /// Semanas com fecho registado dentro da temporada.
+  minWeeks         Int     @default(0) @map("min_weeks")
+
+  /// Documentos expirados travam a subida a este nível.
+  requireValidDocuments Boolean @default(true) @map("require_valid_documents")
+
+  // ── Benefícios. Em percentagem; a aplicação ao fecho semanal fica para a
+  //    fase 2, mas os valores vivem aqui desde já para o motorista os ver. ──
+  fuelDiscount        Decimal @default(0) @map("fuel_discount") @db.Decimal(5, 2)
+  vehicleDiscount     Decimal @default(0) @map("vehicle_discount") @db.Decimal(5, 2)
+  tollsDiscount       Decimal @default(0) @map("tolls_discount") @db.Decimal(5, 2)
+  /// Pontos percentuais somados à taxa dos investimentos (fase 2).
+  investmentRateBonus Decimal @default(0) @map("investment_rate_bonus") @db.Decimal(5, 3)
+  /// Texto livre, uma vantagem por linha, mostrado ao motorista.
+  perks               String?
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("rank_configs")
+}
+
+/// O estado de cada motorista. Uma linha por utilizador, criada no primeiro
+/// cálculo.
+model DriverRank {
+  userId String @id @map("user_id")
+
+  /// O que vale hoje: o maior entre o conquistado e o garantido.
+  tier       RankTier @default(TIER_1)
+  /// O que as metas dão neste momento.
+  earnedTier RankTier @default(TIER_1) @map("earned_tier")
+
+  /// Mínimo garantido e até quando. Nulos fora do período de proteção.
+  floorTier  RankTier? @map("floor_tier")
+  floorUntil DateTime? @map("floor_until") @db.Date
+
+  /// Primeiro dia da temporada a que as métricas abaixo dizem respeito.
+  seasonStart DateTime @map("season_start") @db.Date
+
+  // Métricas do último cálculo, guardadas para a tela não as recalcular.
+  seasonRevenue Decimal @default(0) @map("season_revenue") @db.Decimal(12, 2)
+  invested      Decimal @default(0) @db.Decimal(12, 2)
+  balance       Decimal @default(0) @db.Decimal(12, 2)
+  weeks         Int     @default(0)
+  /// Falso quando há documentos expirados: trava a subida.
+  documentsOk   Boolean @default(true) @map("documents_ok")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tier])
+  @@map("driver_ranks")
+}
+
+/// Histórico: quando subiu, quando desceu, e porquê. Sem isto, um motorista que
+/// pergunte "porque perdi o desconto" não tem resposta.
+model RankEvent {
+  id         String        @id @default(cuid())
+  userId     String        @map("user_id")
+  kind       RankEventKind
+  tier       RankTier
+  fromTier   RankTier?     @map("from_tier")
+  /// Explicação curta, já escrita para ser mostrada.
+  note       String?
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("rank_events")
 }

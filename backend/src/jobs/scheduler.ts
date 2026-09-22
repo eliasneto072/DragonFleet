@@ -5,6 +5,7 @@
 import cron from 'node-cron';
 import { runDocumentsExpiryCheck } from './documents-expiry.job';
 import { runInvestmentsAccrual } from './investments-accrual.job';
+import { runRanksRecalculation } from './ranks.job';
 
 // Corre todos os dias às 03:00 (hora do servidor). Horário de baixa utilização.
 const DOCUMENTS_EXPIRY_SCHEDULE = '0 3 * * *';
@@ -15,6 +16,12 @@ const DOCUMENTS_EXPIRY_SCHEDULE = '0 3 * * *';
 // dias em falta. Também corre ao arrancar, pelo mesmo motivo — um deploy à
 // meia-noite não deixa ninguém sem o dia.
 const INVESTMENTS_SCHEDULE = '15 0 * * *';
+
+// Níveis: 00:45 em Lisboa, depois dos investimentos — o valor aplicado é uma
+// das metas, e recalcular antes de os ganhos do dia entrarem daria um nível
+// baseado em números de ontem. O mesmo cálculo corre quando o motorista abre a
+// tela, por isso uma noite falhada não deixa ninguém com o nível errado.
+const RANKS_SCHEDULE = '45 0 * * *';
 
 export function startScheduler(): void {
   // Validação de documentos (regra dos 90 dias)
@@ -34,9 +41,19 @@ export function startScheduler(): void {
     { timezone: 'Europe/Lisbon' },
   );
 
+  cron.schedule(
+    RANKS_SCHEDULE,
+    () => {
+      runRanksRecalculation().catch((err) =>
+        console.error('[scheduler] Erro no recálculo dos níveis:', err),
+      );
+    },
+    { timezone: 'Europe/Lisbon' },
+  );
+
   runInvestmentsAccrual().catch((err) =>
     console.error('[scheduler] Erro no pagamento dos investimentos ao arrancar:', err),
   );
 
-  console.log('[scheduler] Jobs agendados. Documentos: 03:00. Investimentos: 00:15 (Lisboa).');
+  console.log('[scheduler] Jobs agendados. Documentos: 03:00. Investimentos: 00:15. Níveis: 00:45 (Lisboa).');
 }

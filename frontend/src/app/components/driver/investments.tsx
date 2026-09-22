@@ -35,6 +35,8 @@ import { formatCurrency } from '@/shared/lib/format';
 import {
   InvestmentDetailDialog, StatusPill, dia, planTypeLabel, taxa,
 } from '@/app/components/investments/investment-detail';
+import { useRankConfigs } from '@/app/components/ranks/rank-card';
+import { RankBadge } from '@/app/components/ranks/rank-visuals';
 
 // ── Aplicar ───────────────────────────────────────────────────────────────────
 
@@ -195,6 +197,12 @@ export function Investments() {
     enabled: !!user?.id,
   });
 
+  // Os níveis, para mostrar quais os planos que ainda estão trancados e a
+  // partir de que nível abrem. Trancado e visível motiva; escondido não.
+  const rankConfigsQ = useRankConfigs();
+  const nivelDoPlano = (tier: string | null) =>
+    rankConfigsQ.data?.configs.find((c) => c.tier === tier);
+
   // Vindo do extrato ("Ver o investimento"): abrir logo essa aplicação.
   const pedida = (location.state as { openInvestment?: string } | null)?.openInvestment;
   useEffect(() => {
@@ -281,8 +289,14 @@ export function Investments() {
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {plans.map((p) => (
-                <div key={p.id} className="flex flex-col rounded-lg border border-border p-4">
+              {plans.map((p) => {
+                const trancado = p.unlocked === false;
+                const nivel = nivelDoPlano(p.minRank);
+                return (
+                <div
+                  key={p.id}
+                  className={`flex flex-col rounded-lg border border-border p-4 ${trancado ? 'opacity-70' : ''}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{p.name}</p>
@@ -312,15 +326,24 @@ export function Investments() {
                     )}
                     {p.minAmount > 0 && <li>Mínimo {formatCurrency(p.minAmount)}</li>}
                   </ul>
+
+                  {nivel && (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      A partir de <RankBadge config={nivel} size="sm" />
+                    </p>
+                  )}
+
                   <Button
                     className="mt-3 w-full" size="sm"
-                    disabled={available <= 0}
+                    disabled={available <= 0 || trancado}
                     onClick={() => setAplicarEm(p)}
                   >
-                    Aplicar
+                    {trancado ? `Precisa de ${nivel?.label ?? 'outro nível'}` : 'Aplicar'}
                   </Button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {available <= 0 && plans.length > 0 && (

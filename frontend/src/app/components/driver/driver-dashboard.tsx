@@ -49,6 +49,7 @@ import {
   AccountMovementsCard, BalanceBeforeAfter, MovementDetailDialog, findAdjustment,
   useMyLedger, type MovementLink,
 } from '@/app/components/driver/account-movements';
+import { RankCard } from '@/app/components/ranks/rank-card';
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   background: 'var(--popover)',
@@ -595,6 +596,10 @@ export function DriverDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Nível. Fica logo a seguir ao saldo: é o que muda a cara do painel
+          quando ele sobe, e o que lhe diz o que falta para o próximo. */}
+      <RankCard />
 
       {/* Indicadores */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">

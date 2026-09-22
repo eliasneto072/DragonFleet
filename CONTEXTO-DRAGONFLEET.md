@@ -131,9 +131,31 @@ os dias. Decisões do cliente:
   aplica; o titular ou o `ADMIN` resgata.
 - Contas de **investidor** (subdomínio próprio) ficam para uma segunda fase.
 
-Testes: `investments.math.test.ts` (unitários, corridos) e
-`investments.integration.test.ts` (integração, **escritos mas não corridos
-fora da CI** — o ambiente onde foram escritos não tinha npm).
+**Níveis (ranks).** Cinco níveis — Dragon Driver, Elite, Leader, Manager e
+Master — com nomes, cores, metas e vantagens editáveis no painel. Decisões:
+
+- **Temporadas de dois meses do calendário** (jan–fev, mar–abr, …). As metas de
+  faturação e de semanas contam dentro da temporada; o investido e o saldo são
+  do momento.
+- **Dentro da temporada o rank acompanha as metas nos dois sentidos**, em tempo
+  real. Atinge, sobe e ganha as vantagens; deixa de cumprir, desce e perde-as.
+- **No fim da temporada o rank alcançado fica garantido 30 dias**
+  (`floorTier`/`floorUntil`). A temporada nova começa do zero, e sem isto toda a
+  gente caía no dia 1. A proteção é só para baixo: quem sobe, sobe logo.
+- Metas a **zero não contam** — é assim que se desliga um critério. Nasce tudo a
+  zero de propósito: ninguém sobe por engano no dia do deploy.
+- `requireValidDocuments` trava a subida de quem tem documentos expirados.
+- Os planos de investimento podem exigir um **nível mínimo** (`minRank`); o
+  motorista vê o plano trancado, com o nível que lhe falta.
+- Recálculo às 00:45 (Lisboa) e também quando o motorista abre o portal, para a
+  subida se ver na hora.
+- **Os descontos ficam registados mas ainda NÃO são aplicados ao fecho semanal.**
+  Essa é a fase seguinte; até lá aplicam-se à mão ao registar o fecho.
+
+Testes: `ranks.math.test.ts` e `investments.math.test.ts` (unitários, corridos) e
+`investments.integration.test.ts` e `ranks.integration.test.ts` (integração,
+**escritos mas não corridos fora da CI** — o ambiente onde foram escritos não
+tinha npm).
 
 ---
 

@@ -87,6 +87,16 @@ export const queryKeys = {
     rates: (planId: string) => ['investments', 'rates', planId] as const,
   },
 
+  // Níveis (ranks)
+  ranks: {
+    all: ['ranks'] as const,
+    configs: ['ranks', 'configs'] as const,
+    me: ['ranks', 'me'] as const,
+    forUser: (userId: string) => ['ranks', 'user', userId] as const,
+    events: (userId: string) => ['ranks', 'events', userId] as const,
+    overview: (tier: string, search: string) => ['ranks', 'overview', tier, search] as const,
+  },
+
   // Balance (admin)
   balance: {
     all: ['balance'] as const,
