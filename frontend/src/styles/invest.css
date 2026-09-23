@@ -1,0 +1,290 @@
+/*
+  DragonFleet Capital — a cara do portal do investidor
+  ═══════════════════════════════════════════════════════════════════════════
+
+  O portal da frota é uma ferramenta de trabalho: verde, claro, direto ao
+  assunto. Este não. Quem entra aqui confiou dinheiro à empresa e o que o site
+  tem de transmitir, no primeiro segundo e sem uma palavra, é que esse dinheiro
+  está em boas mãos.
+
+  O luxo não se faz com enfeites — faz-se com contenção. As decisões todas
+  abaixo vêm daí:
+
+  • FUNDO QUASE PRETO, NÃO PRETO. #07080A em vez de #000. O preto absoluto num
+    ecrã moderno é um buraco: não tem profundidade nenhuma, e tudo o que se
+    põe em cima parece colado. Um preto com um resto de azul tem ar de sala
+    com luz baixa.
+
+  • OURO A SÉRIO, NÃO AMARELO. Uma cor só nunca parece metal. O ouro aqui é um
+    gradiente de três pontos — bronze, champanhe, bronze — porque é a variação
+    de claro para escuro que o olho lê como superfície metálica. Um #FFD700
+    chapado parece plástico e é a diferença entre um site de private banking e
+    um botão de jogo de telemóvel.
+
+  • SERIFAS PARA OS NÚMEROS. O valor da conta é a única coisa que interessa
+    neste site, e está numa serifa de display (Cormorant), grande e leve. Uma
+    sans-serif a negrito diz "sistema informático"; uma serifa fina diz
+    "património". São os mesmos dígitos.
+
+  • BORDAS QUASE INVISÍVEIS. rgba(255,255,255,0.07). Uma linha que se vê bem é
+    uma linha que divide; esta só sugere onde acaba cada coisa.
+
+  • NADA PISCA E NADA SALTA. Sem cores de alerta, sem animação de entrada, sem
+    exclamações. Um portal onde o dinheiro está sossegado não precisa de
+    chamar a atenção para nada.
+*/
+
+.portal-invest {
+  /* ── Superfícies ─────────────────────────────────────────────────────── */
+  --background: #07080a;
+  --foreground: #f2efe9;          /* branco quente: o branco puro é frio */
+  --card: #101114;
+  --card-foreground: #f2efe9;
+  --popover: #141519;
+  --popover-foreground: #f2efe9;
+
+  --secondary: #17181c;
+  --secondary-foreground: #f2efe9;
+  --muted: #17181c;
+  --muted-foreground: #8c8778;    /* cinza com um resto de ouro */
+
+  --primary: #c9a227;
+  --primary-foreground: #0a0b0d;
+
+  /* ── A escala do ouro ────────────────────────────────────────────────── */
+  --gold-50:  #f7f0da;
+  --gold-100: #edddb0;
+  --gold-200: #e0c98a;
+  --gold-300: #d4b66a;
+  --gold-400: #c9a227;            /* o ouro da marca */
+  --gold-500: #b08d1f;
+  --gold-600: #8c6f18;
+  --gold-700: #665012;
+  --gold-800: #3d300b;
+
+  /* As tintas da marca da frota apontam para o ouro: os componentes
+     partilhados (botões, badges, gráficos) mudam de cor sem terem de saber em
+     que portal estão. */
+  --brand-50:  var(--gold-800);
+  --brand-100: var(--gold-700);
+  --brand-200: var(--gold-600);
+  --brand-300: var(--gold-500);
+  --brand-400: var(--gold-400);
+  --brand-500: var(--gold-400);
+  --brand-600: var(--gold-500);
+  --brand-700: var(--gold-600);
+  --brand-800: var(--gold-700);
+
+  --accent: #c9a227;
+  --accent-foreground: #0a0b0d;
+  --success: #7fa87a;             /* verde-sálvia, não verde-semáforo */
+  --warning: #c98b27;
+  --destructive: #b4544a;         /* tijolo, não vermelho de erro */
+  --destructive-foreground: #f2efe9;
+
+  --border: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.04);
+  --input-background: rgba(255, 255, 255, 0.04);
+  --switch-background: rgba(255, 255, 255, 0.12);
+  --ring: #c9a227;
+
+  --chart-1: #c9a227;
+  --chart-2: #d4b66a;
+  --chart-3: #8c6f18;
+  --chart-4: #7fa87a;
+  --chart-5: #3d300b;
+
+  /* Cantos mais fechados do que na frota. O arredondado generoso é simpático;
+     o quase-reto é sério. */
+  --radius: 0.375rem;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.55);
+  --shadow-brand: 0 10px 40px rgba(201, 162, 39, 0.16);
+
+  --sidebar: #0a0b0e;
+  --sidebar-foreground: #f2efe9;
+  --sidebar-primary: #c9a227;
+  --sidebar-primary-foreground: #0a0b0d;
+  --sidebar-accent: rgba(201, 162, 39, 0.09);
+  --sidebar-accent-foreground: #f2efe9;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  /* ── Tipografia ──────────────────────────────────────────────────────── */
+  --font-display: 'Cormorant Garamond', 'Times New Roman', serif;
+  --font-sans: 'Work Sans', system-ui, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   O fundo
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Duas luzes muito ténues nos cantos de cima, como um candeeiro fora do
+   enquadramento. É o que impede o fundo de ser uma parede plana. `fixed` para
+   não andarem com o scroll — luz que se desloca com a página parece um erro.
+*/
+.portal-invest body {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, rgba(201, 162, 39, 0.10), transparent 60%),
+    radial-gradient(45rem 35rem at 95% 0%, rgba(120, 130, 190, 0.06), transparent 60%);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Peças
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Números e títulos de display. */
+.inv-display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.015em;
+  /* Dígitos todos com a mesma largura: sem isto, um saldo que muda de 1 111 €
+     para 2 222 € dança na horizontal. */
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* As etiquetas pequenas em maiúsculas espaçadas. É o detalhe que mais
+   contribui para o registo "relatório de banco" — e custa duas linhas. */
+.inv-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Texto em ouro escovado. Só para o nome da marca e para o número principal:
+   usado em todo o lado, deixa de valer nada. */
+.inv-gold-text {
+  background: linear-gradient(105deg, #8c6f18 0%, #e8d9a0 38%, #c9a227 62%, #8c6f18 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A superfície de cartão: vidro escuro com uma aresta de luz em cima.
+   A aresta (o ::before) é o que faz o cartão parecer ter espessura. */
+.inv-surface {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 100%),
+    var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-md);
+}
+.inv-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232, 217, 160, 0.35), transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* O cartão principal — o do saldo. Leva o ouro por dentro. */
+.inv-surface-gold {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(38rem 22rem at 85% -30%, rgba(201, 162, 39, 0.16), transparent 70%),
+    linear-gradient(165deg, #16151a 0%, #0d0e11 58%, #121016 100%);
+  border: 1px solid rgba(201, 162, 39, 0.22);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-brand), var(--shadow-md);
+}
+
+/* Fio de ouro a separar secções, mais apagado nas pontas. */
+.inv-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.35), transparent);
+}
+
+/* Botão principal: chapa de ouro escovado. */
+.inv-btn-gold {
+  background: linear-gradient(180deg, #e0c98a 0%, #c9a227 52%, #a8861d 100%);
+  color: #0a0b0d;
+  border: 1px solid rgba(232, 217, 160, 0.45);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+.inv-btn-gold:hover:not(:disabled) { filter: brightness(1.08); }
+.inv-btn-gold:active:not(:disabled) { transform: translateY(1px); }
+.inv-btn-gold:disabled { opacity: 0.45; }
+
+/* Botão secundário: só o contorno. */
+.inv-btn-ghost {
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.inv-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(201, 162, 39, 0.35);
+}
+
+/* Campos de formulário sóbrios: sem caixa branca, só uma linha por baixo que
+   acende a ouro quando está a ser preenchida. */
+.inv-field {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--foreground);
+  padding: 0.75rem 0.875rem;
+  font-size: 0.9375rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.inv-field::placeholder { color: rgba(242, 239, 233, 0.28); }
+.inv-field:focus {
+  outline: none;
+  border-color: rgba(201, 162, 39, 0.55);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.12);
+}
+
+/* Estado de um pedido. Sem cores de semáforo: a informação é a palavra. */
+.inv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-foreground);
+}
+.inv-chip-gold {
+  border-color: rgba(201, 162, 39, 0.35);
+  background: rgba(201, 162, 39, 0.10);
+  color: var(--gold-200);
+}
+
+/* Linhas da tabela que reagem ao rato sem mudar de cor de fundo inteira. */
+.inv-row { border-bottom: 1px solid var(--border); transition: background-color 140ms ease; }
+.inv-row:hover { background: rgba(255, 255, 255, 0.02); }
+.inv-row:last-child { border-bottom: 0; }
+
+/* Entrada discreta: 250ms e 6px. O suficiente para o ecrã não aparecer de
+   pancada, pouco o suficiente para ninguém dar por isso. */
+@keyframes inv-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.inv-enter { animation: inv-fade-up 250ms ease-out both; }
+
+/* Quem pediu ao sistema para reduzir animações não leva nenhuma. */
+@media (prefers-reduced-motion: reduce) {
+  .inv-enter { animation: none; }
+  .inv-btn-gold { transition: none; }
+}

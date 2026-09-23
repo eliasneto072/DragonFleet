@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck, PiggyBank, Trophy,
+  ShieldCheck, PiggyBank, Trophy, Landmark,
 } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -57,6 +57,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes' },
   { to: '/app/admin/investments',   icon: PiggyBank,       label: 'Investimentos' },
   { to: '/app/admin/ranks',         icon: Trophy,          label: 'Níveis'        },
+  { to: '/app/admin/investors',     icon: Landmark,        label: 'Investidores'  },
   { to: '/app/admin/fleet',         icon: Car,             label: 'Frotas'        },
   { to: '/app/admin/analytics',     icon: TrendingUp,      label: 'Análises'      },
   { to: '/app/admin/notifications', icon: Bell,            label: 'Notificações'  },

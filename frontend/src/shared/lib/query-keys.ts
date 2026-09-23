@@ -87,6 +87,27 @@ export const queryKeys = {
     rates: (planId: string) => ['investments', 'rates', planId] as const,
   },
 
+  // Portal do investidor (invest.dragonfleet.pt)
+  //
+  // Tudo sob a mesma raiz: registar um depósito ou decidir um resgate muda o
+  // saldo, o extrato, a lista de contas e os totais da empresa ao mesmo tempo.
+  // Invalidar `investors.all` refresca os quatro de uma vez, que é sempre o que
+  // se quer — uma tela dessas com um número velho é pior do que um segundo de
+  // espera.
+  investors: {
+    all: ['investors'] as const,
+    me: ['investors', 'me'] as const,
+    statement: (accountId: string, page: number, kind: string) =>
+      ['investors', 'statement', accountId, page, kind] as const,
+    monthly: (accountId: string) => ['investors', 'monthly', accountId] as const,
+    withdrawals: (accountId: string) => ['investors', 'withdrawals', accountId] as const,
+    notifications: ['investors', 'notifications'] as const,
+    accounts: ['investors', 'accounts'] as const,
+    account: (id: string) => ['investors', 'account', id] as const,
+    overview: ['investors', 'overview'] as const,
+    pending: ['investors', 'pending'] as const,
+  },
+
   // Níveis (ranks)
   ranks: {
     all: ['ranks'] as const,

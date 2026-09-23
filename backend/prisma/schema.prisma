@@ -25,6 +25,13 @@ enum UserRole {
   /// de ir perguntar à administração — o que não poupa trabalho a ninguém, só
   /// acrescenta um passo.
   SUPPORT
+
+  /// Investidor: entra pelo invest.dragonfleet.pt e não vê nada da frota.
+  ///
+  /// O bloqueio não é a interface esconder menus — é o servidor recusar tudo o
+  /// que não seja o portal dele (ver `deny-investor.middleware.ts`). Uma conta
+  /// destas não é um motorista com menos botões: é alguém de fora da empresa.
+  INVESTOR
 }
 
 enum UserStatus {
@@ -154,6 +161,7 @@ model User {
   investments        Investment[]
   rank               DriverRank?
   rankEvents         RankEvent[]
+  investorAccount    InvestorAccount?
 
   @@map("users")
 }
@@ -876,4 +884,140 @@ model RankEvent {
 
   @@index([userId])
   @@map("rank_events")
+}
+
+/* =========================
+   PORTAL DO INVESTIDOR
+   invest.dragonfleet.pt
+   ========================= */
+
+/// Estado da conta. FECHADA não aceita depósitos nem rende; o histórico fica.
+enum InvestorAccountStatus {
+  ACTIVE
+  CLOSED
+}
+
+/// Os dois bolsos de uma conta de investidor.
+///
+/// CAPITAL é o que foi depositado; EARNINGS é o que os juros somaram. Andam
+/// separados porque o rendimento pode ser levantado sem mexer no capital, e
+/// porque os juros de cada dia contam sobre o capital e não sobre o total.
+enum InvestorBucket {
+  CAPITAL
+  EARNINGS
+}
+
+enum InvestorMovementKind {
+  DEPOSIT
+  ACCRUAL
+  WITHDRAWAL
+  ADJUSTMENT
+}
+
+enum InvestorWithdrawalStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+/// A conta de um investidor. Uma por utilizador com o papel INVESTOR.
+model InvestorAccount {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  /// Primeiro dia que pode render.
+  startDate      DateTime  @map("start_date") @db.Date
+  /// Último dia já pago em movimentos ACCRUAL. Nulo = ainda não rendeu.
+  accruedThrough DateTime? @map("accrued_through") @db.Date
+
+  /// Dias de aviso prévio para levantar capital. Zero = sem aviso.
+  /// Não se aplica ao rendimento.
+  noticeDays Int @default(0) @map("notice_days")
+
+  status InvestorAccountStatus @default(ACTIVE)
+  notes  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// RESTRICT: apagar um utilizador não pode levar o registo do dinheiro que
+  /// ele pôs cá dentro. Fecha-se a posição primeiro.
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  rates       InvestorRate[]
+  movements   InvestorMovement[]
+  withdrawals InvestorWithdrawal[]
+
+  @@map("investor_accounts")
+}
+
+/// A taxa não é uma coluna da conta: é uma série com datas.
+///
+/// Assim, baixar a taxa hoje não reescreve os juros já pagos — cada dia é pago
+/// à taxa que estava em vigor nesse dia.
+model InvestorRate {
+  id            String   @id @default(cuid())
+  accountId     String   @map("account_id")
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdBy     String?  @map("created_by")
+
+  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, effectiveFrom], map: "investor_rates_account_from_key")
+  @@map("investor_rates")
+}
+
+/// O extrato. O saldo é a soma disto — não há coluna de saldo em lado nenhum.
+model InvestorMovement {
+  id        String @id @default(cuid())
+  accountId String @map("account_id")
+
+  /// Dia civil em Lisboa a que o movimento pertence. O juro do dia 30 é
+  /// lançado na madrugada do 31 e tem de aparecer no dia 30.
+  day DateTime @db.Date
+
+  kind   InvestorMovementKind
+  bucket InvestorBucket
+
+  /// Com sinal: entradas positivas, saídas negativas. Somar dá o saldo.
+  amount Decimal @db.Decimal(16, 6)
+
+  description  String?
+  withdrawalId String? @map("withdrawal_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, day])
+  @@map("investor_movements")
+}
+
+/// Pedido de resgate. Só vira movimento quando a administração o marca como
+/// pago — antes disso é dinheiro prometido, descontado do disponível.
+model InvestorWithdrawal {
+  id        String         @id @default(cuid())
+  accountId String         @map("account_id")
+  bucket    InvestorBucket
+  amount    Decimal        @db.Decimal(12, 2)
+
+  status InvestorWithdrawalStatus @default(PENDING)
+
+  /// Já com o aviso prévio contado.
+  availableOn DateTime @map("available_on") @db.Date
+
+  note     String?
+  decision String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  decidedAt DateTime? @map("decided_at")
+  decidedBy String?   @map("decided_by")
+
+  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status])
+  @@map("investor_withdrawals")
 }

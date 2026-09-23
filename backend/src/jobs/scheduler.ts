@@ -5,6 +5,7 @@
 import cron from 'node-cron';
 import { runDocumentsExpiryCheck } from './documents-expiry.job';
 import { runInvestmentsAccrual } from './investments-accrual.job';
+import { runInvestorsAccrual } from './investors-accrual.job';
 import { runRanksRecalculation } from './ranks.job';
 
 // Corre todos os dias às 03:00 (hora do servidor). Horário de baixa utilização.
@@ -16,6 +17,12 @@ const DOCUMENTS_EXPIRY_SCHEDULE = '0 3 * * *';
 // dias em falta. Também corre ao arrancar, pelo mesmo motivo — um deploy à
 // meia-noite não deixa ninguém sem o dia.
 const INVESTMENTS_SCHEDULE = '15 0 * * *';
+
+// Investidores: 00:20 em Lisboa, logo a seguir aos investimentos. A ordem
+// entre os dois não importa — são dinheiros separados, sem nenhum cálculo em
+// comum — mas espaçá-los cinco minutos evita duas séries de transações a
+// competir pela mesma base de dados no mesmo segundo.
+const INVESTORS_SCHEDULE = '20 0 * * *';
 
 // Níveis: 00:45 em Lisboa, depois dos investimentos — o valor aplicado é uma
 // das metas, e recalcular antes de os ganhos do dia entrarem daria um nível
@@ -42,6 +49,16 @@ export function startScheduler(): void {
   );
 
   cron.schedule(
+    INVESTORS_SCHEDULE,
+    () => {
+      runInvestorsAccrual().catch((err) =>
+        console.error('[scheduler] Erro no juro diário das contas de investidor:', err),
+      );
+    },
+    { timezone: 'Europe/Lisbon' },
+  );
+
+  cron.schedule(
     RANKS_SCHEDULE,
     () => {
       runRanksRecalculation().catch((err) =>
@@ -51,9 +68,18 @@ export function startScheduler(): void {
     { timezone: 'Europe/Lisbon' },
   );
 
+  // Ao arrancar, os dois pagamentos diários. Um deploy à meia-noite não pode
+  // deixar ninguém sem o dia.
   runInvestmentsAccrual().catch((err) =>
     console.error('[scheduler] Erro no pagamento dos investimentos ao arrancar:', err),
   );
 
-  console.log('[scheduler] Jobs agendados. Documentos: 03:00. Investimentos: 00:15. Níveis: 00:45 (Lisboa).');
+  runInvestorsAccrual().catch((err) =>
+    console.error('[scheduler] Erro no juro dos investidores ao arrancar:', err),
+  );
+
+  console.log(
+    '[scheduler] Jobs agendados. Documentos: 03:00. Investimentos: 00:15. '
+    + 'Investidores: 00:20. Níveis: 00:45 (Lisboa).',
+  );
 }

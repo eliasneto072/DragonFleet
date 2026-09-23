@@ -159,6 +159,74 @@ tinha npm).
 
 ---
 
+## 2.2 Portal do investidor — invest.dragonfleet.pt
+
+Segundo site, MESMO projeto e MESMO deploy. `shared/config/portal.ts` lê o
+endereço por onde a aplicação foi aberta e escolhe o router e o tema. A
+alternativa — dois projetos — obrigava a corrigir tudo duas vezes.
+
+**Cloudflare Pages:** `invest.dragonfleet.pt` é um *custom domain* acrescentado
+ao MESMO projeto Pages. Não há projeto novo nem build novo.
+
+### O modelo do dinheiro
+
+Uma conta de investidor tem **dois bolsos**: `CAPITAL` (o que foi depositado) e
+`EARNINGS` (o que os juros somaram). Separados porque o rendimento pode ser
+levantado sem tocar no capital e porque o juro de cada dia conta sobre o capital
+— juros simples, a mesma regra dos investimentos dos motoristas.
+
+- Não há coluna de saldo. O saldo é a soma de `investor_movements`, feita na view
+  `investor_balances`. Mesmo princípio do `driver_balances`.
+- `amount` é **com sinal**: entradas positivas, saídas negativas.
+- A **taxa é uma série com datas** (`investor_rates`), não uma coluna. Baixar a
+  taxa hoje não reescreve os juros já pagos. Mudar a taxa de dias já pagos é
+  recusado (`RATE_IN_THE_PAST`) — para corrigir o passado usa-se um acerto, que
+  fica escrito no extrato com o motivo.
+- Juro diário às **00:20 (Lisboa)** e também sempre que alguém abre a conta.
+  Restrição única parcial `(conta, dia) WHERE kind='ACCRUAL'` impede pagar duas
+  vezes. Dias de capital zero avançam o marcador sem escrever linha nenhuma.
+- Um depósito com data retroativa **apaga e refaz** os juros desses dias, porque
+  o capital deles mudou.
+- Pedidos de resgate **PENDENTES reservam** o dinheiro (descontados do
+  disponível na view). Só viram movimento quando a administração marca como
+  pago. **Nada é transferido pelo site** — o botão regista que a transferência
+  já foi feita no banco.
+- Aviso prévio (`noticeDays`) só se aplica ao capital; o rendimento sai sempre
+  de imediato.
+
+### O isolamento
+
+`routes/routes.ts` monta `/auth` e `/investors` e **só depois** o
+`denyInvestor`. Tudo o que estiver abaixo dessa linha fica fechado a contas
+`INVESTOR` — incluindo rotas que ainda não existem. É uma **lista branca**: uma
+rota nova nasce protegida sem ninguém se lembrar de a proteger. O teste
+`investors.integration.test.ts` percorre catorze rotas da frota e exige 403 em
+todas.
+
+Os investidores também foram tirados das listas de utilizadores
+(`users.repository`): sem isso apareciam misturados com os motoristas.
+
+### Decisões tomadas
+
+- Contas criadas **só pela administração** — não há registo público no portal.
+- Depósitos **registados à mão** depois de confirmar a transferência no banco.
+  Sem Multibanco, sem cartão, sem pagamentos no site.
+- O portal é **sempre escuro** (o `ThemeProvider` força-o): em claro o ouro fica
+  amarelo-mostarda.
+- Marca própria: **DragonFleet Capital**, losango dourado, Cormorant Garamond
+  nos números. Deliberadamente diferente do site da frota.
+
+### Ainda por fazer
+
+- Contrato/documentos do investidor no portal (hoje não há documentos).
+- O investidor não pode mudar a palavra-passe sozinho.
+- Relatório anual de rendimentos para efeitos fiscais.
+
+Testes: `investors.math.test.ts` (24 unitários, corridos) e
+`investors.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está

@@ -17,10 +17,25 @@ import { bankRouter } from '../modules/bank/bank.routes';
 import { companiesRouter } from '../modules/companies/companies.routes';
 import { investmentsRouter } from '../modules/investments/investments.routes';
 import { ranksRouter } from '../modules/ranks/ranks.routes';
+import { investorsRouter } from '../modules/investors/investors.routes';
+import { denyInvestor } from '../middlewares/deny-investor.middleware';
 
 const router = Router();
 
+// ─── As duas rotas abertas a uma conta de investidor ───────────────────────
+//
+// Autenticação e o portal dele. Mais nada.
 router.use('/auth', authRouter())
+router.use('/investors', investorsRouter())
+
+// ─── A partir daqui é a frota ──────────────────────────────────────────────
+//
+// Lista BRANCA: tudo o que estiver abaixo desta linha fica fechado a contas de
+// investidor, incluindo rotas que ainda não existem. Uma rota nova nasce
+// protegida sem ninguém se lembrar de a proteger — que é a única forma de isto
+// se manter verdadeiro daqui a um ano.
+router.use(denyInvestor)
+
 router.use('/users', usersRouter())
 router.use('/vehicles', vehiclesRouter())
 router.use('/earnings', earningsRouter())

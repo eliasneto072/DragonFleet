@@ -1,3 +1,6 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+/* Depois do theme.css de propósito: o portal do investidor redefine os mesmos
+   tokens e tem de ganhar. */
+@import './invest.css';

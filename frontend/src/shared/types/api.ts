@@ -3,7 +3,9 @@
 
 // ---------- Enums ----------
 
-export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER' | 'SUPPORT';
+// INVESTOR entra por invest.dragonfleet.pt e não tem acesso a nada da frota —
+// o bloqueio é do servidor, não desta linha (ver deny-investor.middleware.ts).
+export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER' | 'SUPPORT' | 'INVESTOR';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'AGUARDANDO_REGULARIZACAO';
 
 export type EarningPlatform  = 'UBER' | 'BOLT' | 'FREE_NOW' | 'OTHER';

@@ -42,6 +42,13 @@ export function LoginPage() {
   if (loading && !bootedRef.current) return null;
 
   if (isAuthenticated && user) {
+    // Uma conta de investidor não tem nada para ver deste lado: a API recusa-lhe
+    // toda a frota. Sem esta linha entrava e via uma aplicação vazia com erros
+    // em todos os painéis — e a queixa que chegava era "o site não funciona".
+    if (user.role === 'INVESTOR') {
+      window.location.href = 'https://invest.dragonfleet.pt';
+      return null;
+    }
     const dest = user.role === 'DRIVER' ? '/app/driver' : '/app/admin';
     return <Navigate to={dest} replace />;
   }
