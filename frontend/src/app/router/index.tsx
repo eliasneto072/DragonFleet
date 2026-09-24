@@ -37,7 +37,7 @@ import { InvestmentsAdminPage } from '@/features/admin/pages/InvestmentsAdminPag
 import { RanksPage } from '@/features/admin/pages/RanksPage';
 import { InvestorsPage } from '@/features/admin/pages/InvestorsPage';
 import { ProjectsPage } from '@/features/admin/pages/ProjectsPage';
-import { AdminOnly, NaoSuporte } from '@/features/admin/components/AdminOnly';
+import { AdminOnly, RequireArea } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
 
@@ -74,36 +74,40 @@ export const router = createBrowserRouter([
         element: <AdminLayout />,
         children: [
           { index: true, element: <Navigate to="dashboard" replace /> },
-          // Fora do alcance do suporte. As telas que ele lê — drivers,
-          // documents, financial e support — ficam sem guarda, e o backend
-          // decide o resto: ele vê os dados e leva 403 em qualquer ação.
-          { path: 'dashboard', element: <NaoSuporte><AdminDashboardPage /></NaoSuporte> },
-          { path: 'drivers', element: <DriversPage /> },
-          { path: 'drivers/:id', element: <DriverDetailPage /> }, // ← novo
-          { path: 'documents', element: <DocumentsAdminPage /> },
-          { path: 'settlements', element: <NaoSuporte><SettlementsPage /></NaoSuporte> },
-          { path: 'financial', element: <FinancialPage /> },
-          // Sem guarda: o suporte lê (a pergunta "quanto tenho aplicado" chega-lhe
-          // a ele). Só o ADMIN escreve — a tela esconde os botões e o servidor recusa.
-          { path: 'investments', element: <InvestmentsAdminPage /> },
-          { path: 'ranks', element: <RanksPage /> },
-          // Sem guarda de ADMIN: o suporte e os gestores leem (a pergunta
-          // "quanto é que temos de investidores" chega-lhes). Só o ADMIN
-          // escreve — a tela esconde os botões e o servidor recusa.
-          { path: 'investors', element: <InvestorsPage /> },
-          { path: 'projects', element: <ProjectsPage /> },
-          { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
-          { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
-          // Antes de 'fleet/:id' por legibilidade — o React Router ja da
-          // prioridade ao segmento estatico, mas quem le o ficheiro nao tem
-          // de saber isso para perceber que 'lookup' nao e um id.
-          { path: 'fleet/lookup', element: <NaoSuporte><AssignmentLookupPage /></NaoSuporte> },
-          { path: 'fleet/:id', element: <NaoSuporte><VehicleDetailPage /></NaoSuporte> },
-          { path: 'analytics', element: <NaoSuporte><AnalyticsPage /></NaoSuporte> },
-          { path: 'notifications', element: <NaoSuporte><NotificationsAdminPage /></NaoSuporte> },
-          { path: 'support', element: <SupportAdminPage /> },
-          { path: 'settings', element: <AdminOnly><SettingsPage /></AdminOnly> },
-          { path: 'team', element: <AdminOnly><TeamPage /></AdminOnly> },
+
+          // Cada tela declara a ÁREA a que pertence. Quem não a tiver é
+          // mandado para a primeira que puder abrir — a guarda a sério está
+          // no servidor, isto é para a interface não prometer o que não pode
+          // cumprir.
+          { path: 'dashboard',      element: <RequireArea area="DASHBOARD"><AdminDashboardPage /></RequireArea> },
+          { path: 'drivers',        element: <RequireArea area="DRIVERS"><DriversPage /></RequireArea> },
+          { path: 'drivers/:id',    element: <RequireArea area="DRIVERS"><DriverDetailPage /></RequireArea> },
+          { path: 'documents',      element: <RequireArea area="DOCUMENTS"><DocumentsAdminPage /></RequireArea> },
+          { path: 'fleet',          element: <RequireArea area="FLEET"><FleetPage /></RequireArea> },
+          // Antes de 'fleet/:id' por legibilidade — o React Router já dá
+          // prioridade ao segmento estático, mas quem lê o ficheiro não tem
+          // de saber isso para perceber que 'lookup' não é um id.
+          { path: 'fleet/lookup',   element: <RequireArea area="FLEET"><AssignmentLookupPage /></RequireArea> },
+          { path: 'fleet/:id',      element: <RequireArea area="FLEET"><VehicleDetailPage /></RequireArea> },
+          { path: 'ranks',          element: <RequireArea area="RANKS"><RanksPage /></RequireArea> },
+
+          { path: 'settlements',    element: <RequireArea area="SETTLEMENTS"><SettlementsPage /></RequireArea> },
+          { path: 'financial',      element: <RequireArea area="FINANCIAL"><FinancialPage /></RequireArea> },
+          { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
+          { path: 'analytics',      element: <RequireArea area="ANALYTICS"><AnalyticsPage /></RequireArea> },
+
+          { path: 'investments',    element: <RequireArea area="INVESTMENTS"><InvestmentsAdminPage /></RequireArea> },
+          { path: 'investors',      element: <RequireArea area="INVESTORS"><InvestorsPage /></RequireArea> },
+          { path: 'projects',       element: <RequireArea area="PROJECTS"><ProjectsPage /></RequireArea> },
+
+          { path: 'notifications',  element: <RequireArea area="NOTIFICATIONS"><NotificationsAdminPage /></RequireArea> },
+          { path: 'support',        element: <RequireArea area="SUPPORT"><SupportAdminPage /></RequireArea> },
+          { path: 'settings',       element: <RequireArea area="SETTINGS"><SettingsPage /></RequireArea> },
+
+          // A Equipa fica em AdminOnly e não numa área: é onde se distribuem
+          // as permissões, e dá-la por permissão seria dar a chave para
+          // alguém se dar todas as outras.
+          { path: 'team',           element: <AdminOnly><TeamPage /></AdminOnly> },
         ],
       },
     ],

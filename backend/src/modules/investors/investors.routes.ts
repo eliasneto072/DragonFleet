@@ -14,6 +14,7 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { requireAdmin } from '../../middlewares/role.middleware';
 import { investorsController as c } from './investors.controller';
 import { projectsRouter } from '../projects/projects.routes';
+import { requireArea } from '../../middlewares/area.middleware';
 
 export function investorsRouter(): Router {
   const router = Router();
@@ -22,7 +23,14 @@ export function investorsRouter(): Router {
   // Os projetos vivem DENTRO do portal do investidor: são um produto de
   // investimento e têm de ser alcançáveis por uma conta INVESTOR, que está
   // fechada a tudo o resto da API (ver deny-investor.middleware.ts).
-  router.use('/projects', projectsRouter());
+  // Os projetos ANTES da guarda de INVESTIDORES: são duas áreas distintas no
+  // painel, e quem trata dos projetos não tem obrigatoriamente de ver as
+  // contas dos investidores. Guardá-los por baixo da outra juntaria as duas.
+  router.use('/projects', requireArea('PROJECTS'), projectsRouter());
+
+  // Daqui para baixo é a área INVESTIDORES. A guarda só constrange quem é da
+  // equipa — o próprio investidor passa em frente e vê a conta dele.
+  router.use(requireArea('INVESTORS'));
 
   // ── Portal do investidor ────────────────────────────────────────────────
   router.get('/me', c.me);

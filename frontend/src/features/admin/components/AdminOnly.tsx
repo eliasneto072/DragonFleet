@@ -1,49 +1,72 @@
 // src/features/admin/components/AdminOnly.tsx
 //
-// Guarda de rota para as telas que só a Administração pode abrir.
+// Guardas de rota do painel.
 //
 // Esconder a entrada no menu não chega: o endereço continua a funcionar se
-// alguém o escrever ou tiver guardado nos favoritos. Um MANAGER que abrisse
-// /app/admin/settings via um formulário preenchido com os valores atuais e
-// levava 403 só ao Guardar — depois de já ter escrito.
+// alguém o escrever ou o tiver nos favoritos. Sem isto, quem abrisse
+// /app/admin/settings via um formulário preenchido com os valores atuais e só
+// levava 403 ao Guardar — depois de já ter escrito tudo.
 //
-// Isto não é segurança. A segurança está no servidor, que recusa na mesma. É
-// para a interface não prometer o que não pode cumprir.
+// ISTO NÃO É SEGURANÇA. A segurança está no servidor, que recusa na mesma
+// (ver `area.middleware.ts`). Isto é para a interface não prometer o que não
+// pode cumprir.
 
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import type { UserRole } from '@/shared/types/api';
+import { primeiraTelaPermitida } from './AdminLayout';
+import type { Access, Area } from '@/shared/lib/areas';
 
-function Guarda({ papeis, children }: { papeis: UserRole[]; children: ReactNode }) {
-  const { user } = useAuth();
+/**
+ * Exige acesso a uma área.
+ *
+ * Quem não tem vai para a primeira tela que PODE abrir — e não para o
+ * Dashboard. Mandá-lo para o Dashboard funcionava enquanto toda a gente o
+ * podia abrir; agora que o acesso é por área, seria um salto para outra tela
+ * fechada, e daí para outra, até o browser desistir.
+ *
+ * Sem nenhuma tela disponível, a pessoa tem uma conta de equipa sem acessos
+ * nenhuns. É um estado possível — alguém que ainda não foi configurado — e o
+ * que ela precisa é de uma frase, não de mais um salto.
+ */
+export function RequireArea({ area, nivel = 'VIEW', children }: {
+  area: Area;
+  nivel?: Access;
+  children: ReactNode;
+}) {
+  const { user, can } = useAuth();
 
-  // Para o painel e não para o login: quem está aqui tem sessão válida, só não
-  // tem este papel. Mandá-lo para o login sugeriria que o problema era a
-  // sessão, e ele voltaria a entrar para dar no mesmo sítio.
-  //
-  // O SUPPORT é a exceção: o Dashboard não está entre as telas dele, portanto
-  // mandá-lo para lá seria um salto para outra tela que também não pode abrir.
-  if (!user || !papeis.includes(user.role)) {
-    const destino = user?.role === 'SUPPORT' ? '/app/admin/support' : '/app/admin/dashboard';
-    return <Navigate to={destino} replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
+  if (can(area, nivel)) return <>{children}</>;
 
-  return <>{children}</>;
-}
+  const destino = primeiraTelaPermitida((a) => can(a));
+  if (destino) return <Navigate to={destino} replace />;
 
-/** Só a Administração: Configurações, Sociedades, Equipa. */
-export function AdminOnly({ children }: { children: ReactNode }) {
-  return <Guarda papeis={['ADMIN']}>{children}</Guarda>;
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
+      <p className="text-lg font-medium">Ainda não tem acessos atribuídos</p>
+      <p className="max-w-md text-sm text-muted-foreground">
+        A sua conta existe mas ainda não tem nenhuma área do painel atribuída.
+        Peça à administração para lhe dar acesso ao que precisa.
+      </p>
+    </div>
+  );
 }
 
 /**
- * Fora do alcance do suporte: tudo o que ele não lê.
+ * Só a Administração.
  *
- * Envolve as telas que o menu já lhe esconde. Esconder a entrada não chega —
- * o endereço continua a funcionar se alguém o escrever ou o tiver nos
- * favoritos, e ele veria a tela a carregar até o backend devolver 403.
+ * Mantido para as telas onde o critério é mesmo ser dono do sistema, e não uma
+ * área configurável — a Equipa, por exemplo, onde se distribuem as
+ * permissões. Dar essa tela a alguém por permissão seria dar-lhe a chave para
+ * se dar todas as outras.
  */
-export function NaoSuporte({ children }: { children: ReactNode }) {
-  return <Guarda papeis={['ADMIN', 'MANAGER']}>{children}</Guarda>;
+export function AdminOnly({ children }: { children: ReactNode }) {
+  const { user, can } = useAuth();
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'ADMIN') return <>{children}</>;
+
+  const destino = primeiraTelaPermitida((a) => can(a));
+  return <Navigate to={destino ?? '/app/driver'} replace />;
 }

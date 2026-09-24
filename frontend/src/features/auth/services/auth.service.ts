@@ -1,5 +1,6 @@
 // src/features/auth/services/auth.service.ts
 import type { UserRole } from '@/shared/types/api';
+import type { Access, Area } from '@/shared/lib/areas';
 import { apiClient, tokenStorage } from '@/shared/lib/api-client';
 
 export interface AuthUser {
@@ -16,6 +17,18 @@ export interface AuthUser {
   status:    string;
   createdAt: string;
   updatedAt: string;
+
+  /**
+   * O que esta pessoa pode fazer em cada área do painel.
+   *
+   * Vem no /auth/me e não num pedido à parte: o menu precisa dela para saber
+   * o que desenhar, e num segundo pedido haveria um instante com o menu já
+   * desenhado sem ela — a piscar entradas que a pessoa não pode abrir.
+   *
+   * Ausente nas respostas antigas em cache; quem lê trata isso como "sem
+   * permissões configuradas" e cai no papel.
+   */
+  permissions?: Partial<Record<Area, Access>>;
 }
 
 interface LoginResponse {

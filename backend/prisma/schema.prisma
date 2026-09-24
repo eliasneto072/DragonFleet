@@ -162,6 +162,7 @@ model User {
   rank               DriverRank?
   rankEvents         RankEvent[]
   investorAccount    InvestorAccount?
+  permissions        StaffPermission[]
 
   @@map("users")
 }
@@ -1294,4 +1295,62 @@ model ProjectUpdate {
 
   @@index([projectId, happenedOn])
   @@map("project_updates")
+}
+
+
+/* =========================
+   PERMISSÕES DA EQUIPA
+   ========================= */
+
+/// As áreas do painel de administração. Uma por entrada do menu.
+enum StaffArea {
+  DASHBOARD
+  DRIVERS
+  DOCUMENTS
+  FLEET
+  RANKS
+  SETTLEMENTS
+  FINANCIAL
+  GREEN_RECEIPTS
+  ANALYTICS
+  INVESTMENTS
+  INVESTORS
+  PROJECTS
+  NOTIFICATIONS
+  SUPPORT
+  SETTINGS
+  TEAM
+}
+
+/// NONE não vê; VIEW lê; MANAGE lê e escreve.
+///
+/// NONE é um valor explícito e não a ausência de linha: "nunca foi
+/// configurado" e "foi expressamente tirado" são coisas diferentes, e só a
+/// primeira cai no comportamento antigo do papel.
+enum StaffAccess {
+  NONE
+  VIEW
+  MANAGE
+}
+
+/// O que uma pessoa da equipa pode fazer em cada área.
+///
+/// DUAS REGRAS QUE NÃO SE MEXEM:
+///   1. O ADMIN tem tudo, sempre, e estas linhas são ignoradas para ele —
+///      senão uma configuração errada tranca o dono fora do sistema.
+///   2. Sem linhas nenhumas, vale o comportamento antigo do papel.
+model StaffPermission {
+  id     String      @id @default(cuid())
+  userId String      @map("user_id")
+  area   StaffArea
+  access StaffAccess @default(NONE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, area], map: "staff_permissions_user_area_key")
+  @@map("staff_permissions")
 }

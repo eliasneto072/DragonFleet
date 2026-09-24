@@ -392,6 +392,77 @@ cláusula ORDER BY é como se abre a porta a uma injeção.
 
 ---
 
+## 2.7 Permissões por pessoa, e o menu reorganizado
+
+### O menu
+
+Eram dezasseis entradas numa lista seguida. Passaram a quatro grupos:
+**Operação** (Dashboard, Motoristas, Documentos, Frotas, Níveis), **Dinheiro**
+(Faturação, Financeiro, Recibos Verdes, Análises), **Investimento**
+(Investimentos, Investidores, Projetos) e **Sistema** (Notificações, Suporte,
+Configurações, Equipa). Um grupo sem entradas visíveis desaparece com o título.
+
+O menu é **construído a partir das permissões**: cada entrada declara a sua
+`Area` em `AdminLayout.tsx`. As duas listas `SO_ADMIN` / `VE_SUPORTE`
+desapareceram.
+
+### As permissões
+
+`staff_permissions`: uma linha por (pessoa, área), 16 áreas, três níveis —
+`NONE`, `VIEW`, `MANAGE`.
+
+**Duas regras que não se mexem:**
+
+1. **O ADMIN tem tudo, sempre**, e a tabela é ignorada para ele. Sem isto uma
+   configuração errada tranca o dono fora do sistema — e o ecrã que corrige
+   isso também estaria trancado. Guardar permissões para um ADMIN é recusado
+   (`ADMIN_HAS_EVERYTHING`).
+2. **Sem linhas configuradas, vale o comportamento antigo do papel**
+   (`PADRAO_DO_PAPEL`). É o que faz este deploy não mudar nada para ninguém no
+   dia em que entra. Basta UMA área configurada para a configuração passar a
+   mandar por inteiro — não se volta a misturar com o padrão.
+
+### A guarda é do servidor
+
+`requireArea(area, nivel)` em `area.middleware.ts`, aplicado a roteadores
+inteiros no `routes.ts`. A regra que torna isso seguro: **só constrange quem é
+da equipa** (ADMIN/MANAGER/SUPPORT). Um motorista ou investidor passa em
+frente — as rotas são partilhadas (o mesmo `/withdrawals` serve quem pede e
+quem aprova) e quem decide o que um motorista vê dos SEUS dados são os
+serviços, como sempre foi.
+
+Sem sessão identificada a guarda também passa em frente, senão partia o
+**registo público** em `POST /users`.
+
+Vai à base a cada pedido e não ao token: tirar um acesso tem de fazer efeito
+**agora**, não na próxima sessão. Há um teste que confirma isso com o mesmo
+token.
+
+As permissões vêm no `/auth/me` **e na resposta do login** — sem o segundo,
+haveria uma janela entre entrar e o primeiro `me` com o menu desenhado vazio.
+
+### Perfis
+
+Sete conjuntos prontos (Faturação, Suporte, Frota, Financeiro, Investimento,
+Só leitura, Sem acesso). **Não são papéis**: preenchem as 16 áreas de uma vez e
+a partir daí muda-se o que for preciso.
+
+### A Equipa continua a ser só do ADMIN
+
+Não é uma área configurável de propósito: dá-la por permissão seria dar a chave
+para alguém se dar todas as outras.
+
+### Ainda por fazer
+
+- Dentro de cada área, `MANAGE` vs `VIEW` é imposto por roteador; alguns
+  serviços ainda têm as suas próprias verificações de ADMIN por baixo, que
+  continuam a valer (é redundância a favor, não contra).
+- Não há registo de quem mudou o quê nas permissões além de `updated_by`.
+
+Testes: `permissions.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está
