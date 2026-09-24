@@ -74,10 +74,22 @@ export const withdrawalsService = {
    * O valor vai como texto e não como número: num FormData tudo é texto, e o
    * backend já o converte com `z.coerce.number()`.
    */
-  create(amount: number, receipt: File): Promise<{ withdrawal: ApiWithdrawal }> {
+  /**
+   * POST /withdrawals — multipart, com o recibo verde.
+   *
+   * `bankAccountId` escolhe para qual das contas do motorista o dinheiro vai.
+   * Omitido, o servidor usa a principal — que é o que acontece a quem só tem
+   * uma. O servidor confirma sempre que a conta é mesmo dele.
+   */
+  create(
+    amount: number,
+    receipt: File,
+    bankAccountId?: string,
+  ): Promise<{ withdrawal: ApiWithdrawal }> {
     const form = new FormData();
     form.append('amount', String(amount));
     form.append('receipt', receipt);
+    if (bankAccountId) form.append('bankAccountId', bankAccountId);
     return apiClient.upload('/withdrawals', form);
   },
 

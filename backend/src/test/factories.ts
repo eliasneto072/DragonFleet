@@ -70,10 +70,15 @@ export async function criaAdmin() {
 export async function criaContaAprovada(userId: string, opts: {
   iban?: string;
   holderName?: string;
+  label?: string;
+  /** A conta por omissão. A primeira de cada motorista costuma ser. */
+  isPrimary?: boolean;
 } = {}) {
   return testDb.bankAccount.create({
     data: {
       userId,
+      label: opts.label ?? 'Conta principal',
+      isPrimary: opts.isPrimary ?? true,
       iban: opts.iban ?? 'PT50003300004567890123437',
       holderName: opts.holderName ?? 'Motorista de Teste',
       reviewedAt: new Date(),
@@ -82,10 +87,11 @@ export async function criaContaAprovada(userId: string, opts: {
 }
 
 /** Conta submetida e à espera de decisão: existe, mas não serve para receber. */
-export async function criaContaPendente(userId: string) {
+export async function criaContaPendente(userId: string, opts: { label?: string } = {}) {
   return testDb.bankAccount.create({
     data: {
       userId,
+      label: opts.label ?? 'Conta pendente',
       pendingIban: 'PT50002700000001234567833',
       pendingHolderName: 'Motorista de Teste',
       pendingProofUrl: 'https://exemplo.local/comprovativo.pdf',

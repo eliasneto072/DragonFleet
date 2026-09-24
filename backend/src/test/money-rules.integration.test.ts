@@ -270,7 +270,9 @@ describe('retirada — o IBAN de destino', () => {
       .send({ status: 'APPROVED' });
 
     // O motorista muda de banco, e a administração aprova a alteração.
-    await testDb.bankAccount.update({
+    // updateMany e não update: o motorista pode ter até três contas, portanto
+    // `userId` já não identifica uma linha.
+    await testDb.bankAccount.updateMany({
       where: { userId: motorista.id },
       data: { iban: 'PT50001000004567890123438', reviewedAt: new Date() },
     });

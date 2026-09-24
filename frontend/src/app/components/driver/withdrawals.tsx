@@ -191,20 +191,37 @@ export function Withdrawals() {
   });
 
   const withdrawals: ApiWithdrawal[] = data?.withdrawals ?? [];
-  const account = bankQuery.data?.account;
   const available = balanceQuery.data?.balance.available ?? 0;
 
-  // isUsable é derivado no servidor: há IBAN em vigor. Enquanto a consulta não
-  // responde tratamos como bloqueado — abrir o formulário para o fechar a
-  // seguir seria pior do que esperar.
-  const canWithdraw = account?.isUsable === true;
+  // Só as contas aprovadas servem de destino. Uma submetida e por decidir
+  // aparece no Perfil, mas não aqui: não há para onde transferir.
+  const contas = (bankQuery.data?.accounts ?? []).filter((c) => c.isUsable);
+  const principal = contas.find((c) => c.isPrimary) ?? contas[0];
+
+  // A conta escolhida para ESTE pedido. Começa na principal e o motorista
+  // muda se quiser — a escolha vale só para este pedido, não altera a
+  // principal, que é uma decisão à parte no Perfil.
+  const [contaEscolhida, setContaEscolhida] = useState<string | null>(null);
+  const conta = contas.find((c) => c.id === contaEscolhida) ?? principal;
+
+  // Enquanto a consulta não responde tratamos como bloqueado — abrir o
+  // formulário para o fechar a seguir seria pior do que esperar.
+  const canWithdraw = contas.length > 0;
+
+  // Para o aviso de "não pode pedir": aqui interessam TODAS as contas, e não
+  // só as aprovadas. É a diferença entre "está à espera de decisão" e "ainda
+  // não registou nada" — duas mensagens diferentes para quem abre a tela.
+  const todas = bankQuery.data?.accounts ?? [];
+  const aguardaDecisao = todas.some((c) => c.hasPending);
+  const recusada = todas.find((c) => c.rejectionReason && !c.hasPending);
 
   const settled = withdrawals.filter((w) => w.status === 'PAID' || w.status === 'APPROVED');
   const totalWithdrawn = settled.reduce((sum, w) => sum + Number(w.amount), 0);
 
   const { mutate: createWithdrawal, isPending } = useMutation({
-    mutationFn: ({ value, file }: { value: number; file: File }) =>
-      withdrawalsService.create(value, file),
+    mutationFn: ({ value, file, accountId }: {
+      value: number; file: File; accountId?: string;
+    }) => withdrawalsService.create(value, file, accountId),
     onSuccess: () => {
       // Também o painel do administrador: o pedido entra na fila dele.
       invalidateAfterWithdrawal(queryClient);
@@ -240,7 +257,7 @@ export function Withdrawals() {
       return;
     }
 
-    createWithdrawal({ value, file: receipt });
+    createWithdrawal({ value, file: receipt, accountId: conta?.id });
   }
 
   function handleOpenChange(next: boolean) {
@@ -248,6 +265,9 @@ export function Withdrawals() {
     if (!next) {
       setReceipt(null);
       setReceiptError('');
+      // A escolha da conta vale só para o pedido que estava a ser feito: o
+      // seguinte volta a começar na principal.
+      setContaEscolhida(null);
     }
   }
 
@@ -295,20 +315,20 @@ export function Withdrawals() {
             <Landmark className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                {account?.hasPending
+                {aguardaDecisao
                   ? 'Os seus dados bancários aguardam aprovação'
-                  : account?.rejectionReason
+                  : recusada
                     ? 'Os seus dados bancários foram recusados'
                     : 'Ainda não registou uma conta bancária'}
               </p>
               <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                {account?.hasPending
+                {aguardaDecisao
                   ? 'Assim que a administração aprovar, poderá pedir retiradas.'
                   : 'Sem IBAN aprovado não há destino para a transferência, por isso os pedidos ficam bloqueados.'}
               </p>
-              {account?.rejectionReason && !account.hasPending && (
+              {recusada && (
                 <p className="mt-1.5 text-sm text-amber-800 dark:text-amber-300">
-                  <span className="font-medium">Motivo:</span> {account.rejectionReason}
+                  <span className="font-medium">Motivo:</span> {recusada.rejectionReason}
                 </p>
               )}
               <Button asChild variant="outline" size="sm" className="mt-3">
@@ -335,9 +355,14 @@ export function Withdrawals() {
               {formatCurrency(totalWithdrawn)} já retirados em {settled.length} pedido
               {settled.length !== 1 ? 's' : ''}
             </p>
-            {account?.isUsable && account.iban && (
+            {principal?.iban && (
               <p className="mt-2 truncate font-mono text-xs text-white/60">
-                {formatIban(account.iban)}
+                {formatIban(principal.iban)}
+                {contas.length > 1 && (
+                  <span className="ml-2 font-sans">
+                    e mais {contas.length - 1} conta{contas.length - 1 === 1 ? '' : 's'}
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -401,12 +426,58 @@ export function Withdrawals() {
               </p>
             </div>
 
-            {account?.iban && (
+            {/* Com uma conta só, isto é informação: para onde vai. Com mais do
+                que uma passa a ser uma escolha — e é a única do formulário que
+                o motorista pode enganar-se sem dar por isso, por isso a conta
+                escolhida fica assinalada e não apenas subentendida. */}
+            {contas.length === 1 && conta?.iban && (
               <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3">
                 <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">Transferência para</p>
-                  <p className="break-all font-mono text-xs">{formatIban(account.iban)}</p>
+                  <p className="break-all font-mono text-xs">{formatIban(conta.iban)}</p>
+                </div>
+              </div>
+            )}
+
+            {contas.length > 1 && (
+              <div className="space-y-2">
+                <Label>Receber em</Label>
+                <div className="space-y-2">
+                  {contas.map((c) => {
+                    const escolhida = c.id === conta?.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setContaEscolhida(c.id)}
+                        aria-pressed={escolhida}
+                        className={`flex w-full items-start gap-2 rounded-lg border p-3 text-left transition-colors ${
+                          escolhida
+                            ? 'border-brand-500 bg-brand-50 dark:bg-emerald-950/40'
+                            : 'border-border bg-secondary hover:border-brand-300'
+                        }`}
+                      >
+                        <Landmark
+                          className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {c.label ?? 'Conta'}
+                            {c.isPrimary && (
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                principal
+                              </span>
+                            )}
+                          </p>
+                          <p className="break-all font-mono text-xs text-muted-foreground">
+                            {formatIban(c.iban)}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

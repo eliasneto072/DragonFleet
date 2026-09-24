@@ -106,6 +106,16 @@ export interface ApiWithdrawal {
   paidToHolder?: string | null;
 
   /**
+   * Qual das contas bancárias o motorista escolheu ao pedir.
+   *
+   * Nulo nas retiradas anteriores a haver mais do que uma conta. O nome serve
+   * para a tela do administrador dizer "Millennium" em vez de mostrar vinte e
+   * cinco dígitos.
+   */
+  bankAccountId?:    string | null;
+  bankAccountLabel?: string | null;
+
+  /**
    * A quem foi emitido o recibo verde. Registado na aprovação.
    *
    * Quatro estados, e a diferença entre os dois últimos é a que interessa à
@@ -158,7 +168,13 @@ export interface ApiCompany {
  * a conta sem destino de pagamento até alguém corrigir.
  */
 export interface ApiBankAccount {
+  id: string;
   userId: string;
+
+  /** O nome que o motorista deu à conta ("Millennium", "conta da empresa"). */
+  label: string | null;
+  /** A que vem escolhida por omissão no pedido de retirada. */
+  isPrimary: boolean;
 
   /** Em vigor. Nulo até à primeira aprovação. */
   iban:       string | null;

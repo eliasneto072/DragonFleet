@@ -227,6 +227,55 @@ Testes: `investors.math.test.ts` (24 unitários, corridos) e
 
 ---
 
+## 2.3 Até três contas bancárias por motorista
+
+`bank_accounts` deixou de ter `user_id` único. Cada motorista pode ter até três
+contas ativas (`MAX_BANK_ACCOUNTS`), uma delas **principal**.
+
+- **Cada conta tem a SUA aprovação.** Aprovar uma não aprova as outras — a
+  confiança é por conta, não por pessoa. A rota de aprovação passou a ser
+  `PATCH /bank/accounts/:id/review` (era por `userId`, que já não identifica
+  nada).
+- **Índice parcial** `bank_accounts_one_primary_per_user` garante uma principal
+  por motorista mesmo com dois pedidos simultâneos. Outro índice parcial impede
+  o mesmo IBAN repetido na mesma pessoa.
+- **Arquivar, não apagar** (`archived_at`): uma conta que já recebeu dinheiro é
+  histórico. Recusa arquivar a última conta e uma com retirada por decidir.
+- **A retirada guarda `bank_account_id`** (a escolha) e continua a congelar
+  `paid_to_iban` **na aprovação**. O `resolveAccount` valida que a conta é mesmo
+  do motorista — sem isso, trocar o id no pedido mandava a transferência para
+  fora. Há um teste dedicado a isso.
+- `GET /bank/me` e `GET /bank/:userId` devolvem agora `{ accounts: [...] }`.
+
+Testes: `bank-accounts.integration.test.ts` (só na CI).
+
+---
+
+## 2.4 Decisões fechadas sobre os PROJETOS de investimento
+
+Confirmadas pelo cliente, ainda **por implementar**:
+
+1. **O capital fica investido enquanto o carro render** e é devolvido quando o
+   carro for vendido; a mais-valia ou menos-valia da venda reparte-se na mesma
+   proporção. NÃO há amortização mensal do capital.
+2. **O lucro do carro é apurado automaticamente** a partir dos fechos semanais
+   do motorista que tem esse carro, com botão de acerto manual para despesas
+   que não passam no fecho (seguro, revisão, pneus).
+3. **Distribuição mensal.**
+
+Nota do cliente sobre a economia disto: o lucro é alto para ele, os investidores
+recuperam o capital em cerca de 2 anos de distribuições e continuam a receber
+enquanto o carro rodar. Ou seja, **as distribuições não amortizam capital** — a
+dívida de capital mantém-se até à venda. Convém o projeto poder ter um prazo
+opcional, senão um carro que dure 6 anos devolve mais de 300%.
+
+**Aviso dado ao cliente (uma vez, não repetir):** juntar dinheiro de várias
+pessoas com participação nos lucros cai no regime do financiamento colaborativo
+de capital (Lei 102/2015) e pode exigir registo na CMVM conforme a forma e o
+público. O enquadramento é com o contabilista dele.
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está

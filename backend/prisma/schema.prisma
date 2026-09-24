@@ -156,7 +156,7 @@ model User {
   settlements        WeeklySettlement[]  @relation("settlementsReceived")
   settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
-  bankAccount        BankAccount?
+  bankAccounts       BankAccount[]
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
   investments        Investment[]
   rank               DriverRank?
@@ -301,6 +301,15 @@ model Withdrawal {
   receiptUrl String @map("receipt_url")
   receiptKey String @map("receipt_key")
 
+  /// A conta escolhida pelo motorista ao pedir. Serve para a tela do
+  /// administrador mostrar o nome que ele lhe deu em vez do número, e para se
+  /// saber qual das três foi pedida mesmo que depois seja arquivada.
+  ///
+  /// Nula nas retiradas anteriores a esta funcionalidade — nessas havia uma
+  /// conta só e não havia escolha nenhuma a registar.
+  bankAccountId String?      @map("bank_account_id")
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
   /// IBAN para onde o valor foi enviado, copiado no momento da APROVAÇÃO.
   ///
   /// Congelado de propósito, como a percentagem no fecho semanal: se o
@@ -339,6 +348,7 @@ model Withdrawal {
   // sociedades conta os recibos de cada uma. Sem este indice, cada uma dessas
   // consultas e um varrimento sequencial da tabela toda.
   @@index([companyId])
+  @@index([bankAccountId])
   @@map("withdrawals")
 }
 
@@ -348,9 +358,26 @@ model Withdrawal {
 /// fraude — quem ganhe acesso à conta muda o número e desvia o pagamento
 /// seguinte. Enquanto a alteração está pendente, o IBAN anterior continua a
 /// valer, por isso os dois pares de campos coexistem.
+/// Uma conta bancária do motorista. Até três por pessoa.
+///
+/// Cada uma tem o seu ciclo de aprovação: submete-se com comprovativo, fica
+/// pendente, e só depois de aprovada pode receber dinheiro. Três contas são
+/// três aprovações — a confiança é por conta, não por pessoa.
 model BankAccount {
   id     String @id @default(cuid())
-  userId String @unique @map("user_id")
+  userId String @map("user_id")
+
+  /// O nome que o motorista dá à conta ("Millennium", "conta da empresa").
+  /// Sem isto, escolher entre três IBANs é escolher entre três filas de
+  /// dígitos.
+  label String?
+
+  /// A que vem escolhida por omissão no pedido de retirada.
+  /// Um índice parcial na base garante que só há uma ativa por motorista.
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  /// Arquivada. Não se apaga: retiradas antigas apontam para cá.
+  archivedAt DateTime? @map("archived_at")
 
   /// Em vigor. Vazio até a primeira aprovação.
   iban       String?
@@ -373,9 +400,11 @@ model BankAccount {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy User? @relation("bankAccountsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy  User?        @relation("bankAccountsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+  withdrawals Withdrawal[]
 
+  @@index([userId])
   @@map("bank_accounts")
 }
 

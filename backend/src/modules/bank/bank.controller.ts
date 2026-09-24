@@ -6,7 +6,10 @@ import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
 import { uploadToCloudinary } from '../upload/upload.service';
 import { bankService } from './bank.service';
-import { bankUserParamSchema, reviewBankSchema, submitBankSchema } from './bank.schemas';
+import {
+  accountParamSchema, bankUserParamSchema, renameBankSchema,
+  reviewBankSchema, submitBankSchema,
+} from './bank.schemas';
 
 function getActor(req: AuthRequest) {
   if (!req.user?.id) throw new AppError('Unauthenticated', 401, 'UNAUTHENTICATED');
@@ -14,11 +17,10 @@ function getActor(req: AuthRequest) {
 }
 
 export class BankController {
-  // GET /bank/me — os próprios dados
+  // GET /bank/me — as próprias contas
   getMine = async (req: AuthRequest, res: Response) => {
     const actor = getActor(req);
-    const account = await bankService.get(actor, actor.id);
-    return ok(res, { account });
+    return ok(res, { accounts: await bankService.list(actor, actor.id) });
   };
 
   // GET /bank/pending — fila de alterações à espera de decisão
@@ -32,11 +34,10 @@ export class BankController {
     return ok(res, { accounts: items, page });
   };
 
-  // GET /bank/:userId — a gestão consulta os dados de um motorista
+  // GET /bank/:userId — a gestão consulta as contas de um motorista
   getByUser = async (req: AuthRequest, res: Response) => {
     const parsed = bankUserParamSchema.parse({ params: req.params });
-    const account = await bankService.get(getActor(req), parsed.params.userId);
-    return ok(res, { account });
+    return ok(res, { accounts: await bankService.list(getActor(req), parsed.params.userId) });
   };
 
   /**
@@ -67,6 +68,8 @@ export class BankController {
     const account = await bankService.submit(actor, actor.id, {
       iban: parsed.body.iban,
       holderName: parsed.body.holderName,
+      label: parsed.body.label,
+      accountId: parsed.body.accountId,
       proofUrl: fileUrl,
       proofKey: fileKey,
     });
@@ -74,15 +77,30 @@ export class BankController {
     return ok(res, { account }, 201);
   };
 
-  // PATCH /bank/:userId/review — aprovar ou recusar
+  // PATCH /bank/accounts/:id/review — aprovar ou recusar
   review = async (req: AuthRequest, res: Response) => {
     const parsed = reviewBankSchema.parse({ params: req.params, body: req.body });
-    const account = await bankService.review(
-      getActor(req),
-      parsed.params.userId,
-      parsed.body,
-    );
+    const account = await bankService.review(getActor(req), parsed.params.id, parsed.body);
     return ok(res, { account });
+  };
+
+  // PATCH /bank/accounts/:id/primary — passa a ser a conta por omissão
+  setPrimary = async (req: AuthRequest, res: Response) => {
+    const parsed = accountParamSchema.parse({ params: req.params });
+    return ok(res, { accounts: await bankService.setPrimary(getActor(req), parsed.params.id) });
+  };
+
+  // PATCH /bank/accounts/:id — muda o nome da conta
+  rename = async (req: AuthRequest, res: Response) => {
+    const parsed = renameBankSchema.parse({ params: req.params, body: req.body });
+    const account = await bankService.rename(getActor(req), parsed.params.id, parsed.body.label);
+    return ok(res, { account });
+  };
+
+  // DELETE /bank/accounts/:id — arquiva
+  archive = async (req: AuthRequest, res: Response) => {
+    const parsed = accountParamSchema.parse({ params: req.params });
+    return ok(res, { accounts: await bankService.archive(getActor(req), parsed.params.id) });
   };
 }
 

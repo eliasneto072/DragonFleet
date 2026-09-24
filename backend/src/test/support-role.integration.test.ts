@@ -109,10 +109,23 @@ describe('SUPPORT — o que NAO pode', () => {
   });
 
   it('nao aprova um IBAN', async () => {
+    // A rota é por CONTA e não por motorista: com até três contas por pessoa,
+    // "a conta do motorista X" deixou de identificar alguma coisa.
+    const conta = await testDb.bankAccount.create({
+      data: {
+        userId: motorista.id,
+        label: 'Conta 1',
+        isPrimary: true,
+        pendingIban: 'PT50002700000001234567833',
+        pendingHolderName: 'Motorista Teste',
+        pendingAt: new Date(),
+      },
+    });
+
     await request(app)
-      .patch(`/bank/${motorista.id}/review`)
+      .patch(`/bank/accounts/${conta.id}/review`)
       .set(comoSuporte())
-      .send({ decision: 'APPROVE' })
+      .send({ approve: true })
       .expect(403);
   });
 
@@ -220,7 +233,10 @@ describe('SUPPORT — o IBAN', () => {
   it('ve apenas os ultimos quatro digitos', async () => {
     const IBAN = 'PT50000201231234567890154';
     await testDb.bankAccount.create({
-      data: { userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste' },
+      data: {
+        userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste',
+        label: 'Conta 1', isPrimary: true,
+      },
     });
 
     const res = await request(app)
@@ -228,8 +244,8 @@ describe('SUPPORT — o IBAN', () => {
       .set(comoSuporte())
       .expect(200);
 
-    // ok(res, { account }) envolve tudo: { ok: true, data: { account } }.
-    const visto: string = res.body.data.account.iban;
+    // ok(res, { accounts }) envolve tudo: { ok: true, data: { accounts } }.
+    const visto: string = res.body.data.accounts[0].iban;
     expect(visto).not.toBe(IBAN);
     expect(visto).toContain('0154');   // os últimos quatro, para confirmar
     expect(visto).toContain('•');      // o resto escondido
@@ -239,7 +255,10 @@ describe('SUPPORT — o IBAN', () => {
     // A outra metade: a máscara não pode alastrar a quem faz as transferências.
     const IBAN = 'PT50000201231234567890154';
     await testDb.bankAccount.create({
-      data: { userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste' },
+      data: {
+        userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste',
+        label: 'Conta 1', isPrimary: true,
+      },
     });
 
     const res = await request(app)
@@ -247,15 +266,18 @@ describe('SUPPORT — o IBAN', () => {
       .set(authHeader(admin.id, UserRole.ADMIN))
       .expect(200);
 
-    // ok(res, { account }) envolve tudo: { ok: true, data: { account } }.
-    const visto: string = res.body.data.account.iban;
+    // ok(res, { accounts }) envolve tudo: { ok: true, data: { accounts } }.
+    const visto: string = res.body.data.accounts[0].iban;
     expect(visto).toBe(IBAN);
   });
 
   it('o proprio motorista continua a ver o seu', async () => {
     const IBAN = 'PT50000201231234567890154';
     await testDb.bankAccount.create({
-      data: { userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste' },
+      data: {
+        userId: motorista.id, iban: IBAN, holderName: 'Motorista Teste',
+        label: 'Conta 1', isPrimary: true,
+      },
     });
 
     const res = await request(app)
@@ -263,8 +285,8 @@ describe('SUPPORT — o IBAN', () => {
       .set(authHeader(motorista.id, UserRole.DRIVER))
       .expect(200);
 
-    // ok(res, { account }) envolve tudo: { ok: true, data: { account } }.
-    const visto: string = res.body.data.account.iban;
+    // ok(res, { accounts }) envolve tudo: { ok: true, data: { accounts } }.
+    const visto: string = res.body.data.accounts[0].iban;
     expect(visto).toBe(IBAN);
   });
 });

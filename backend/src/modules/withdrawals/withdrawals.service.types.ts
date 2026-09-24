@@ -5,6 +5,14 @@ export type CreateWithdrawalInput = {
   /** Recibo verde. Sem ele não há pedido. */
   receiptUrl: string;
   receiptKey: string;
+  /**
+   * Para qual das contas bancárias. Opcional: sem ela usa-se a principal.
+   *
+   * O identificador é validado contra as contas DELE — vindo do browser, não
+   * prova nada, e sem essa verificação dava para mandar o dinheiro para a
+   * conta de outra pessoa.
+   */
+  bankAccountId?: string;
 };
 
 export type UpdateWithdrawalStatusInput = {

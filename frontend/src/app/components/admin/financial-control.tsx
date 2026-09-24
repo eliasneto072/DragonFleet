@@ -609,6 +609,13 @@ export function FinancialControl({ hideHeader = false }: Props) {
                         {w.paidToHolder && (
                           <p className="truncate text-xs text-muted-foreground">{w.paidToHolder}</p>
                         )}
+                        {/* Qual das contas dele. Com até três por motorista, o
+                            nome que ele lhe deu diz mais do que os dígitos. */}
+                        {w.bankAccountLabel && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            Conta escolhida: {w.bankAccountLabel}
+                          </p>
+                        )}
                       </div>
                       <CopyIbanButton iban={w.paidToIban} label="Copiar" />
                     </div>
@@ -741,6 +748,11 @@ export function FinancialControl({ hideHeader = false }: Props) {
                               {w.paidToHolder}
                             </p>
                           )}
+                          {w.bankAccountLabel && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Conta escolhida: {w.bankAccountLabel}
+                            </p>
+                          )}
                         </div>
                         <CopyIbanButton iban={w.paidToIban} label="Copiar" />
                       </div>
@@ -869,7 +881,10 @@ export function FinancialControl({ hideHeader = false }: Props) {
             {payTarget?.paidToIban && (
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary p-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">Destino</p>
+                  <p className="text-xs text-muted-foreground">
+                    Destino
+                    {payTarget.bankAccountLabel && ` · ${payTarget.bankAccountLabel}`}
+                  </p>
                   <p className="break-all font-mono text-xs tabular-nums">
                     {formatIban(payTarget.paidToIban)}
                   </p>

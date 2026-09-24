@@ -330,10 +330,10 @@ export const analyticsRepository = {
       // submissão à espera de decisão — o campo `iban` pode estar preenchido
       // ao mesmo tempo, porque o IBAN em vigor continua a valer enquanto a
       // alteração espera.
-      prisma.bankAccount.count({ where: { pendingAt: { not: null } } }),
+      prisma.bankAccount.count({ where: { pendingAt: { not: null }, archivedAt: null } }),
 
       prisma.bankAccount.findFirst({
-        where: { pendingAt: { not: null } },
+        where: { pendingAt: { not: null }, archivedAt: null },
         orderBy: { pendingAt: 'asc' },
         select: { pendingAt: true },
       }),

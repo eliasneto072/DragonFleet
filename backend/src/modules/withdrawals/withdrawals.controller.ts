@@ -71,6 +71,7 @@ export class WithdrawalsController {
       amount: parsed.body.amount,
       receiptUrl: fileUrl,
       receiptKey: fileKey,
+      bankAccountId: parsed.body.bankAccountId,
     });
 
     return ok(res, { withdrawal }, 201);
