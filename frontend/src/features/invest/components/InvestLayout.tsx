@@ -13,13 +13,14 @@
 // Em telemóvel a navegação passa para baixo, ao alcance do polegar.
 
 import { Outlet, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, Receipt, ArrowUpFromLine, UserRound } from 'lucide-react';
+import { LayoutGrid, Car, Receipt, ArrowUpFromLine, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { InvestWordmark, InvestMark } from './InvestBrand';
 
 const SECCOES: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/painel', label: 'Painel', icon: LayoutGrid },
+  { to: '/projetos', label: 'Projetos', icon: Car },
   { to: '/extrato', label: 'Extrato', icon: Receipt },
   { to: '/resgates', label: 'Resgates', icon: ArrowUpFromLine },
   { to: '/conta', label: 'Conta', icon: UserRound },

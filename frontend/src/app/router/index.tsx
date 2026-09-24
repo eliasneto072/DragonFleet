@@ -36,6 +36,7 @@ import { TeamPage } from '@/features/admin/pages/TeamPage';
 import { InvestmentsAdminPage } from '@/features/admin/pages/InvestmentsAdminPage';
 import { RanksPage } from '@/features/admin/pages/RanksPage';
 import { InvestorsPage } from '@/features/admin/pages/InvestorsPage';
+import { ProjectsPage } from '@/features/admin/pages/ProjectsPage';
 import { AdminOnly, NaoSuporte } from '@/features/admin/components/AdminOnly';
 
 export const router = createBrowserRouter([
@@ -90,6 +91,7 @@ export const router = createBrowserRouter([
           // "quanto é que temos de investidores" chega-lhes). Só o ADMIN
           // escreve — a tela esconde os botões e o servidor recusa.
           { path: 'investors', element: <InvestorsPage /> },
+          { path: 'projects', element: <ProjectsPage /> },
           { path: 'green-receipts', element: <AdminOnly><GreenReceiptsPage /></AdminOnly> },
           { path: 'fleet', element: <NaoSuporte><FleetPage /></NaoSuporte> },
           // Antes de 'fleet/:id' por legibilidade — o React Router ja da

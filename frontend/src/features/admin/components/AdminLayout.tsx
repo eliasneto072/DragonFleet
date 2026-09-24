@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck, PiggyBank, Trophy, Landmark,
+  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake,
 } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -58,6 +58,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: '/app/admin/investments',   icon: PiggyBank,       label: 'Investimentos' },
   { to: '/app/admin/ranks',         icon: Trophy,          label: 'Níveis'        },
   { to: '/app/admin/investors',     icon: Landmark,        label: 'Investidores'  },
+  { to: '/app/admin/projects',      icon: Handshake,       label: 'Projetos'      },
   { to: '/app/admin/fleet',         icon: Car,             label: 'Frotas'        },
   { to: '/app/admin/analytics',     icon: TrendingUp,      label: 'Análises'      },
   { to: '/app/admin/notifications', icon: Bell,            label: 'Notificações'  },

@@ -15,6 +15,8 @@ import { InvestDashboardPage } from '@/features/invest/pages/InvestDashboardPage
 import { InvestStatementPage } from '@/features/invest/pages/InvestStatementPage';
 import { InvestWithdrawalsPage } from '@/features/invest/pages/InvestWithdrawalsPage';
 import { InvestAccountPage } from '@/features/invest/pages/InvestAccountPage';
+import { InvestProjectsPage } from '@/features/invest/pages/InvestProjectsPage';
+import { InvestProjectDetailPage } from '@/features/invest/pages/InvestProjectDetailPage';
 
 export const investRouter = createBrowserRouter([
   { path: '/entrar', element: <InvestLoginPage /> },
@@ -27,6 +29,8 @@ export const investRouter = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/painel" replace /> },
       { path: 'painel', element: <InvestDashboardPage /> },
+      { path: 'projetos', element: <InvestProjectsPage /> },
+      { path: 'projetos/:id', element: <InvestProjectDetailPage /> },
       { path: 'extrato', element: <InvestStatementPage /> },
       { path: 'resgates', element: <InvestWithdrawalsPage /> },
       { path: 'conta', element: <InvestAccountPage /> },

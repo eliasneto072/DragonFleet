@@ -13,10 +13,16 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { requireAdmin } from '../../middlewares/role.middleware';
 import { investorsController as c } from './investors.controller';
+import { projectsRouter } from '../projects/projects.routes';
 
 export function investorsRouter(): Router {
   const router = Router();
   router.use(authMiddleware);
+
+  // Os projetos vivem DENTRO do portal do investidor: são um produto de
+  // investimento e têm de ser alcançáveis por uma conta INVESTOR, que está
+  // fechada a tudo o resto da API (ver deny-investor.middleware.ts).
+  router.use('/projects', projectsRouter());
 
   // ── Portal do investidor ────────────────────────────────────────────────
   router.get('/me', c.me);

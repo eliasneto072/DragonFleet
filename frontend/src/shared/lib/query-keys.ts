@@ -108,6 +108,18 @@ export const queryKeys = {
     pending: ['investors', 'pending'] as const,
   },
 
+  // Projetos de investimento
+  //
+  // Sob raiz própria mas invalidados junto com `investors.all`: subscrever ou
+  // distribuir muda o saldo do investidor E o estado do projeto ao mesmo
+  // tempo, e uma das duas telas ficaria com um número velho.
+  projects: {
+    all: ['projects'] as const,
+    list: (status: string, search: string) => ['projects', 'list', status, search] as const,
+    detail: (id: string) => ['projects', 'detail', id] as const,
+    mine: ['projects', 'mine'] as const,
+  },
+
   // Níveis (ranks)
   ranks: {
     all: ['ranks'] as const,

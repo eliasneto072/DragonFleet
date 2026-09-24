@@ -223,6 +223,7 @@ model Vehicle {
   documents   Document[]
   assignments VehicleAssignment[]
   settlements WeeklySettlement[]
+  projects    InvestmentProject[]
 
   @@index([userId])
   @@index([status])
@@ -941,6 +942,10 @@ enum InvestorMovementKind {
   ACCRUAL
   WITHDRAWAL
   ADJUSTMENT
+  /// Distribuição mensal do lucro de um projeto.
+  PROFIT_SHARE
+  /// Mais-valia (ou perda) apurada quando um projeto liquida.
+  PROJECT_RESULT
 }
 
 enum InvestorWithdrawalStatus {
@@ -975,6 +980,7 @@ model InvestorAccount {
   rates       InvestorRate[]
   movements   InvestorMovement[]
   withdrawals InvestorWithdrawal[]
+  shares      ProjectShare[]
 
   @@map("investor_accounts")
 }
@@ -1018,9 +1024,15 @@ model InvestorMovement {
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
 
-  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// O projeto que gerou este movimento, quando veio de um.
+  /// Sem isto, o extrato mostrava "+142,30 €" sem dizer de que carro veio.
+  projectId String? @map("project_id")
+
+  account InvestorAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  project InvestmentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([accountId, day])
+  @@index([projectId])
   @@map("investor_movements")
 }
 
@@ -1049,4 +1061,181 @@ model InvestorWithdrawal {
   @@index([accountId])
   @@index([status])
   @@map("investor_withdrawals")
+}
+
+
+/* =========================
+   PROJETOS DE INVESTIMENTO
+   participação nos lucros de um carro
+   ========================= */
+
+/// O ciclo de vida de um projeto.
+enum ProjectStatus {
+  /// A preparar. Os investidores não o veem.
+  DRAFT
+  /// Aberto a subscrições.
+  FUNDING
+  /// Financiado; o carro a render e a distribuir todos os meses.
+  ACTIVE
+  /// Liquidado: o capital voltou às contas dos investidores.
+  CLOSED
+  /// Abortado antes de arrancar; o capital foi libertado.
+  CANCELLED
+}
+
+enum ProjectShareStatus {
+  ACTIVE
+  LIQUIDATED
+  CANCELLED
+}
+
+enum ProjectPeriodStatus {
+  /// Apurado, ainda não pago.
+  DRAFT
+  /// Pago aos investidores.
+  DISTRIBUTED
+}
+
+/// Um projeto: um carro financiado por investidores, que repartem o que ele der.
+///
+/// AS DISTRIBUIÇÕES MENSAIS NÃO AMORTIZAM O CAPITAL. Quem pôs 10 000 €
+/// continua com 10 000 € em dívida depois de já ter recebido 10 000 € de
+/// lucros; o capital só volta na liquidação. Foi uma decisão explícita do
+/// cliente e é o que faz o investidor continuar a ganhar enquanto o carro
+/// rodar. Está escrito aqui porque quem ler isto daqui a dois anos vai assumir
+/// o contrário.
+model InvestmentProject {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  /// Quanto é preciso angariar.
+  targetAmount Decimal @map("target_amount") @db.Decimal(12, 2)
+  /// Mínimo por participação. Zero = sem mínimo.
+  minTicket    Decimal @default(0) @map("min_ticket") @db.Decimal(12, 2)
+
+  /// A fatia do lucro que vai para os investidores, em percentagem.
+  profitShare  Decimal @default(50) @map("profit_share") @db.Decimal(5, 2)
+
+  /// O carro. Nulo enquanto não estiver escolhido.
+  vehicleId String? @map("vehicle_id")
+
+  /// Que parcelas do fecho semanal contam como rendimento do carro.
+  includeCommission Boolean @default(true) @map("include_commission")
+  includeVehicleFee Boolean @default(true) @map("include_vehicle_fee")
+
+  status ProjectStatus @default(DRAFT)
+
+  fundingClosesOn DateTime? @map("funding_closes_on") @db.Date
+  /// Primeiro mês que conta lucro.
+  startedOn       DateTime? @map("started_on") @db.Date
+  /// Prazo OPCIONAL. Vazio = corre até o carro ser vendido.
+  endsOn          DateTime? @map("ends_on") @db.Date
+  closedOn        DateTime? @map("closed_on") @db.Date
+
+  /// Quanto rendeu a venda. É isto que se reparte na liquidação.
+  saleAmount Decimal? @map("sale_amount") @db.Decimal(12, 2)
+
+  riskLevel String? @map("risk_level")
+  imageUrl  String? @map("image_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  vehicle   Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  shares    ProjectShare[]
+  periods   ProjectPeriod[]
+  expenses  ProjectExpense[]
+  movements InvestorMovement[]
+
+  @@index([status])
+  @@index([vehicleId])
+  @@map("investment_projects")
+}
+
+/// A participação de um investidor num projeto.
+///
+/// Enquanto está ACTIVE, o valor sai do DISPONÍVEL da conta dele mas continua
+/// a contar como capital — a empresa continua a devê-lo. É a view
+/// `investor_balances` que faz essa distinção.
+model ProjectShare {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+  accountId String @map("account_id")
+
+  amount Decimal @db.Decimal(12, 2)
+
+  status ProjectShareStatus @default(ACTIVE)
+
+  /// O que voltou na liquidação. Pode ser menos do que entrou, se o carro se
+  /// desvalorizou — é a contrapartida de ter recebido lucros sem que isso
+  /// abatesse o capital.
+  liquidatedAmount Decimal?  @map("liquidated_amount") @db.Decimal(12, 2)
+  liquidatedAt     DateTime? @map("liquidated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// RESTRICT: apagar uma conta de investidor não pode levar por à frente o
+  /// registo do que ele pôs num carro.
+  account InvestorAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([projectId])
+  @@index([accountId])
+  @@map("project_shares")
+}
+
+/// Um mês de um projeto, com as parcelas à vista.
+///
+/// As parcelas ficam guardadas e não recalculadas na leitura: um investidor
+/// que pergunte "de onde vem este valor" tem de ter resposta, e alterar a
+/// percentagem do projeto não pode reescrever meses já pagos.
+model ProjectPeriod {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  /// Sempre o dia 1 do mês.
+  month     DateTime @db.Date
+
+  commissionTotal  Decimal @default(0) @map("commission_total") @db.Decimal(12, 2)
+  vehicleFeeTotal  Decimal @default(0) @map("vehicle_fee_total") @db.Decimal(12, 2)
+  expensesTotal    Decimal @default(0) @map("expenses_total") @db.Decimal(12, 2)
+  settlementsCount Int     @default(0) @map("settlements_count")
+
+  /// comissão + aluguer − despesas
+  profit          Decimal @default(0) @db.Decimal(12, 2)
+  /// A fatia dos investidores. Nunca negativa: um mês de prejuízo distribui
+  /// zero, não cobra ao investidor.
+  investorsAmount Decimal @default(0) @map("investors_amount") @db.Decimal(12, 2)
+  /// A percentagem em vigor no apuramento, congelada.
+  profitShare     Decimal @map("profit_share") @db.Decimal(5, 2)
+
+  status        ProjectPeriodStatus @default(DRAFT)
+  distributedAt DateTime?           @map("distributed_at")
+  notes         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month], map: "project_periods_project_month_key")
+  @@map("project_periods")
+}
+
+/// Despesas do carro que não passam pelo fecho semanal: seguro, revisão,
+/// pneus, IUC. Sem um sítio para as lançar, o lucro apurado seria sempre
+/// otimista.
+model ProjectExpense {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  month       DateTime @db.Date
+  amount      Decimal  @db.Decimal(12, 2)
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdBy   String?  @map("created_by")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, month])
+  @@map("project_expenses")
 }

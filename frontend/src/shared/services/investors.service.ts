@@ -29,6 +29,9 @@ export interface InvestorBalance {
   availableEarnings: number;
   deposited: number;
   withdrawn: number;
+  /** Capital aplicado em projetos abertos. Já descontado do disponível. */
+  investedInProjects: number;
+  projectsCount: number;
 }
 
 export interface InvestorMovement {

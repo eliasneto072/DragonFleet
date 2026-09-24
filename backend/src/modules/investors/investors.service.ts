@@ -90,6 +90,9 @@ export interface InvestorBalance {
   availableEarnings: number;
   deposited: number;
   withdrawn: number;
+  /// Capital aplicado em projetos abertos. Já descontado do disponível.
+  investedInProjects: number;
+  projectsCount: number;
 }
 
 type BalanceRow = {
@@ -99,6 +102,7 @@ type BalanceRow = {
   pending_capital: number; pending_earnings: number;
   available_capital: number; available_earnings: number;
   deposited: number; withdrawn: number;
+  invested_in_projects: number; projects_count: number;
 };
 
 function toBalance(r: BalanceRow): InvestorBalance {
@@ -120,6 +124,8 @@ function toBalance(r: BalanceRow): InvestorBalance {
     availableEarnings: round2(num(r.available_earnings)),
     deposited: round2(num(r.deposited)),
     withdrawn: round2(num(r.withdrawn)),
+    investedInProjects: round2(num(r.invested_in_projects)),
+    projectsCount: Number(r.projects_count ?? 0),
   };
 }
 
@@ -138,7 +144,9 @@ const BALANCE_COLS = Prisma.sql`
   CAST(available_capital AS FLOAT)  AS available_capital,
   CAST(available_earnings AS FLOAT) AS available_earnings,
   CAST(deposited AS FLOAT)          AS deposited,
-  CAST(withdrawn AS FLOAT)          AS withdrawn
+  CAST(withdrawn AS FLOAT)          AS withdrawn,
+  CAST(invested_in_projects AS FLOAT) AS invested_in_projects,
+  projects_count
 `;
 
 // ─── Serviço ────────────────────────────────────────────────────────────────
@@ -344,7 +352,7 @@ export class InvestorsService {
     accountId?: string;
     from?: Day;
     to?: Day;
-    kind?: 'DEPOSIT' | 'ACCRUAL' | 'WITHDRAWAL' | 'ADJUSTMENT';
+    kind?: 'DEPOSIT' | 'ACCRUAL' | 'WITHDRAWAL' | 'ADJUSTMENT' | 'PROFIT_SHARE' | 'PROJECT_RESULT';
     page?: number;
     pageSize?: number;
   }) {
@@ -953,7 +961,8 @@ function toMovementPublic(m: {
   return {
     id: m.id,
     day: dateToDay(m.day),
-    kind: m.kind as 'DEPOSIT' | 'ACCRUAL' | 'WITHDRAWAL' | 'ADJUSTMENT',
+    kind: m.kind as
+      'DEPOSIT' | 'ACCRUAL' | 'WITHDRAWAL' | 'ADJUSTMENT' | 'PROFIT_SHARE' | 'PROJECT_RESULT',
     bucket: m.bucket as Bucket,
     // Seis casas no extrato seriam ruído: o juro de um dia mostra-se ao
     // cêntimo. O valor exato continua guardado, e é a soma dele — não a soma

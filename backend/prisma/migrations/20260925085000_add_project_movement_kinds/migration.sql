@@ -1,0 +1,22 @@
+-- Dois tipos novos de movimento na conta do investidor.
+--
+-- PROFIT_SHARE   a distribuição mensal do lucro de um projeto
+-- PROJECT_RESULT a mais-valia (ou a perda) apurada quando o projeto liquida
+--
+-- ─── PORQUE NÃO SE REAPROVEITOU O ACCRUAL ───────────────────────────────────
+--
+-- ACCRUAL é o juro diário e tem um índice único parcial por (conta, dia): um
+-- dia só pode ter um juro. Dois projetos a distribuir no mesmo dia batiam
+-- contra esse índice e a segunda distribuição rebentava — por uma regra que
+-- não tem nada que ver com projetos.
+--
+-- ─── PORQUE NÃO SE REAPROVEITOU O ADJUSTMENT ────────────────────────────────
+--
+-- ADJUSTMENT é a correção manual, com motivo escrito por uma pessoa. Misturar
+-- as distribuições automáticas lá dentro tornava impossível responder a "quanto
+-- é que este investidor recebeu de lucros" sem interpretar texto livre.
+--
+-- Fica sozinho nesta migração: o Postgres não deixa usar um valor de enum na
+-- mesma transação em que ele é criado.
+ALTER TYPE "InvestorMovementKind" ADD VALUE IF NOT EXISTS 'PROFIT_SHARE';
+ALTER TYPE "InvestorMovementKind" ADD VALUE IF NOT EXISTS 'PROJECT_RESULT';

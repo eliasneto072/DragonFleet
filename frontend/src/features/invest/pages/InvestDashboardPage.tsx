@@ -72,6 +72,16 @@ export function InvestDashboardPage() {
 
         <hr className="inv-rule my-7" />
 
+        {/* O capital que está dentro de projetos. Sem esta linha, o investidor
+            vê "capital 10 000 €" e um disponível de zero, e não percebe porquê. */}
+        {balance.investedInProjects > 0 && (
+          <p className="mb-4 text-xs text-[var(--muted-foreground)]">
+            {formatCurrency(balance.investedInProjects)} aplicados em{' '}
+            {balance.projectsCount} projeto{balance.projectsCount === 1 ? '' : 's'} —
+            fora do disponível até o carro ser vendido.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-xs text-[var(--muted-foreground)]">
             A render desde {dia(account.startDate)}

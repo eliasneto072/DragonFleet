@@ -276,6 +276,71 @@ público. O enquadramento é com o contabilista dele.
 
 ---
 
+## 2.5 Projetos de investimento — participação nos lucros de um carro
+
+Implementado. Vive dentro do portal do investidor (`/investors/projects`), para
+ficar dentro da lista branca que o `denyInvestor` protege.
+
+### A regra que toda a gente assume ao contrário
+
+**As distribuições mensais NÃO amortizam o capital.** Quem pôs 10 000 €
+continua com 10 000 € em dívida depois de já ter recebido 10 000 € de lucros.
+O capital só volta na liquidação. Há um teste de integração chamado
+`AS DISTRIBUIÇÕES NÃO ABATEM O CAPITAL` só para isso.
+
+### Como o dinheiro se move
+
+- Subscrever **não cria movimento nenhum**: o capital continua na conta, só
+  deixa de estar disponível. A view `investor_balances` ganhou
+  `invested_in_projects`, que `available_capital` desconta.
+- Distribuir cria um `InvestorMovement` por participação, bucket `EARNINGS`,
+  kind **`PROFIT_SHARE`** (novo). Não se reaproveitou o `ACCRUAL` porque esse
+  tem índice único por (conta, dia) — dois projetos no mesmo dia rebentavam.
+- Liquidar grava só a **diferença** (kind `PROJECT_RESULT`, bucket `CAPITAL`):
+  o capital já lá estava, o que muda é deixar de estar trancado.
+
+### O lucro é apurado dos fechos
+
+`comissão + aluguer da viatura` dos fechos **REGISTADOS** cujo `week_start` cai
+no mês, **menos** as despesas lançadas à mão (seguro, revisão, pneus).
+Combustível e portagens não entram: são adiantados e descontados ao motorista no
+mesmo fecho, efeito nulo. As parcelas ficam guardadas em `project_periods` —
+sem elas, "de onde vem este valor" não tem resposta.
+
+Dois interruptores por projeto (`include_commission`, `include_vehicle_fee`)
+porque é uma decisão de negócio, não uma verdade universal.
+
+### Os cêntimos
+
+`allocate()` usa o **método do maior resto**: a soma das partes é sempre
+exatamente o total. Há um teste que verifica isso em mil repartições seguidas.
+Sem ele, dividir 100 € por três perdia um cêntimo por mês, todos os meses.
+
+### Liquidação
+
+Os investidores são donos da fração que financiaram (`raised / target`). Com
+venda, reparte-se `venda × fração`; sem venda (projeto que chega ao prazo),
+devolve-se o capital tal como entrou. Pode devolver menos do que entrou — é a
+contrapartida de terem recebido lucros sem que isso abatesse o capital.
+
+### Prazo opcional
+
+`ends_on` vazio = corre até vender. Preenchido = liquida nessa data. Existe
+porque um carro que dure seis anos devolveria o capital mais de três vezes só em
+distribuições.
+
+### Ainda por fazer
+
+- O prazo (`ends_on`) **não fecha o projeto sozinho** — não há job. Fecha-se à
+  mão na tela.
+- Sem mercado secundário (transferir uma participação a outro investidor).
+- Sem fotografias do carro no projeto (`image_url` existe, não há upload).
+
+Testes: `projects.math.test.ts` (27 unitários, corridos) e
+`projects.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está
