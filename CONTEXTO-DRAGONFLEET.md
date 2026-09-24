@@ -341,6 +341,57 @@ Testes: `projects.math.test.ts` (27 unitários, corridos) e
 
 ---
 
+## 2.6 Diário de bordo dos projetos, e destaques da carteira
+
+### O diário (`project_updates`)
+
+Entre o financiamento fechar e o carro render passam semanas. Nesse tempo o
+investidor tem dinheiro parado num projeto que não distribui nada, e a única
+forma de saber o que se passa é **telefonar**. É esse telefonema que o diário
+substitui.
+
+- Uma tabela e não um campo de estado: um estado responde a "onde está", mas
+  não a "o que aconteceu" nem "quando" — e um projeto parado há três semanas
+  não se distingue de um que anda depressa.
+- `happened_on` é o dia a que a entrada se refere, **não** o dia em que foi
+  escrita (pagamento na sexta, registado na segunda).
+- `stage` é enum (lista fechada) para desenhar a escada de progresso; o título
+  e o corpo são texto livre. `MAINTENANCE`, `INCIDENT` e `OTHER` **não** contam
+  como degraus — senão uma avaria fazia o projeto parecer mais adiantado.
+- `visible = false` → nota interna, que o investidor não vê.
+- **Quando a última subscrição fecha a meta**, o `subscribe` cria sozinho a
+  entrada `FUNDING_COMPLETE` e notifica os participantes, dentro da mesma
+  transação. É exatamente o momento em que o investidor passa a ter dinheiro
+  parado à espera de um carro.
+- Fotografias: o formulário envia a imagem pelo `/upload` que já existe e
+  guarda só o endereço.
+
+### Com ou sem motorista
+
+O detalhe do projeto devolve `driver: { active, since }`, lido da
+`vehicle_assignments` ativa. **Sem o nome do motorista** — o investidor é
+alguém de fora da empresa e quem conduz não é assunto dele. Há um teste que
+verifica que o nome não sai na resposta.
+
+### Destaques e filtros (`GET /investors/stats`)
+
+Quem está connosco há mais tempo, quem tem mais capital, quem mais ganhou,
+juros já pagos (um **custo**, não um lucro), e o lucro dos projetos repartido
+entre empresa e investidores — só dos meses já **distribuídos**, porque um mês
+apurado e por pagar ainda não é lucro de ninguém.
+
+`GET /investors/accounts` aceita `search`, `status` e `sort`. A ordenação é
+traduzida de uma **lista fechada** para SQL; interpolar texto do pedido numa
+cláusula ORDER BY é como se abre a porta a uma injeção.
+
+### Ainda por fazer
+
+- O diário não tem paginação (um projeto com 200 entradas traz-nas todas).
+- Não há entradas automáticas a partir de eventos da frota — por exemplo,
+  atribuir o carro a um motorista não escreve `DRIVER_ASSIGNED` sozinho.
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está

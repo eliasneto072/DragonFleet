@@ -97,3 +97,12 @@ export const decideWithdrawalSchema = z.object({
     decision: z.string().trim().max(500).optional(),
   }),
 });
+
+export const listAccountsQuerySchema = z.object({
+  query: z.object({
+    search: z.string().max(100).optional(),
+    status: z.enum(['ACTIVE', 'CLOSED']).optional(),
+    /** total | capital | earnings | oldest | name */
+    sort: z.enum(['total', 'capital', 'earnings', 'oldest', 'name']).optional(),
+  }),
+});

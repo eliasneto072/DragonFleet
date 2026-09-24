@@ -38,7 +38,8 @@ import {
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
-  Check, Coins, Landmark, Loader2, Plus, Scale, TrendingUp, UserPlus, X,
+  Award, Check, Clock, Coins, Landmark, Loader2, Plus, Scale, Search,
+  TrendingUp, UserPlus, Wallet, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -59,10 +60,24 @@ export function InvestorsAdmin() {
   const qc = useQueryClient();
   const [aCriar, setACriar] = useState(false);
   const [aberta, setAberta] = useState<string | null>(null);
+  const [pesquisa, setPesquisa] = useState('');
+  const [ordem, setOrdem] = useState('total');
+  const [estado, setEstado] = useState('ACTIVE');
 
   const contasQ = useQuery({
-    queryKey: queryKeys.investors.accounts,
-    queryFn: () => investorsService.listAccounts(),
+    // A chave leva os filtros: sem isso, mudar a ordenação devolvia a lista
+    // anterior da cache e parecia que o botão não fazia nada.
+    queryKey: [...queryKeys.investors.accounts, pesquisa, ordem, estado],
+    queryFn: () => investorsService.listAccounts({
+      search: pesquisa.trim() || undefined,
+      status: estado === 'ALL' ? undefined : (estado as 'ACTIVE' | 'CLOSED'),
+      sort: ordem,
+    }),
+  });
+
+  const statsQ = useQuery({
+    queryKey: [...queryKeys.investors.all, 'stats'],
+    queryFn: () => investorsService.stats(),
   });
   const overviewQ = useQuery({
     queryKey: queryKeys.investors.overview,
@@ -193,6 +208,85 @@ export function InvestorsAdmin() {
         </Card>
       )}
 
+      {/* ── Destaques ────────────────────────────────────────────────────── */}
+      {statsQ.data && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Destaque
+            icon={Clock} titulo="Connosco há mais tempo"
+            nome={statsQ.data.oldest?.name}
+            valor={statsQ.data.oldest ? `desde ${dia(statsQ.data.oldest.since)}` : '—'}
+          />
+          <Destaque
+            icon={Wallet} titulo="Maior capital"
+            nome={statsQ.data.topCapital?.name}
+            valor={statsQ.data.topCapital ? formatCurrency(statsQ.data.topCapital.capital) : '—'}
+          />
+          <Destaque
+            icon={Award} titulo="Mais ganhou"
+            nome={statsQ.data.topEarnings?.name}
+            valor={statsQ.data.topEarnings ? formatCurrency(statsQ.data.topEarnings.earned) : '—'}
+          />
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                <p className="text-xs">Lucro dos projetos</p>
+              </div>
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
+                {formatCurrency(statsQ.data.projects.toCompany)}
+              </p>
+              {/* As três parcelas: o que os carros deram, o que foi para os
+                  investidores e o que ficou. Só o número final não deixa
+                  conferir nada. */}
+              <p className="mt-1 text-xs text-muted-foreground">
+                para a empresa, de {formatCurrency(statsQ.data.projects.profit)} de lucro
+                ({formatCurrency(statsQ.data.projects.toInvestors)} para investidores)
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {statsQ.data && statsQ.data.interestPaid > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Juros já pagos aos depósitos: {formatCurrency(statsQ.data.interestPaid)} — é um
+          custo da empresa, não um lucro.
+        </p>
+      )}
+
+      {/* ── Filtros ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[14rem] flex-1">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Procurar por nome ou email"
+            value={pesquisa}
+            onChange={(e) => setPesquisa(e.target.value)}
+          />
+        </div>
+
+        <Select value={ordem} onValueChange={setOrdem}>
+          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="total">Maior total</SelectItem>
+            <SelectItem value="capital">Maior capital</SelectItem>
+            <SelectItem value="earnings">Maior rendimento</SelectItem>
+            <SelectItem value="oldest">Mais antigo</SelectItem>
+            <SelectItem value="name">Nome</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={estado} onValueChange={setEstado}>
+          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ACTIVE">Ativas</SelectItem>
+            <SelectItem value="CLOSED">Fechadas</SelectItem>
+            <SelectItem value="ALL">Todas</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* ── A lista de contas ────────────────────────────────────────────── */}
       <Card>
         <CardContent className="p-0">
@@ -217,6 +311,7 @@ export function InvestorsAdmin() {
                   <TableHead className="text-right">Capital</TableHead>
                   <TableHead className="text-right">Rendimento</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Em projetos</TableHead>
                   <TableHead className="text-right">Taxa</TableHead>
                   <TableHead />
                 </TableRow>
@@ -236,6 +331,9 @@ export function InvestorsAdmin() {
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatCurrency(c.total)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {c.investedInProjects > 0 ? formatCurrency(c.investedInProjects) : '—'}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{c.annualRate}%</TableCell>
                     <TableCell className="text-right">
@@ -260,6 +358,24 @@ export function InvestorsAdmin() {
 }
 
 // ─── Peças ──────────────────────────────────────────────────────────────────
+
+/** Um destaque da carteira: quem, e quanto. */
+function Destaque({ icon: Icon, titulo, nome, valor }: {
+  icon: typeof Landmark; titulo: string; nome?: string; valor: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Icon className="h-4 w-4" />
+          <p className="text-xs">{titulo}</p>
+        </div>
+        <p className="mt-2 truncate text-lg font-semibold">{nome ?? '—'}</p>
+        <p className="mt-1 text-xs text-muted-foreground tabular-nums">{valor}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function Total({ icon: Icon, titulo, valor, nota, destaque }: {
   icon: typeof Landmark; titulo: string; valor?: number; nota: string; destaque?: boolean;

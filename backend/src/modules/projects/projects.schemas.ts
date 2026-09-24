@@ -92,3 +92,20 @@ export const subscribeSchema = z.object({
     amount: z.coerce.number().finite().positive(),
   }),
 });
+
+export const updateEntrySchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z.object({
+    stage: z.enum([
+      'FUNDING_COMPLETE', 'FUNDS_RECEIVED', 'VEHICLE_PAID', 'PAPERWORK',
+      'INSURANCE', 'TVDE_LICENSE', 'DRIVER_ASSIGNED', 'EARNING',
+      'MAINTENANCE', 'INCIDENT', 'SALE', 'OTHER',
+    ]).optional(),
+    title: z.string().trim().min(3, 'Escreva um título.').max(120),
+    body: z.string().trim().max(3000).optional(),
+    imageUrl: z.string().url().optional(),
+    happenedOn: day.optional(),
+    /** Falso deixa a entrada só para uso interno. */
+    visible: z.boolean().optional(),
+  }),
+});

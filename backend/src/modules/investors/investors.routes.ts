@@ -38,6 +38,7 @@ export function investorsRouter(): Router {
   // Antes de '/accounts/:id' por legibilidade — o Express já dá prioridade ao
   // segmento estático, mas quem lê não tem de saber isso.
   router.get('/overview', c.overview);
+  router.get('/stats', c.stats);
   router.get('/pending-withdrawals', c.pendingWithdrawals);
   router.patch('/withdrawals/:id/decide', requireAdmin, c.decideWithdrawal);
 

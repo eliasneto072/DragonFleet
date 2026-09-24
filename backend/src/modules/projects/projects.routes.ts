@@ -42,5 +42,11 @@ export function projectsRouter(): Router {
   router.post('/:id/expenses', requireAdmin, c.addExpense);
   router.delete('/expenses/:id', requireAdmin, c.removeExpense);
 
+  // Diário de bordo. Escrever é só do ADMIN; ler faz-se no GET do projeto,
+  // que já filtra as entradas internas para quem não é da gestão.
+  router.post('/:id/updates', requireAdmin, c.addUpdate);
+  router.patch('/updates/:id/toggle', requireAdmin, c.toggleUpdate);
+  router.delete('/updates/:id', requireAdmin, c.removeUpdate);
+
   return router;
 }

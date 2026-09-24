@@ -186,6 +186,12 @@ export class ProjectsService {
         vehicle: { select: { id: true, brand: true, model: true, plate: true } },
         periods: { orderBy: { month: 'desc' } },
         expenses: gestao ? { orderBy: { month: 'desc' } } : false,
+        // O investidor só vê as entradas marcadas como visíveis; a gestão vê
+        // tudo, incluindo as notas internas.
+        updates: {
+          where: gestao ? {} : { visible: true },
+          orderBy: [{ happenedOn: 'desc' }, { createdAt: 'desc' }],
+        },
         shares: {
           include: gestao
             ? { account: { include: { user: { select: { id: true, name: true, email: true } } } } }
@@ -221,6 +227,19 @@ export class ProjectsService {
         })
       : null;
 
+    // Com ou sem motorista, e desde quando. É a pergunta que o investidor faz
+    // a seguir a "onde está o carro" — um carro parado não rende.
+    //
+    // Sem o NOME do motorista: o investidor é alguém de fora da empresa e não
+    // tem nada que saber quem conduz. Saber se há alguém ao volante chega-lhe.
+    const motorista = p.vehicleId
+      ? await prisma.vehicleAssignment.findFirst({
+          where: { vehicleId: p.vehicleId, endedAt: null },
+          orderBy: { startedAt: 'desc' },
+          select: { startedAt: true },
+        })
+      : null;
+
     return {
       project: {
         ...toPublic(p),
@@ -232,6 +251,11 @@ export class ProjectsService {
         ),
       },
       periods: p.periods.map(periodPublic),
+      updates: (p.updates ?? []).map(updatePublic),
+      driver: {
+        active: !!motorista,
+        since: motorista ? motorista.startedAt.toISOString().slice(0, 10) : null,
+      },
       // As participações de toda a gente só para a gestão. Um investidor vê a
       // sua e o número de participantes, não os nomes dos outros.
       shares: gestao
@@ -812,6 +836,77 @@ export class ProjectsService {
     return this.computeMonth(actor, d.projectId, mes);
   }
 
+  // ══ Diário de bordo ══════════════════════════════════════════════════════
+
+  /**
+   * Escreve uma entrada no diário.
+   *
+   * `happenedOn` é o dia a que a entrada se refere e não o dia em que é
+   * escrita: o pagamento foi feito na sexta e registado na segunda, e a linha
+   * do tempo tem de o mostrar na sexta.
+   *
+   * Notifica os participantes quando é visível. Uma entrada que ninguém dá por
+   * ela não resolve o problema que este diário existe para resolver — que é o
+   * investidor não ter de telefonar para saber o que se passa.
+   */
+  async addUpdate(actor: Actor, projectId: string, input: {
+    stage?: string; title: string; body?: string; imageUrl?: string;
+    happenedOn?: string; visible?: boolean;
+  }) {
+    exigirAdmin(actor);
+
+    const p = await prisma.investmentProject.findUnique({ where: { id: projectId } });
+    if (!p) throw new AppError('Projeto não encontrado.', 404, 'PROJECT_NOT_FOUND');
+    if (!input.title?.trim()) {
+      throw new AppError('Escreva um título para a entrada.', 400, 'TITLE_REQUIRED');
+    }
+
+    const dia = input.happenedOn ?? new Date().toISOString().slice(0, 10);
+    const visivel = input.visible ?? true;
+
+    const entrada = await prisma.projectUpdate.create({
+      data: {
+        projectId,
+        stage: (input.stage ?? 'OTHER') as never,
+        title: input.title.trim(),
+        body: input.body?.trim() || null,
+        imageUrl: input.imageUrl?.trim() || null,
+        happenedOn: new Date(`${dia}T00:00:00Z`),
+        visible: visivel,
+        createdBy: actor.id,
+      },
+    });
+
+    if (visivel) {
+      await this.avisarParticipantes(
+        projectId,
+        `${p.name}: ${entrada.title}`,
+        entrada.body?.slice(0, 200) ?? 'Há uma novidade no projeto.',
+      );
+    }
+
+    return updatePublic(entrada);
+  }
+
+  async removeUpdate(actor: Actor, updateId: string) {
+    exigirAdmin(actor);
+    const e = await prisma.projectUpdate.findUnique({ where: { id: updateId } });
+    if (!e) throw new AppError('Entrada não encontrada.', 404, 'UPDATE_NOT_FOUND');
+    await prisma.projectUpdate.delete({ where: { id: updateId } });
+    return { ok: true, projectId: e.projectId };
+  }
+
+  /** Mostra ou esconde uma entrada do diário aos investidores. */
+  async toggleUpdate(actor: Actor, updateId: string) {
+    exigirAdmin(actor);
+    const e = await prisma.projectUpdate.findUnique({ where: { id: updateId } });
+    if (!e) throw new AppError('Entrada não encontrada.', 404, 'UPDATE_NOT_FOUND');
+    const atualizada = await prisma.projectUpdate.update({
+      where: { id: updateId }, data: { visible: !e.visible },
+    });
+    return updatePublic(atualizada);
+  }
+
   // ══ O investidor ═════════════════════════════════════════════════════════
 
   /**
@@ -868,11 +963,57 @@ export class ProjectsService {
         },
       });
 
+      const novoTotal = round2(raised + check.amount);
+
+      // O financiamento acabou de fechar com esta subscrição. Abre-se o diário
+      // com a primeira entrada, aqui e não à mão: é o momento em que o
+      // investidor passa a ter dinheiro parado à espera de um carro, e é
+      // exatamente aí que ele quer começar a ver o que se passa.
+      //
+      // Dentro da transação de propósito: se isto falhar, a subscrição que
+      // fechou o financiamento também não deve ficar registada — senão o
+      // projeto ficava cheio sem ninguém dar por isso.
+      if (novoTotal >= round2(Number(projeto.targetAmount))) {
+        await tx.projectUpdate.create({
+          data: {
+            projectId,
+            stage: 'FUNDING_COMPLETE',
+            title: 'Financiamento concluído',
+            body: `O projeto angariou os ${eur(novoTotal)} necessários. `
+              + 'A partir daqui, cada passo — a entrada do dinheiro, a compra do carro, '
+              + 'a legalização, a entrega ao motorista — fica registado nesta página.',
+            happenedOn: new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z'),
+            createdBy: actor.id,
+          },
+        });
+
+        const donos = await tx.investorAccount.findMany({
+          where: {
+            id: {
+              in: [...new Set(
+                (await tx.projectShare.findMany({
+                  where: { projectId, status: 'ACTIVE' }, select: { accountId: true },
+                })).map((x) => x.accountId),
+              )],
+            },
+          },
+          select: { userId: true },
+        });
+        await tx.notification.createMany({
+          data: donos.map((d) => ({
+            userId: d.userId,
+            title: 'Financiamento concluído',
+            message: `O projeto "${projeto.name}" está totalmente financiado. `
+              + 'Acompanhe os próximos passos na página do projeto.',
+          })),
+        });
+      }
+
       return {
         id: share.id,
         amount: check.amount,
         projectId,
-        raised: round2(raised + check.amount),
+        raised: novoTotal,
       };
     });
   }
@@ -960,6 +1101,22 @@ function toPublic(p: {
     riskLevel: p.riskLevel,
     imageUrl: p.imageUrl,
     createdAt: p.createdAt.toISOString(),
+  };
+}
+
+function updatePublic(x: {
+  id: string; stage: string; title: string; body: string | null;
+  imageUrl: string | null; happenedOn: Date; visible: boolean; createdAt: Date;
+}) {
+  return {
+    id: x.id,
+    stage: x.stage,
+    title: x.title,
+    body: x.body,
+    imageUrl: x.imageUrl,
+    happenedOn: x.happenedOn.toISOString().slice(0, 10),
+    visible: x.visible,
+    createdAt: x.createdAt.toISOString(),
   };
 }
 

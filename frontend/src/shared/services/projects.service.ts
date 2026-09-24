@@ -13,6 +13,52 @@ export type ProjectStatus = 'DRAFT' | 'FUNDING' | 'ACTIVE' | 'CLOSED' | 'CANCELL
 export type PeriodStatus = 'DRAFT' | 'DISTRIBUTED';
 export type ShareStatus = 'ACTIVE' | 'LIQUIDATED' | 'CANCELLED';
 
+export type UpdateStage =
+  | 'FUNDING_COMPLETE' | 'FUNDS_RECEIVED' | 'VEHICLE_PAID' | 'PAPERWORK'
+  | 'INSURANCE' | 'TVDE_LICENSE' | 'DRIVER_ASSIGNED' | 'EARNING'
+  | 'MAINTENANCE' | 'INCIDENT' | 'SALE' | 'OTHER';
+
+/** O nome de cada etapa, em português de motorista e não de programador. */
+export const NOME_DA_ETAPA: Record<UpdateStage, string> = {
+  FUNDING_COMPLETE: 'Financiamento concluído',
+  FUNDS_RECEIVED: 'Dinheiro na conta',
+  VEHICLE_PAID: 'Carro pago',
+  PAPERWORK: 'Documentação e legalização',
+  INSURANCE: 'Seguro',
+  TVDE_LICENSE: 'Licença TVDE',
+  DRIVER_ASSIGNED: 'Entregue a motorista',
+  EARNING: 'A render',
+  MAINTENANCE: 'Manutenção',
+  INCIDENT: 'Imprevisto',
+  SALE: 'Venda',
+  OTHER: 'Nota',
+};
+
+/**
+ * A escada de progresso, por ordem.
+ *
+ * Só as etapas que marcam avanço. Manutenção, imprevisto e nota acontecem a
+ * qualquer altura e não são degraus — pô-las aqui faria um projeto com uma
+ * avaria parecer mais adiantado do que está.
+ */
+export const ESCADA: UpdateStage[] = [
+  'FUNDING_COMPLETE', 'FUNDS_RECEIVED', 'VEHICLE_PAID',
+  'PAPERWORK', 'INSURANCE', 'TVDE_LICENSE', 'DRIVER_ASSIGNED', 'EARNING',
+];
+
+export interface ProjectUpdate {
+  id: string;
+  stage: UpdateStage;
+  title: string;
+  body: string | null;
+  imageUrl: string | null;
+  /** O dia a que a entrada se refere, não o dia em que foi escrita. */
+  happenedOn: string;
+  /** Falso = nota interna, que o investidor não vê. */
+  visible: boolean;
+  createdAt: string;
+}
+
 export const ESTADO_DO_PROJETO: Record<ProjectStatus, string> = {
   DRAFT: 'Rascunho',
   FUNDING: 'A angariar',
@@ -90,6 +136,9 @@ export interface ProjectExpense {
 export interface ProjectDetail {
   project: Project & { raised: number; investorsCount: number; distributed: number };
   periods: ProjectPeriod[];
+  updates: ProjectUpdate[];
+  /** Com ou sem motorista ao volante, e desde quando. Sem o nome dele. */
+  driver: { active: boolean; since: string | null };
   /** Vazio para um investidor: ele não vê as participações dos outros. */
   shares: ProjectShare[];
   expenses: ProjectExpense[];
@@ -173,4 +222,17 @@ export const projectsService = {
 
   removeExpense: (expenseId: string) =>
     apiClient.delete<{ period: ProjectPeriod }>(`${raiz}/expenses/${expenseId}`),
+
+  // ── Diário de bordo ───────────────────────────────────────────────────────
+
+  addUpdate: (id: string, body: {
+    stage?: UpdateStage; title: string; body?: string;
+    imageUrl?: string; happenedOn?: string; visible?: boolean;
+  }) => apiClient.post<{ update: ProjectUpdate }>(`${raiz}/${id}/updates`, body),
+
+  toggleUpdate: (updateId: string) =>
+    apiClient.patch<{ update: ProjectUpdate }>(`${raiz}/updates/${updateId}/toggle`, {}),
+
+  removeUpdate: (updateId: string) =>
+    apiClient.delete<{ ok: boolean }>(`${raiz}/updates/${updateId}`),
 };

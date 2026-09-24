@@ -31,13 +31,16 @@ import {
 } from '@/app/components/ui/select';
 import { PageHeader } from '@/app/components/ui/page-header';
 import {
-  Calculator, Car, Check, Loader2, Plus, Send, Trash2, TrendingUp, Users, X,
+  Calculator, Car, Check, Eye, EyeOff, Image as ImageIcon, Loader2, Plus,
+  Send, Trash2, TrendingUp, Users, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import {
-  projectsService, ESTADO_DO_PROJETO, type ProjectDetail, type ProjectListItem,
+  projectsService, ESTADO_DO_PROJETO, NOME_DA_ETAPA,
+  type ProjectDetail, type ProjectListItem, type UpdateStage,
 } from '@/shared/services/projects.service';
+import { apiClient } from '@/shared/lib/api-client';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
@@ -535,6 +538,9 @@ function ProjetoDialog({ id, podeMexer, onClose }: {
               </Bloco>
             )}
 
+            {/* ── Diário de bordo ──────────────────────────────────────── */}
+            {podeMexer && <DiarioBloco projectId={id} d={d} />}
+
             {/* ── Participações ────────────────────────────────────────── */}
             <Bloco titulo="Participações">
               {d.shares.length === 0 ? (
@@ -599,6 +605,226 @@ function ProjetoDialog({ id, podeMexer, onClose }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * O diário de bordo, do lado de quem escreve.
+ *
+ * É a peça que faz o investidor não telefonar: entre o financiamento fechar e
+ * o carro render passam semanas em que ele tem dinheiro parado e nada para
+ * ver. Cada entrada aqui é um telefonema a menos.
+ *
+ * A fotografia é opcional mas vale a pena: uma imagem do carro à porta do
+ * stand diz mais do que três parágrafos a garantir que ele existe.
+ */
+function DiarioBloco({ projectId, d }: { projectId: string; d: ProjectDetail }) {
+  const qc = useQueryClient();
+  const [f, setF] = useState<{
+    stage: UpdateStage; title: string; body: string;
+    happenedOn: string; visible: boolean;
+  }>({
+    stage: 'OTHER',
+    title: '',
+    body: '',
+    happenedOn: new Date().toISOString().slice(0, 10),
+    visible: true,
+  });
+  const [imagem, setImagem] = useState<File | null>(null);
+  const [aEnviar, setAEnviar] = useState(false);
+
+  function refrescar(msg: string) {
+    toast.success(msg);
+    void qc.invalidateQueries({ queryKey: queryKeys.projects.all });
+  }
+  const falhou = (e: unknown) =>
+    toast.error(e instanceof ApiError ? e.message : 'Não foi possível concluir.');
+
+  const escrever = useMutation({
+    mutationFn: async () => {
+      // A imagem vai primeiro pelo /upload, que já existe e já trata do
+      // armazenamento; a entrada leva só o endereço. Assim não é preciso um
+      // caminho de multipart só para isto.
+      let imageUrl: string | undefined;
+      if (imagem) {
+        setAEnviar(true);
+        const form = new FormData();
+        form.append('image', imagem);
+        const r = await apiClient.upload<{ fileUrl: string }>('/upload', form);
+        imageUrl = r.fileUrl;
+        setAEnviar(false);
+      }
+      return projectsService.addUpdate(projectId, {
+        stage: f.stage,
+        title: f.title.trim(),
+        body: f.body.trim() || undefined,
+        happenedOn: f.happenedOn,
+        visible: f.visible,
+        imageUrl,
+      });
+    },
+    onSuccess: () => {
+      refrescar(f.visible
+        ? 'Entrada publicada. Os investidores foram avisados.'
+        : 'Nota interna guardada.');
+      setF({ ...f, title: '', body: '' });
+      setImagem(null);
+    },
+    onError: (e) => { setAEnviar(false); falhou(e); },
+  });
+
+  const alternar = useMutation({
+    mutationFn: (id: string) => projectsService.toggleUpdate(id),
+    onSuccess: () => refrescar('Visibilidade alterada.'), onError: falhou,
+  });
+  const apagar = useMutation({
+    mutationFn: (id: string) => projectsService.removeUpdate(id),
+    onSuccess: () => refrescar('Entrada removida.'), onError: falhou,
+  });
+
+  const valido = f.title.trim().length >= 3;
+
+  return (
+    <Bloco titulo="Diário de bordo">
+      <p className="mb-4 text-xs text-muted-foreground">
+        O que escrever aqui aparece na página do projeto de cada investidor, por ordem de
+        data, e dispara um aviso. É isto que evita o telefonema de quem tem dinheiro
+        parado à espera do carro.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr]">
+        <div>
+          <Label>Etapa</Label>
+          <Select
+            value={f.stage}
+            onValueChange={(v) => setF({ ...f, stage: v as UpdateStage })}
+          >
+            <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(Object.keys(NOME_DA_ETAPA) as UpdateStage[]).map((k) => (
+                <SelectItem key={k} value={k}>{NOME_DA_ETAPA[k]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Campo
+          id="u-date" label="Dia a que se refere" type="date" value={f.happenedOn}
+          onChange={(v) => setF({ ...f, happenedOn: v })}
+        />
+      </div>
+
+      <div className="mt-3">
+        <Campo
+          id="u-title" label="Título" value={f.title}
+          onChange={(v) => setF({ ...f, title: v })}
+          placeholder="Carro pago ao stand"
+        />
+      </div>
+
+      <div className="mt-3">
+        <Label htmlFor="u-body">Detalhe</Label>
+        <Textarea
+          id="u-body" rows={3} className="mt-1.5"
+          value={f.body}
+          onChange={(e) => setF({ ...f, body: e.target.value })}
+          placeholder="O que aconteceu, o que vem a seguir e quando é esperado."
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="underline underline-offset-2">
+            {imagem ? imagem.name : 'Anexar fotografia'}
+          </span>
+          <input
+            type="file" accept="image/*" className="sr-only"
+            onChange={(e) => setImagem(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {imagem && (
+          <Button variant="ghost" size="sm" onClick={() => setImagem(null)}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
+        <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox" checked={!f.visible}
+            onChange={(e) => setF({ ...f, visible: !e.target.checked })}
+          />
+          Nota interna (os investidores não veem)
+        </label>
+      </div>
+
+      <Button
+        className="mt-4" size="sm"
+        disabled={!valido || escrever.isPending || aEnviar}
+        onClick={() => escrever.mutate()}
+      >
+        {(escrever.isPending || aEnviar)
+          ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+          : <Plus className="mr-1 h-3.5 w-3.5" />}
+        {aEnviar ? 'A enviar a fotografia…' : 'Publicar'}
+      </Button>
+
+      {d.updates.length > 0 && (
+        <div className="mt-6 space-y-2">
+          {d.updates.map((u) => (
+            <div
+              key={u.id}
+              className={`rounded-lg border p-3 ${u.visible ? 'border-border' : 'border-dashed border-border opacity-70'}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {u.title}
+                    {!u.visible && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        nota interna
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {NOME_DA_ETAPA[u.stage]} · {u.happenedOn.split('-').reverse().join('/')}
+                  </p>
+                  {u.body && (
+                    <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+                      {u.body}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => alternar.mutate(u.id)}
+                    title={u.visible ? 'Esconder dos investidores' : 'Mostrar aos investidores'}
+                    aria-label={u.visible ? 'Esconder dos investidores' : 'Mostrar aos investidores'}
+                  >
+                    {u.visible
+                      ? <Eye className="h-3.5 w-3.5" />
+                      : <EyeOff className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => apagar.mutate(u.id)}
+                    aria-label="Apagar entrada"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+              {u.imageUrl && (
+                <img
+                  src={u.imageUrl} alt={u.title} loading="lazy"
+                  className="mt-2 max-h-40 rounded-md border border-border object-cover"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Bloco>
   );
 }
 

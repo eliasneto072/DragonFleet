@@ -458,3 +458,50 @@ describe('Totais da empresa', () => {
     expect(res.body.code).toBe('ACCOUNT_NOT_EMPTY');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Destaques e filtros', () => {
+  it('os destaques respondem a quem está há mais tempo e quem tem mais', async () => {
+    const antigo = await investidorComDeposito(5000, { startDate: '2024-01-15' });
+    const rico = await investidorComDeposito(50000);
+
+    const res = await request(app).get('/investors/stats').set(asAdmin()).expect(200);
+    const d = res.body.data;
+
+    expect(d.oldest.since).toBe('2024-01-15');
+    expect(d.topCapital.capital).toBe(50000);
+    expect(antigo.accountId).toBeTruthy();
+    expect(rico.accountId).toBeTruthy();
+  });
+
+  it('a pesquisa encontra por nome e por email', async () => {
+    await request(app).post('/investors/accounts').set(asAdmin()).send({
+      name: 'Maria Investidora', email: 'maria@teste.local',
+      password: 'palavra-passe-segura', annualRate: 5,
+    }).expect(201);
+    await investidorComDeposito(1000);
+
+    const porNome = await request(app).get('/investors/accounts?search=maria')
+      .set(asAdmin()).expect(200);
+    expect(porNome.body.data.accounts).toHaveLength(1);
+    expect(porNome.body.data.accounts[0].userName).toBe('Maria Investidora');
+
+    const porEmail = await request(app).get('/investors/accounts?search=maria@teste')
+      .set(asAdmin()).expect(200);
+    expect(porEmail.body.data.accounts).toHaveLength(1);
+  });
+
+  it('a ordenação muda mesmo a ordem', async () => {
+    await investidorComDeposito(1000);
+    await investidorComDeposito(9000);
+
+    const porCapital = await request(app).get('/investors/accounts?sort=capital')
+      .set(asAdmin()).expect(200);
+    expect(porCapital.body.data.accounts[0].capital).toBe(9000);
+  });
+
+  it('um investidor não vê os destaques dos outros', async () => {
+    const { userId } = await investidorComDeposito(1000);
+    await request(app).get('/investors/stats').set(asInvestor(userId)).expect(403);
+  });
+});

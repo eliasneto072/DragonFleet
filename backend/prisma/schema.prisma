@@ -1146,6 +1146,7 @@ model InvestmentProject {
   shares    ProjectShare[]
   periods   ProjectPeriod[]
   expenses  ProjectExpense[]
+  updates   ProjectUpdate[]
   movements InvestorMovement[]
 
   @@index([status])
@@ -1238,4 +1239,59 @@ model ProjectExpense {
 
   @@index([projectId, month])
   @@map("project_expenses")
+}
+
+
+/// As etapas de um projeto, do financiamento ao carro a render.
+///
+/// Lista fechada porque é o que permite desenhar uma escada de progresso e
+/// dizer "vamos em 4 de 7". O texto de cada entrada é livre — cada carro tem a
+/// sua história, e obrigá-la a caber num enum daria entradas sem conteúdo.
+enum ProjectUpdateStage {
+  FUNDING_COMPLETE
+  FUNDS_RECEIVED
+  VEHICLE_PAID
+  PAPERWORK
+  INSURANCE
+  TVDE_LICENSE
+  DRIVER_ASSIGNED
+  EARNING
+  MAINTENANCE
+  INCIDENT
+  SALE
+  OTHER
+}
+
+/// Uma entrada do diário de bordo de um projeto.
+///
+/// Entre o financiamento fechar e o carro render passam semanas, e durante
+/// esse tempo o investidor tem dinheiro parado num projeto que não distribui
+/// nada. É esta sequência que lhe diz onde as coisas estão — e que substitui o
+/// telefonema.
+model ProjectUpdate {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+
+  stage ProjectUpdateStage @default(OTHER)
+  title String
+  body  String?
+
+  /// Fotografia do carro, do documento, do que for. Uma imagem de um carro
+  /// real vale mais do que três parágrafos a dizer que ele existe.
+  imageUrl String? @map("image_url")
+
+  /// O dia a que a entrada se refere, que não é o dia em que foi escrita: o
+  /// pagamento foi feito na sexta e registado na segunda.
+  happenedOn DateTime @map("happened_on") @db.Date
+
+  /// Falso deixa a entrada só para uso interno.
+  visible Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, happenedOn])
+  @@map("project_updates")
 }

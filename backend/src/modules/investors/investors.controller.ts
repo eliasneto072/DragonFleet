@@ -8,6 +8,7 @@ import { prisma } from '../../config/prisma';
 import { investorsService } from './investors.service';
 import {
   accountQuerySchema, adjustSchema, createInvestorSchema, decideWithdrawalSchema,
+  listAccountsQuerySchema,
   depositSchema, idParamSchema, requestWithdrawalSchema, setRateSchema,
   statementQuerySchema, updateAccountSchema,
 } from './investors.schemas';
@@ -82,8 +83,13 @@ export class InvestorsController {
 
   // ── Administração ─────────────────────────────────────────────────────────
 
-  listAccounts = async (req: AuthRequest, res: Response) =>
-    ok(res, { accounts: await investorsService.listAccounts(getActor(req)) });
+  listAccounts = async (req: AuthRequest, res: Response) => {
+    const { query } = listAccountsQuerySchema.parse({ query: req.query });
+    return ok(res, { accounts: await investorsService.listAccounts(getActor(req), query) });
+  };
+
+  stats = async (req: AuthRequest, res: Response) =>
+    ok(res, await investorsService.stats(getActor(req)));
 
   overview = async (req: AuthRequest, res: Response) =>
     ok(res, await investorsService.overview(getActor(req)));

@@ -551,3 +551,91 @@ describe('Permissões', () => {
       .expect(403);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Diário de bordo', () => {
+  it('fechar o financiamento abre o diário sozinho e avisa os participantes', async () => {
+    // É o momento em que o investidor passa a ter dinheiro parado à espera de
+    // um carro. Se o diário só abrisse à mão, seria precisamente aí que ele
+    // ficaria sem nada para ver.
+    const inv = await investidorCom(20000);
+    const { projeto } = await projetoAberto({ target: 20000 });
+
+    await request(app).post(`/investors/projects/${projeto.id}/subscribe`)
+      .set(asInvestor(inv.userId)).send({ amount: 20000 }).expect(201);
+
+    const entradas = await testDb.projectUpdate.findMany({ where: { projectId: projeto.id } });
+    expect(entradas).toHaveLength(1);
+    expect(entradas[0].stage).toBe('FUNDING_COMPLETE');
+
+    const avisos = await testDb.notification.count({
+      where: { userId: inv.userId, title: 'Financiamento concluído' },
+    });
+    expect(avisos).toBe(1);
+  });
+
+  it('não abre o diário enquanto faltar dinheiro', async () => {
+    const inv = await investidorCom(20000);
+    const { projeto } = await projetoAberto({ target: 20000 });
+
+    await request(app).post(`/investors/projects/${projeto.id}/subscribe`)
+      .set(asInvestor(inv.userId)).send({ amount: 19999 }).expect(201);
+
+    const entradas = await testDb.projectUpdate.count({ where: { projectId: projeto.id } });
+    expect(entradas).toBe(0);
+  });
+
+  it('o investidor vê as entradas visíveis e NÃO vê as notas internas', async () => {
+    const inv = await investidorCom(10000);
+    const { projeto } = await projetoAberto();
+    await request(app).post(`/investors/projects/${projeto.id}/subscribe`)
+      .set(asInvestor(inv.userId)).send({ amount: 10000 }).expect(201);
+
+    await request(app).post(`/investors/projects/${projeto.id}/updates`).set(asAdmin())
+      .send({ stage: 'VEHICLE_PAID', title: 'Carro pago', happenedOn: '2026-03-10' })
+      .expect(201);
+    await request(app).post(`/investors/projects/${projeto.id}/updates`).set(asAdmin())
+      .send({ title: 'Negociação do stand', visible: false, happenedOn: '2026-03-11' })
+      .expect(201);
+
+    const dele = await request(app).get(`/investors/projects/${projeto.id}`)
+      .set(asInvestor(inv.userId)).expect(200);
+    expect(dele.body.data.updates).toHaveLength(1);
+    expect(dele.body.data.updates[0].title).toBe('Carro pago');
+
+    const daGestao = await request(app).get(`/investors/projects/${projeto.id}`)
+      .set(asAdmin()).expect(200);
+    expect(daGestao.body.data.updates).toHaveLength(2);
+  });
+
+  it('um investidor não escreve no diário', async () => {
+    const inv = await investidorCom(10000);
+    const { projeto } = await projetoAberto();
+    await request(app).post(`/investors/projects/${projeto.id}/updates`)
+      .set(asInvestor(inv.userId)).send({ title: 'Está tudo bem' })
+      .expect(403);
+  });
+
+  it('diz se o carro tem motorista, e desde quando, sem dizer quem', async () => {
+    const inv = await investidorCom(10000);
+    const { projeto, veiculo } = await projetoAberto();
+    await request(app).post(`/investors/projects/${projeto.id}/subscribe`)
+      .set(asInvestor(inv.userId)).send({ amount: 10000 }).expect(201);
+
+    const semMotorista = await request(app).get(`/investors/projects/${projeto.id}`)
+      .set(asInvestor(inv.userId)).expect(200);
+    expect(semMotorista.body.data.driver.active).toBe(false);
+
+    const motorista = await criaMotorista({ name: 'João Condutor' });
+    await testDb.vehicleAssignment.create({
+      data: { vehicleId: veiculo.id, userId: motorista.id, startedAt: new Date('2026-03-01') },
+    });
+
+    const comMotorista = await request(app).get(`/investors/projects/${projeto.id}`)
+      .set(asInvestor(inv.userId)).expect(200);
+    expect(comMotorista.body.data.driver.active).toBe(true);
+    expect(comMotorista.body.data.driver.since).toBe('2026-03-01');
+    // O nome do motorista não sai para fora da empresa.
+    expect(JSON.stringify(comMotorista.body)).not.toContain('João Condutor');
+  });
+});

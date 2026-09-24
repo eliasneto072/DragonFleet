@@ -97,6 +97,15 @@ export interface InvestorOverview {
   totalLiability: number;
 }
 
+export interface InvestorStats {
+  oldest: { name: string; email: string; since: string; total: number } | null;
+  topCapital: { name: string; email: string; capital: number } | null;
+  topEarnings: { name: string; email: string; earned: number } | null;
+  /** Juros pagos aos depósitos — um custo, não um lucro. */
+  interestPaid: number;
+  projects: { profit: number; toInvestors: number; toCompany: number };
+}
+
 export interface InvestorNotification {
   id: string;
   title: string;
@@ -151,10 +160,18 @@ export const investorsService = {
 
   // ── Administração ─────────────────────────────────────────────────────────
 
-  listAccounts: () =>
+  listAccounts: (params: {
+    search?: string;
+    status?: 'ACTIVE' | 'CLOSED';
+    /** total | capital | earnings | oldest | name */
+    sort?: string;
+  } = {}) =>
     apiClient.get<{ accounts: (InvestorBalance & { annualRate: number })[] }>(
-      '/investors/accounts',
+      `/investors/accounts${qs(params as Record<string, string | undefined>)}`,
     ),
+
+  /** Os destaques da carteira: quem está há mais tempo, quem tem mais, etc. */
+  stats: () => apiClient.get<InvestorStats>('/investors/stats'),
 
   overview: () => apiClient.get<InvestorOverview>('/investors/overview'),
 

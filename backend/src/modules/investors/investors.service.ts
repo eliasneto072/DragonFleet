@@ -496,8 +496,19 @@ export class InvestorsService {
 
   // ══ Administração ════════════════════════════════════════════════════════
 
-  /** Todas as contas, com saldos. A tela de Investidores. */
-  async listAccounts(actor: Actor) {
+  /**
+   * Todas as contas, com saldos, filtradas e ordenadas.
+   *
+   * A ordenação é feita em SQL e não no browser: com trinta investidores dava
+   * na mesma, mas a lista é a porta de entrada da tela e ordenar do lado do
+   * servidor é o que a mantém igual quando forem trezentos.
+   */
+  async listAccounts(actor: Actor, filter: {
+    search?: string;
+    status?: 'ACTIVE' | 'CLOSED';
+    /** total (por omissão), capital, earnings, oldest, name */
+    sort?: string;
+  } = {}) {
     if (!podeVer(actor.role)) throw new AppError('Acesso restrito.', 403, 'FORBIDDEN');
 
     const contas = await prisma.investorAccount.findMany({ select: { id: true } });
@@ -507,8 +518,29 @@ export class InvestorsService {
       try { await this.catchUp(c.id); } catch { /* o erro já foi registado */ }
     }
 
+    // A ordem pedida, traduzida para SQL. Lista fechada e não texto vindo do
+    // pedido: interpolar o que o browser mandar numa cláusula ORDER BY é como
+    // se abre a porta a uma injeção.
+    const ordens: Record<string, Prisma.Sql> = {
+      total: Prisma.sql`total DESC`,
+      capital: Prisma.sql`capital DESC`,
+      earnings: Prisma.sql`earnings DESC`,
+      oldest: Prisma.sql`start_date ASC`,
+      name: Prisma.sql`user_name ASC`,
+    };
+    const ordem = ordens[filter.sort ?? 'total'] ?? ordens.total;
+
+    const termo = filter.search?.trim()
+      ? `%${filter.search.trim().toLowerCase()}%`
+      : null;
+
     const rows = await prisma.$queryRaw<BalanceRow[]>`
-      SELECT ${BALANCE_COLS} FROM investor_balances ORDER BY total DESC`;
+      SELECT ${BALANCE_COLS} FROM investor_balances
+      WHERE (${filter.status ?? null}::text IS NULL OR account_status::text = ${filter.status ?? null})
+        AND (${termo}::text IS NULL
+             OR lower(user_name) LIKE ${termo}
+             OR lower(user_email) LIKE ${termo})
+      ORDER BY ${ordem}`;
 
     const hoje = lisbonDay();
     const taxas = await prisma.investorRate.findMany({
@@ -557,6 +589,95 @@ export class InvestorsService {
       investors,
       driversOwed: round2(num(drv?.owed)),
       totalLiability: round2(investors.total + num(drv?.owed)),
+    };
+  }
+
+  /**
+   * Os destaques da carteira de investidores.
+   *
+   * Responde às perguntas que se fazem em voz alta a olhar para a lista: quem
+   * está connosco há mais tempo, quem tem mais dinheiro cá dentro, quem já
+   * ganhou mais. E, do outro lado, o que isto custa e o que rende à empresa.
+   *
+   * Tudo em SQL: são seis perguntas independentes e trazê-las como seis somas
+   * é mais barato do que trazer as contas todas para as somar no servidor.
+   */
+  async stats(actor: Actor) {
+    if (!podeVer(actor.role)) throw new AppError('Acesso restrito.', 403, 'FORBIDDEN');
+
+    const [maisAntigo, maiorCapital, maiorRendimento, juros, projetos] = await Promise.all([
+      prisma.$queryRaw<{ name: string; email: string; start_date: Date; total: number }[]>`
+        SELECT user_name AS name, user_email AS email, start_date,
+               CAST(total AS FLOAT) AS total
+        FROM investor_balances
+        WHERE account_status = 'ACTIVE'
+        ORDER BY start_date ASC LIMIT 1`,
+
+      prisma.$queryRaw<{ name: string; email: string; capital: number }[]>`
+        SELECT user_name AS name, user_email AS email, CAST(capital AS FLOAT) AS capital
+        FROM investor_balances
+        WHERE account_status = 'ACTIVE'
+        ORDER BY capital DESC LIMIT 1`,
+
+      // Quem mais GANHOU, e não quem mais tem: são perguntas diferentes, e
+      // quem já levantou os ganhos desaparecia da segunda.
+      prisma.$queryRaw<{ name: string; email: string; earned: number }[]>`
+        SELECT u.name, u.email, CAST(SUM(m.amount) AS FLOAT) AS earned
+        FROM investor_movements m
+        JOIN investor_accounts a ON a.id = m.account_id
+        JOIN users u ON u.id = a.user_id
+        WHERE m.bucket = 'EARNINGS' AND m.amount > 0
+        GROUP BY u.id, u.name, u.email
+        ORDER BY 3 DESC LIMIT 1`,
+
+      // O que os depósitos custaram à empresa em juros, desde sempre.
+      prisma.$queryRaw<{ total: number }[]>`
+        SELECT CAST(COALESCE(SUM(amount), 0) AS FLOAT) AS total
+        FROM investor_movements WHERE kind = 'ACCRUAL'`,
+
+      // Os projetos: o que os carros deram, quanto foi para os investidores, e
+      // o que sobrou para a empresa. Só os meses JÁ DISTRIBUÍDOS — um mês
+      // apurado e por pagar ainda não é lucro de ninguém.
+      prisma.$queryRaw<{ profit: number; investors: number }[]>`
+        SELECT CAST(COALESCE(SUM(profit), 0) AS FLOAT)           AS profit,
+               CAST(COALESCE(SUM(investors_amount), 0) AS FLOAT) AS investors
+        FROM project_periods WHERE status = 'DISTRIBUTED'`,
+    ]);
+
+    const p = projetos[0];
+    const lucroProjetos = round2(num(p?.profit));
+    const paraInvestidores = round2(num(p?.investors));
+
+    return {
+      oldest: maisAntigo[0]
+        ? {
+            name: maisAntigo[0].name,
+            email: maisAntigo[0].email,
+            since: dateToDay(maisAntigo[0].start_date),
+            total: round2(num(maisAntigo[0].total)),
+          }
+        : null,
+      topCapital: maiorCapital[0]
+        ? {
+            name: maiorCapital[0].name,
+            email: maiorCapital[0].email,
+            capital: round2(num(maiorCapital[0].capital)),
+          }
+        : null,
+      topEarnings: maiorRendimento[0]
+        ? {
+            name: maiorRendimento[0].name,
+            email: maiorRendimento[0].email,
+            earned: round2(num(maiorRendimento[0].earned)),
+          }
+        : null,
+      /** Juros pagos aos depósitos — um custo, não um lucro. */
+      interestPaid: round2(num(juros[0]?.total)),
+      projects: {
+        profit: lucroProjetos,
+        toInvestors: paraInvestidores,
+        toCompany: round2(lucroProjetos - paraInvestidores),
+      },
     };
   }
 

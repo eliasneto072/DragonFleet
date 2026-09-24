@@ -7,7 +7,8 @@ import { AppError } from '../../shared/errors/AppError';
 import { projectsService } from './projects.service';
 import {
   activateSchema, cancelSchema, closeSchema, createProjectSchema, expenseSchema,
-  idParamSchema, listQuerySchema, monthParamSchema, subscribeSchema, updateProjectSchema,
+  idParamSchema, listQuerySchema, monthParamSchema, subscribeSchema,
+  updateEntrySchema, updateProjectSchema,
 } from './projects.schemas';
 
 function getActor(req: AuthRequest) {
@@ -89,6 +90,24 @@ export class ProjectsController {
     const { params, body } = expenseSchema.parse({ params: req.params, body: req.body });
     const period = await projectsService.addExpense(getActor(req), params.id, body);
     return ok(res, { period }, 201);
+  };
+
+  // ── Diário de bordo ───────────────────────────────────────────────────────
+
+  addUpdate = async (req: AuthRequest, res: Response) => {
+    const { params, body } = updateEntrySchema.parse({ params: req.params, body: req.body });
+    const update = await projectsService.addUpdate(getActor(req), params.id, body);
+    return ok(res, { update }, 201);
+  };
+
+  removeUpdate = async (req: AuthRequest, res: Response) => {
+    const { params } = idParamSchema.parse({ params: req.params });
+    return ok(res, await projectsService.removeUpdate(getActor(req), params.id));
+  };
+
+  toggleUpdate = async (req: AuthRequest, res: Response) => {
+    const { params } = idParamSchema.parse({ params: req.params });
+    return ok(res, { update: await projectsService.toggleUpdate(getActor(req), params.id) });
   };
 
   removeExpense = async (req: AuthRequest, res: Response) => {

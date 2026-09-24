@@ -29,7 +29,8 @@ import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import { ApiError } from '@/shared/lib/api-client';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import { mesLegivel } from '../components/invest-bits';
+import { dia, mesLegivel } from '../components/invest-bits';
+import { ProjectLadder, ProjectTimeline } from '../components/project-timeline';
 
 export function InvestProjectDetailPage() {
   const { id = '' } = useParams();
@@ -61,7 +62,7 @@ export function InvestProjectDetailPage() {
     return <Skeleton className="h-96 w-full rounded-xl" />;
   }
 
-  const { project: p, periods, mine } = q.data;
+  const { project: p, periods, mine, updates, driver } = q.data;
   const disponivel = meQ.data?.balance.availableCapital ?? 0;
 
   const falta = Math.max(0, p.targetAmount - p.raised);
@@ -101,6 +102,19 @@ export function InvestProjectDetailPage() {
               {p.vehicle
                 ? `${p.vehicle.brand} ${p.vehicle.model} · ${p.vehicle.plate}`
                 : 'Carro por atribuir'}
+              {/* Com ou sem motorista: um carro parado não rende, e esta é a
+                  pergunta a seguir a "onde está o carro". Sem o nome dele —
+                  quem conduz não é assunto de quem financia. */}
+              {p.vehicle && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span style={{ color: driver.active ? 'var(--gold-200)' : undefined }}>
+                    {driver.active
+                      ? `com motorista desde ${dia(driver.since)}`
+                      : 'sem motorista de momento'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
           {p.riskLevel && (
@@ -159,6 +173,19 @@ export function InvestProjectDetailPage() {
               Liquidado por {formatCurrency(mine.liquidated)} — já no seu saldo disponível.
             </p>
           )}
+        </section>
+      )}
+
+      {/* ── O diário de bordo ────────────────────────────────────────────── */}
+      {(updates.length > 0 || p.status === 'ACTIVE') && (
+        <section className="inv-surface inv-enter p-6 sm:p-8">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,15rem)_1fr]">
+            <ProjectLadder updates={updates} />
+            <div>
+              <p className="inv-label mb-4">O que tem acontecido</p>
+              <ProjectTimeline updates={updates} />
+            </div>
+          </div>
         </section>
       )}
 
