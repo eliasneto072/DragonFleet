@@ -15,6 +15,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import { formatCurrency } from '@/shared/lib/format';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { dia } from '../components/invest-bits';
+import { resumirMensagem } from '@/shared/lib/notification-format';
 
 export function InvestAccountPage() {
   const { user, logout } = useAuth();
@@ -92,7 +93,11 @@ export function InvestAccountPage() {
                     <p className={`text-sm ${n.read ? 'text-[var(--muted-foreground)]' : ''}`}>
                       {n.title}
                     </p>
-                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{n.message}</p>
+                    {/* Uma linha só: a lista de avisos da conta é uma lista, e
+                        o aviso todo abre-se em Notificações. */}
+                    <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
+                      {resumirMensagem(n.message)}
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {/* O ponto é a única marca de "por ler". Um fundo diferente

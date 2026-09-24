@@ -108,7 +108,7 @@ function TicketModal({ ticket, onClose }: { ticket: ApiTicket; onClose: () => vo
         <div className="flex-1 overflow-y-auto space-y-3 py-2 min-h-0">
           <div className="bg-muted rounded-lg p-3">
             <p className="text-xs font-medium text-muted-foreground mb-1">Mensagem original</p>
-            <p className="text-sm">{ticket.message}</p>
+            <p className="whitespace-pre-line text-sm">{ticket.message}</p>
           </div>
 
           {ticket.replies.map((r) => {
@@ -119,7 +119,7 @@ function TicketModal({ ticket, onClose }: { ticket: ApiTicket; onClose: () => vo
                   <p className={`text-xs font-medium mb-1 ${isAdmin ? 'text-white/80' : 'text-muted-foreground'}`}>
                     {isAdmin ? '🛡️ Suporte (tu)' : r.author.name}
                   </p>
-                  <p className="text-sm">{r.message}</p>
+                  <p className="whitespace-pre-line text-sm">{r.message}</p>
                   <p className={`text-xs mt-1 ${isAdmin ? 'text-white/60' : 'text-muted-foreground'}`}>
                     {new Date(r.createdAt).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                   </p>

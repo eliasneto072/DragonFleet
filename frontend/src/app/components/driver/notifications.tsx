@@ -11,6 +11,7 @@ import { notificationsService } from '@/features/driver/services/notifications.s
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiNotification } from '@/shared/types/api';
 import { linkFromNotification } from '@/app/components/driver/account-movements';
+import { NotificationBody } from '@/app/components/ui/notification-body';
 
 // O backend não tem campo "type" — inferimos pelo título como fallback visual
 function inferType(title: string): 'info' | 'success' | 'warning' | 'error' {
@@ -179,9 +180,11 @@ export function Notifications() {
                             <Badge variant="secondary" className="text-xs">Novo</Badge>
                           )}
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {notification.message}
-                        </p>
+                        <NotificationBody
+                          texto={notification.message}
+                          dobravel
+                          className="mt-1"
+                        />
                       </div>
                       <Button
                         variant="ghost"

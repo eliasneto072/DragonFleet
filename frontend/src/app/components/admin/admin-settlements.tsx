@@ -284,7 +284,7 @@ function SettlementDetail({ s }: { s: ApiSettlement }) {
             <Eye className="h-3.5 w-3.5" aria-hidden="true" />
             Comentários — o motorista vê
           </p>
-          <p className="mt-1 text-sm">{s.notes}</p>
+          <p className="mt-1 whitespace-pre-line text-sm">{s.notes}</p>
         </div>
       )}
 

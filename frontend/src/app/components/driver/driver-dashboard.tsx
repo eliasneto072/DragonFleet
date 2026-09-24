@@ -322,7 +322,7 @@ function WeekDetail({ s, entry, reconciliation }: {
       {s.notes?.trim() && (
         <div className="rounded-lg bg-secondary p-3">
           <p className="text-xs font-medium text-muted-foreground">Observações do escritório</p>
-          <p className="mt-1 text-sm">{s.notes}</p>
+          <p className="mt-1 whitespace-pre-line text-sm">{s.notes}</p>
         </div>
       )}
     </div>

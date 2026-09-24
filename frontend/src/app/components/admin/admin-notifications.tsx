@@ -10,7 +10,9 @@ import { Badge }    from '@/app/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
-import { Bell, Send, Users, User, Loader2, CheckCircle } from 'lucide-react';
+import { Bell, Send, Users, User, Loader2, CheckCircle, Eye } from 'lucide-react';
+import { NotificationBody } from '@/app/components/ui/notification-body';
+import { resumirMensagem } from '@/shared/lib/notification-format';
 import { PageHeader } from '@/app/components/ui/page-header';
 import { toast } from 'sonner';
 import { notificationsService } from '@/features/driver/services/notifications.service';
@@ -25,6 +27,7 @@ export function AdminNotifications() {
   const [userId,  setUserId]  = useState('');
   const [title,   setTitle]   = useState('');
   const [message, setMessage] = useState('');
+  const [prever,  setPrever]  = useState(false);
 
   const usersQ = useQuery({
     queryKey: queryKeys.users.allUnpaged,
@@ -57,6 +60,7 @@ export function AdminNotifications() {
       setTitle('');
       setMessage('');
       setUserId('');
+      setPrever(false);
     },
     onError: () => toast.error('Erro ao enviar notificação.'),
   });
@@ -179,14 +183,56 @@ export function AdminNotifications() {
 
           {/* Mensagem */}
           <div className="space-y-1.5">
-            <Label htmlFor="notif-message">Mensagem</Label>
-            <Textarea
-              id="notif-message"
-              placeholder="Escreve a mensagem da notificação…"
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              rows={3}
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="notif-message">Mensagem</Label>
+              {message.trim() && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setPrever(v => !v)}
+                >
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  {prever ? 'Voltar a escrever' : 'Pré-visualizar'}
+                </Button>
+              )}
+            </div>
+
+            {prever ? (
+              // O mesmo componente que o motorista vê, e não uma imitação:
+              // uma pré-visualização que desenha de outra maneira mente.
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="font-semibold">{title.trim() || 'Sem título'}</p>
+                <NotificationBody texto={message} className="mt-1" />
+              </div>
+            ) : (
+              <Textarea
+                id="notif-message"
+                placeholder={
+                  'Escreve a mensagem…\n\n'
+                  + '## Um título\n'
+                  + '- Um ponto de uma lista\n'
+                  + '- Outro ponto\n\n'
+                  + 'Um parágrafo normal, com **uma parte a negrito**.'
+                }
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                rows={10}
+                className="font-mono text-sm leading-relaxed"
+              />
+            )}
+
+            {/* A formatação só serve se estiver escrita onde se escreve. */}
+            <p className="text-xs text-muted-foreground">
+              <code className="rounded bg-secondary px-1">## Título</code>
+              {' · '}
+              <code className="rounded bg-secondary px-1">- lista</code>
+              {' · '}
+              <code className="rounded bg-secondary px-1">**negrito**</code>
+              {' · '}
+              linha em branco separa parágrafos
+            </p>
           </div>
 
           <Button onClick={handleSend} disabled={sendMutation.isPending}>
@@ -224,10 +270,14 @@ export function AdminNotifications() {
                         ? <Badge className="bg-brand-50 text-brand-700 hover:bg-brand-50 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-950 shrink-0"><CheckCircle className="h-3 w-3 mr-1" />Lida</Badge>
                         : <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-950 shrink-0">Não lida</Badge>}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-0.5 truncate">{n.message}</p>
+                    {/* Uma linha só, sem as marcas de formatação: "## Níveis"
+                        num resumo de uma linha é ruído, não é um título. */}
+                    <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                      {resumirMensagem(n.message)}
+                    </p>
                   </div>
                   <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                    {new Date(n.createdAt).toLocaleDateString('pt-BR')}
+                    {new Date(n.createdAt).toLocaleDateString('pt-PT')}
                   </p>
                 </div>
               ))}

@@ -307,7 +307,7 @@ export function Investments() {
                       <span className="block text-[11px] text-muted-foreground">ao ano</span>
                     </p>
                   </div>
-                  {p.description && <p className="mt-2 text-sm text-muted-foreground">{p.description}</p>}
+                  {p.description && <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{p.description}</p>}
                   <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                     {p.type === 'FIXED' ? (
                       <>

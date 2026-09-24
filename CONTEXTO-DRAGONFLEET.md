@@ -463,6 +463,86 @@ Testes: `permissions.integration.test.ts` (**escrito, corre só na CI**).
 
 ---
 
+## 2.8 O texto das notificações tinha forma, e o ecrã deitava-a fora
+
+O cliente enviou um aviso longo, escrito em títulos, parágrafos e listas.
+Chegou ao motorista como um bloco corrido de vinte linhas.
+
+### A causa
+
+`<p>{notification.message}</p>`. O HTML trata qualquer sequência de espaços e
+quebras de linha como **um** espaço. O texto ia inteiro — só não tinha forma
+nenhuma.
+
+O email tinha o mesmo defeito e mais um: `<p>${message}</p>` **sem escapar**.
+Um `<` numa frase inocente ("faturação < 500€") comia o resto do email, e
+marcação escrita numa mensagem entrava como marcação.
+
+### A solução
+
+Um formatador com quatro regras, e só quatro:
+
+```
+## Um título          →  título
+- Um item             →  lista (aceita "-", "*" e "•")
+linha em branco       →  separa parágrafos
+**negrito**           →  negrito
+```
+
+Uma quebra de linha **simples** dentro de um parágrafo é mantida: quem a
+escreveu queria-a ali.
+
+Duas implementações da mesma gramática, de propósito:
+
+- `frontend/src/shared/lib/notification-format.ts` — devolve **blocos**, não
+  HTML. Nada vindo da mensagem chega ao DOM como marcação, por isso não há
+  porta aberta a HTML injetado num aviso. Desenhado por
+  `app/components/ui/notification-body.tsx`.
+- `backend/src/shared/services/notification-html.ts` — escapa primeiro,
+  formata depois (a ordem importa: ao contrário, o `<strong>` que nós próprios
+  escrevemos seria escapado a seguir e aparecia como texto). Estilos em
+  atributos `style` e `<br>` em vez de `white-space:pre-line`, porque o Outlook
+  ignora o segundo.
+
+**Não se usou uma biblioteca de markdown.** Precisávamos de três coisas; uma
+biblioteca traz tabelas, imagens, ligações e HTML embutido. O texto é escrito
+na administração mas é lido por toda a gente, e um email não se corrige depois
+de enviado.
+
+### O resto do mesmo defeito
+
+O mesmo `<p>` esmagava todo o texto escrito por pessoas. Corrigido com
+`whitespace-pre-line` em: mensagens e respostas de suporte (motorista e
+administração), notas do fecho semanal (nas duas vistas), descrição dos planos
+de investimento e a mensagem original na fila de trabalho.
+
+### No painel
+
+A caixa de escrita passou de 3 para 10 linhas, com a ajuda da formatação
+escrita por baixo e um botão **Pré-visualizar** que usa o MESMO componente que
+o motorista vê — uma pré-visualização que desenha de outra maneira mente.
+
+Na lista de avisos, uma mensagem com mais de 260 caracteres dobra atrás de um
+"Ver mais", com o estado por cartão. O `resumirMensagem` tira as marcas nas
+pré-visualizações de uma linha: `## Níveis` num resumo é ruído, não é um
+título.
+
+Corrigido também um `toLocaleDateString('pt-BR')` no histórico.
+
+Testes: `notification-html.test.ts`, 13 casos, **corridos** — escape, quebras,
+listas, títulos, `**` sem par, `\r\n` do Windows, mensagem vazia e uma de 500
+linhas.
+
+### Ainda por fazer
+
+- O formatador existe duas vezes (frontend e backend). São 80 linhas cada e o
+  monorepo não tem pacote partilhado; se divergirem, o sintoma é a
+  pré-visualização deixar de bater certo com o email.
+- Os avisos automáticos (fecho, ajuste, documento a expirar) continuam a ser
+  escritos numa linha só — passam a poder ter forma, mas ainda não têm.
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está
