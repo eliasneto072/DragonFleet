@@ -90,7 +90,23 @@ describe('Sem configuração, nada muda', () => {
     expect(g.SUPPORT).toBe('MANAGE');
     expect(g.DRIVERS).toBe('VIEW');
     expect(g.FINANCIAL).toBe('VIEW');
-    expect(g.SETTLEMENTS).toBe('NONE');
+
+    // ─── DECISÃO PENDENTE DO CLIENTE ───────────────────────────────────────
+    //
+    // Esta linha dizia 'NONE' e contradizia o support-role.integration.test,
+    // anterior às permissões, que prova que o suporte VIA os fechos e os
+    // lançamentos. Os dois não podiam passar ao mesmo tempo.
+    //
+    // Enquanto o requireArea não impunha nada, a contradição era invisível —
+    // em produção o suporte vê os fechos hoje. Publicar com 'NONE' tirava-lhes
+    // esse acesso no dia seguinte, sem ninguém o ter decidido conscientemente.
+    // Por isso publica-se com 'VIEW', que é o estado atual, e o nome deste
+    // teste — "continua a ver o que via" — passa a ser verdade.
+    //
+    // SE O CLIENTE QUISER TIRAR O ACESSO: SETTLEMENTS em PADRAO_DO_PAPEL.SUPPORT
+    // e no perfil 'suporte' do catálogo, esta linha para 'NONE', e os testes
+    // "os fechos semanais" e "os lançamentos" do support-role para 403.
+    expect(g.SETTLEMENTS).toBe('VIEW');
     expect(g.FLEET).toBe('NONE');
   });
 });

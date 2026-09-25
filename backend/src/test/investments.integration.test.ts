@@ -108,10 +108,13 @@ describe('aplicar', () => {
   });
 
   it('recusa planos desativados e valores abaixo do mínimo', async () => {
-    const inativo = await criaPlano({ name: 'X', type: 'FLEXIBLE', annualRate: 2, active: false });
+    // Nomes com pelo menos dois caracteres: o schema exige-o ("Dê um nome ao
+    // plano."). Os nomes 'X' e 'Y' que aqui estavam falhavam essa validação, e
+    // a criação do plano dava 400 antes de o teste chegar ao que queria provar.
+    const inativo = await criaPlano({ name: 'Inativo', type: 'FLEXIBLE', annualRate: 2, active: false });
     expect((await aplica(inativo.id, 100).expect(400)).body.code).toBe('PLAN_UNAVAILABLE');
 
-    const minimo = await criaPlano({ name: 'Y', type: 'FLEXIBLE', annualRate: 2, minAmount: 500 });
+    const minimo = await criaPlano({ name: 'Com mínimo', type: 'FLEXIBLE', annualRate: 2, minAmount: 500 });
     expect((await aplica(minimo.id, 100).expect(400)).body.code).toBe('BELOW_MIN_AMOUNT');
   });
 
@@ -262,7 +265,14 @@ describe('resgatar', () => {
 });
 
 describe('permissões', () => {
-  const planoValido = { name: 'P', type: 'FLEXIBLE', annualRate: 2 };
+  // VÁLIDO de facto — o nome tinha um carácter e o schema exige dois.
+  //
+  // Um teste de permissão tem de usar um pedido que passaria se a pessoa
+  // tivesse permissão, para que a ÚNICA razão da recusa seja a permissão. Com
+  // o nome 'P', o teste passava só porque a verificação de papel corre antes
+  // da validação; se alguém tirasse a verificação de admin, o gestor levaria
+  // 400 pelo nome em vez de 201, e a falha apontaria para o sítio errado.
+  const planoValido = { name: 'Plano válido', type: 'FLEXIBLE', annualRate: 2 };
 
   it('só o ADMIN cria planos', async () => {
     const gestor = await testDb.user.create({

@@ -24,7 +24,7 @@ import { logger } from '../../shared/utils/logger';
 import { UserRole } from '../../shared/types/enums';
 import {
   TIERS, dateToDay, dayToDate, earnedTier, effectiveTier, floorActive, floorUntilFor,
-  lisbonDay, progressTo, seasonOf, tierIndex, type Day, type DriverMetrics, type Season,
+  lisbonDay, nextReachable, progressTo, seasonOf, tierIndex, type Day, type DriverMetrics, type Season,
   type Tier, type TierRequirements,
 } from './ranks.math';
 
@@ -322,7 +322,9 @@ export class RanksService {
     tier: Tier; earned: Tier; floorTier: Tier | null; floorUntil: Day | null;
     season: Season; metrics: DriverMetrics; today: Day; configs: RankConfigPublic[];
   }): RankStatus {
-    const proximo = a.configs.find((c) => tierIndex(c.tier) === tierIndex(a.earned) + 1);
+    // O proximo nivel CONFIGURADO, e nao simplesmente o seguinte. Um nivel sem
+    // metas daria barra cheia e "nada em falta" num nivel onde nunca se sobe.
+    const proximo = nextReachable(a.earned, a.configs);
     const p = proximo ? progressTo(a.metrics, proximo) : null;
 
     return {

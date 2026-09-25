@@ -2,8 +2,9 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  earnedTier, effectiveTier, floorActive, floorUntilFor, maxTier, meets,
-  previousSeason, progressTo, seasonOf, tierIndex, type DriverMetrics, type TierRequirements,
+  earnedTier, effectiveTier, floorActive, floorUntilFor, hasGoals, maxTier, meets,
+  nextReachable, previousSeason, progressTo, seasonOf, tierIndex,
+  type DriverMetrics, type TierRequirements,
 } from './ranks.math';
 
 const req = (tier: TierRequirements['tier'], o: Partial<TierRequirements> = {}): TierRequirements => ({
@@ -176,5 +177,65 @@ describe('utilitários', () => {
     expect(tierIndex('TIER_1')).toBe(1);
     expect(tierIndex('TIER_5')).toBe(5);
     expect(maxTier('TIER_2', 'TIER_4')).toBe('TIER_4');
+  });
+});
+
+describe('niveis por configurar', () => {
+  // ─── O CASO QUE NENHUM TESTE COBRIA ──────────────────────────────────────
+  //
+  // Todos os testes do earnedTier usavam a ESCADA, onde cada nivel de 2 a 5 tem
+  // meta. Nenhum tinha os niveis a zero — que e exatamente o estado no dia do
+  // deploy, porque "nasce tudo a zero de proposito". Com o codigo anterior,
+  // nesse dia TODOS os motoristas subiam direto ao nivel 5.
+  const tudoAZero = [req('TIER_1'), req('TIER_2'), req('TIER_3'), req('TIER_4'), req('TIER_5')];
+
+  it('no dia do deploy, com tudo a zero, ninguem sobe', () => {
+    expect(earnedTier(metrics(), tudoAZero)).toBe('TIER_1');
+  });
+
+  it('nem quem factura muito sobe para um nivel por configurar', () => {
+    expect(earnedTier(metrics({ seasonRevenue: 1_000_000, invested: 50_000 }), tudoAZero))
+      .toBe('TIER_1');
+  });
+
+  it('configurando so o nivel 2, os de cima continuam fechados', () => {
+    // O administrador configura um de cada vez. Com o codigo anterior, deixar o
+    // 5 por configurar mantinha toda a gente no 5.
+    const soODois = [req('TIER_1'), req('TIER_2', { minSeasonRevenue: 5000 }), req('TIER_3'), req('TIER_4'), req('TIER_5')];
+    expect(earnedTier(metrics({ seasonRevenue: 100_000 }), soODois)).toBe('TIER_2');
+  });
+
+  it('um nivel so com o travao dos documentos continua por configurar', () => {
+    // O requireValidDocuments impede subir; nao e algo que se cumpra para subir.
+    const soDocs = [req('TIER_1'), req('TIER_2', { requireValidDocuments: true })];
+    expect(earnedTier(metrics({ documentsOk: true }), soDocs)).toBe('TIER_1');
+  });
+
+  it('hasGoals distingue configurado de por configurar', () => {
+    expect(hasGoals(req('TIER_3'))).toBe(false);
+    expect(hasGoals(req('TIER_3', { requireValidDocuments: true }))).toBe(false);
+    expect(hasGoals(req('TIER_3', { minWeeks: 1 }))).toBe(true);
+  });
+});
+
+describe('o proximo nivel da barra de progresso', () => {
+  it('salta os niveis por configurar', () => {
+    // Sem isto, um nivel sem metas dava barra cheia e "nada em falta" num nivel
+    // onde o motorista nunca ia subir.
+    const buraco = [req('TIER_1'), req('TIER_2'), req('TIER_3', { minSeasonRevenue: 10_000 })];
+    expect(nextReachable('TIER_1', buraco)?.tier).toBe('TIER_3');
+  });
+
+  it('sem nenhum configurado acima, e como estar no topo', () => {
+    const nada = [req('TIER_1'), req('TIER_2'), req('TIER_3')];
+    expect(nextReachable('TIER_1', nada)).toBeUndefined();
+  });
+
+  it('com a escada completa, e simplesmente o seguinte', () => {
+    expect(nextReachable('TIER_2', ESCADA)?.tier).toBe('TIER_3');
+  });
+
+  it('no topo nao ha seguinte', () => {
+    expect(nextReachable('TIER_5', ESCADA)).toBeUndefined();
   });
 });

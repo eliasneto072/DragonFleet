@@ -282,13 +282,43 @@ describe('A retirada escolhe a conta', () => {
       },
     });
 
-    await request(app).patch(`/withdrawals/${retirada.id}/status`)
-      .set(asAdmin()).send({ status: 'APPROVED' }).expect(200);
+    // ─── O QUE MUDOU E O QUE NÃO MUDOU ──────────────────────────────────────
+    //
+    // A versão anterior esperava que a aprovação DESVIASSE em silêncio para a
+    // principal do motorista. O código sempre recusou — e continua a recusar,
+    // de propósito: uma conta alheia na retirada só aparece por adulteração ou
+    // por bug, e desviar esconderia isso. Ver a nota no withdrawals.service.
+    //
+    // O que NÃO mudou é a garantia que dá nome ao teste: o dinheiro não vai
+    // para a conta de outra pessoa. É a última asserção, e é a que importa.
+    const r = await request(app).patch(`/withdrawals/${retirada.id}/status`)
+      .set(asAdmin()).send({ status: 'APPROVED' }).expect(400);
+
+    // A mensagem diz a causa verdadeira, e não "não tem dados bancários" —
+    // que seria falso: este motorista tem a conta A aprovada.
+    expect(r.body.code).toBe('BANK_ACCOUNT_MISMATCH');
 
     const depois = await testDb.withdrawal.findUniqueOrThrow({ where: { id: retirada.id } });
-    // Caiu na principal DELE, não no IBAN do outro.
-    expect(depois.paidToIban).toBe(IBAN_A);
+    expect(depois.status).toBe('PENDING');
+    expect(depois.paidToIban).toBeNull();
     expect(depois.paidToIban).not.toBe(IBAN_B);
+  });
+
+  it('sem conta nenhuma, a mensagem continua a ser a da falta de dados bancários', async () => {
+    // O outro ramo da mesma decisão: aqui a mensagem antiga está certa, e as
+    // duas causas não se podem confundir.
+    await comSaldo();
+    const retirada = await testDb.withdrawal.create({
+      data: {
+        userId: motorista.id, amount: 100,
+        receiptUrl: 'https://exemplo.local/r.pdf', receiptKey: 'teste/r',
+      },
+    });
+
+    const r = await request(app).patch(`/withdrawals/${retirada.id}/status`)
+      .set(asAdmin()).send({ status: 'APPROVED' }).expect(400);
+
+    expect(r.body.code).toBe('BANK_ACCOUNT_REQUIRED');
   });
 
   it('o IBAN continua a congelar na aprovação', async () => {

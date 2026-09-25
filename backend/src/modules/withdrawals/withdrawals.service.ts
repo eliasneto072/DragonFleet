@@ -304,6 +304,38 @@ export class WithdrawalsService {
         withdrawal.userId, withdrawal.bankAccountId,
       );
       if (!bank) {
+        // ─── DUAS CAUSAS, DUAS MENSAGENS ────────────────────────────────────
+        //
+        // O `resolveAccount` só procura entre as contas do PRÓPRIO motorista,
+        // portanto devolve null em dois casos que não são o mesmo:
+        //
+        //   1. o motorista não tem conta nenhuma utilizável;
+        //   2. a retirada aponta para uma conta que não é dele.
+        //
+        // A mensagem única que aqui estava dizia "não tem dados bancários
+        // aprovados" nos dois — e no segundo isso é falso: o motorista TEM
+        // conta aprovada. O administrador ia procurar uma conta em falta que
+        // existe.
+        //
+        // O caso 2 só acontece por adulteração ou por um bug: a criação da
+        // retirada já recusa contas alheias, e não se pode arquivar uma conta
+        // com retirada por decidir. Por isso RECUSA, em vez de desviar em
+        // silêncio para a principal — desviar esconderia a anomalia, e o
+        // motorista receberia numa conta que não escolheu. A garantia que
+        // importa mantém-se: o dinheiro nunca sai para outra pessoa.
+        const temOutraConta = withdrawal.bankAccountId
+          ? await bankService.resolveAccount(withdrawal.userId, null)
+          : null;
+
+        if (temOutraConta) {
+          throw new AppError(
+            'A conta indicada nesta retirada não pertence a este motorista. ' +
+            'Nada foi aprovado. Recuse a retirada e peça ao motorista para a fazer de novo.',
+            400,
+            'BANK_ACCOUNT_MISMATCH',
+          );
+        }
+
         throw new AppError(
           'Este motorista não tem dados bancários aprovados. Não há destino para a transferência.',
           400,

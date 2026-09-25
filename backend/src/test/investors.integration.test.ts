@@ -138,7 +138,9 @@ describe('Criar contas', () => {
     const motorista = await criaMotorista();
     await request(app).post('/investors/accounts')
       .set(authHeader(motorista.id, UserRole.DRIVER))
-      .send({ name: 'X', email: 'x@y.pt', password: '12345678', annualRate: 5 })
+      // Pedido válido: a recusa tem de vir da permissão e só dela. O nome 'X'
+      // que aqui estava violava o mínimo de dois caracteres do schema.
+      .send({ name: 'Investidor Teste', email: 'x@y.pt', password: '12345678', annualRate: 5 })
       .expect(403);
   });
 });

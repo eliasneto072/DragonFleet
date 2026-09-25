@@ -218,13 +218,20 @@ describe('Apuramento do lucro', () => {
     const { projeto, veiculo, motorista } = await aRender();
 
     // Duas semanas de março, com comissão e aluguer.
+    //
+    // O `commissionRate` tem de ir explícito: a fábrica usa 0% por omissão, e
+    // sem ele os fechos saíam com comissão zero. O código somava corretamente
+    // zero mais zero e o teste falhava no `commissionTotal > 0` — parecia um
+    // erro do apuramento e era um erro da preparação.
     await criaFecho({
       userId: motorista.id, createdById: admin.id, vehicleId: veiculo.id,
       weekStart: new Date('2026-03-02T00:00:00Z'), uberAmount: 1000, vehicleFee: 200,
+      commissionRate: 15,
     });
     await criaFecho({
       userId: motorista.id, createdById: admin.id, vehicleId: veiculo.id,
       weekStart: new Date('2026-03-09T00:00:00Z'), uberAmount: 1000, vehicleFee: 200,
+      commissionRate: 15,
     });
 
     const res = await request(app)

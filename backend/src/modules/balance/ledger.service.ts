@@ -208,12 +208,24 @@ export const ledgerService = {
         })),
 
         // Resgatar: entra o payout, no instante do resgate. Só as fechadas.
+        //
+        // A condição tem de ser a MESMA da view, que soma o payout de toda a
+        // aplicação CLOSED. A versão anterior exigia também `closedAt`, porque
+        // precisava dele para datar a linha — e assim uma aplicação fechada sem
+        // `closedAt` tinha o dinheiro contado na view e AUSENTE do extrato.
+        //
+        // Hoje esse estado é impossível pela aplicação: o único sítio que fecha
+        // grava `payout` e `closedAt` juntos. Mas é impossível por convenção e
+        // não por garantia — não há restrição na base, e um acerto manual abria
+        // a divergência. O extrato existe para explicar o número da view; não
+        // pode nunca deixar cair um valor que ela conta. Sem `closedAt`, a linha
+        // assenta na data da aplicação, e o dinheiro fica contado.
         ...aplicacoes
-          .filter((i) => i.status === 'CLOSED' && i.closedAt && i.payout != null)
+          .filter((i) => i.status === 'CLOSED' && i.payout != null)
           .map((i) => ({
             id: `r:${i.id}`,
             kind: 'REDEMPTION' as const,
-            date: i.closedAt!.toISOString(),
+            date: (i.closedAt ?? i.createdAt).toISOString(),
             label: i.closeReason === 'MATURED' ? 'Investimento terminado' : 'Resgate de investimento',
             detail: i.plan.name,
             amount: cents(Number(i.payout)),

@@ -117,6 +117,33 @@ export function meets(m: DriverMetrics, r: TierRequirements): boolean {
 }
 
 /**
+ * Este nível tem alguma meta configurada?
+ *
+ * ─── PORQUE ISTO EXISTE ────────────────────────────────────────────────────
+ *
+ * O `meets` responde "as metas DEFINIDAS estão cumpridas?", e para um nível
+ * sem metas nenhumas a resposta honesta é "sim" — não há nada por cumprir.
+ * Isso está certo para o `meets` e o teste unitário dele afirma-o.
+ *
+ * O erro era o `earnedTier` tomar essa resposta como "este nível está ganho".
+ * Um nível sem metas não é um nível GRATUITO: é um nível POR CONFIGURAR. Como
+ * tudo "nasce a zero de propósito", no dia do deploy todos os motoristas subiam
+ * direto ao nível 5 — o contrário exato do que a decisão pretendia. E como o
+ * administrador configura os níveis um de cada vez, bastava deixar o 5 por
+ * configurar para toda a gente continuar lá.
+ *
+ * O `requireValidDocuments` NÃO conta como meta. É um travão — impede a subida
+ * de quem tem documentos expirados — e não algo que se cumpra para subir. Um
+ * nível só com esse travão continua por configurar.
+ */
+export function hasGoals(r: TierRequirements): boolean {
+  return r.minSeasonRevenue > 0
+      || r.minInvested > 0
+      || r.minBalance > 0
+      || r.minWeeks > 0;
+}
+
+/**
  * O nível mais alto cujas metas estão cumpridas.
  *
  * Percorre de cima para baixo e pára no primeiro que passa — não exige que os
@@ -131,6 +158,8 @@ export function earnedTier(m: DriverMetrics, reqs: TierRequirements[]): Tier {
   const ordenados = [...reqs].sort((a, b) => tierIndex(b.tier) - tierIndex(a.tier));
   for (const r of ordenados) {
     if (tierIndex(r.tier) === 1) continue;
+    // Por configurar não é ganho. Ver `hasGoals`.
+    if (!hasGoals(r)) continue;
     if (meets(m, r)) return r.tier;
   }
   return 'TIER_1';
@@ -170,6 +199,23 @@ export interface Progress {
   };
   /** 0 a 1: a meta menos cumprida, que é a que trava a subida. */
   ratio: number;
+}
+
+/**
+ * O próximo nível que se pode de facto alcançar acima de `atual`.
+ *
+ * Não é simplesmente o seguinte: um nível por configurar mostraria uma barra
+ * cheia — `progressTo` devolve 1 quando não há metas — e o motorista veria
+ * "nada em falta" num nível onde nunca vai subir. Salta os que não têm metas e
+ * devolve o primeiro que tem; se nenhum acima tiver, é como estar no topo.
+ */
+export function nextReachable<T extends TierRequirements>(
+  atual: Tier,
+  configs: T[],
+): T | undefined {
+  return [...configs]
+    .filter((c) => tierIndex(c.tier) > tierIndex(atual) && hasGoals(c))
+    .sort((a, b) => tierIndex(a.tier) - tierIndex(b.tier))[0];
 }
 
 /** Quanto falta a um motorista para chegar a um nível. */

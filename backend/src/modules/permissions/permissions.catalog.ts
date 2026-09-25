@@ -81,11 +81,24 @@ export const PADRAO_DO_PAPEL: Record<string, Partial<Record<Area, Access>>> = {
     ]),
   ) as Partial<Record<Area, Access>>,
 
-  // Lia motoristas, documentos, financeiro, investimentos e níveis; só mexia
-  // no suporte.
+  // Lia motoristas, documentos, FECHOS, financeiro, investimentos e níveis;
+  // só mexia no suporte.
+  //
+  // Os FECHOS faltavam neste inventário, e o engano esteve invisível enquanto
+  // o `requireArea` não impunha nada — ver area.middleware. Mal a guarda passou
+  // a funcionar, o suporte levou 403 em /settlements e /earnings (que estão os
+  // dois atrás da área SETTLEMENTS), e o `support-role.integration.test.ts`,
+  // que existia antes das permissões, ficou vermelho.
+  //
+  // O suporte precisa de os ver: a pergunta mais comum num ticket é "porque é
+  // que o meu fecho deu este valor". Sem isto, reencaminha tudo para a
+  // administração. Só VER — criar e confirmar continua a ser recusado pelos
+  // serviços, e os testes "não cria um fecho" e "não confirma um lançamento"
+  // continuam a prová-lo.
   SUPPORT: {
     DRIVERS: 'VIEW',
     DOCUMENTS: 'VIEW',
+    SETTLEMENTS: 'VIEW',
     FINANCIAL: 'VIEW',
     INVESTMENTS: 'VIEW',
     RANKS: 'VIEW',
@@ -114,8 +127,9 @@ export const PERFIS: { id: string; nome: string; descricao: string; acessos: Par
     id: 'suporte',
     nome: 'Suporte',
     descricao: 'Responde a tickets e consulta o que precisa para responder.',
+    // Igual ao padrão do papel — ver a nota em PADRAO_DO_PAPEL.SUPPORT.
     acessos: {
-      DRIVERS: 'VIEW', DOCUMENTS: 'VIEW', FINANCIAL: 'VIEW',
+      DRIVERS: 'VIEW', DOCUMENTS: 'VIEW', SETTLEMENTS: 'VIEW', FINANCIAL: 'VIEW',
       INVESTMENTS: 'VIEW', RANKS: 'VIEW', SUPPORT: 'MANAGE',
     },
   },
