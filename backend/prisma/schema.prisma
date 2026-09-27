@@ -153,6 +153,7 @@ model User {
   vehicleAssignments VehicleAssignment[]
   balanceAdjustments BalanceAdjustment[] @relation("adjustmentsReceived")
   adjustmentsMade    BalanceAdjustment[] @relation("adjustmentsMade")
+  adjustmentsEdited  BalanceAdjustment[] @relation("adjustmentsEdited")
   settlements        WeeklySettlement[]  @relation("settlementsReceived")
   settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
@@ -417,10 +418,19 @@ model BalanceAdjustment {
   reason    String
   userId    String         @map("user_id")
   createdBy String?        @map("created_by") // admin que fez o ajuste (auditoria)
+
+  /// A data do movimento. É esta que ancora a linha no extrato e, portanto,
+  /// decide os saldos corridos. Pode ser corrigida pelo painel — daí o rasto
+  /// de edição abaixo.
   createdAt DateTime       @default(now()) @map("created_at")
 
-  user  User  @relation("adjustmentsReceived", fields: [userId], references: [id], onDelete: Cascade)
-  admin User? @relation("adjustmentsMade", fields: [createdBy], references: [id], onDelete: SetNull)
+  /// Nulos enquanto nunca foi editado, que é o que se quer dizer.
+  editedAt DateTime? @map("edited_at")
+  editedBy String?   @map("edited_by")
+
+  user   User  @relation("adjustmentsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  admin  User? @relation("adjustmentsMade", fields: [createdBy], references: [id], onDelete: SetNull)
+  editor User? @relation("adjustmentsEdited", fields: [editedBy], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@map("balance_adjustments")

@@ -77,6 +77,9 @@ export interface AdjustmentPublic {
   createdBy: string | null;
   createdByName: string | null;
   createdAt: Date;
+  /** Nulos enquanto nunca foi editado. Ver `updateAdjustment`. */
+  editedAt?: Date | null;
+  editedByName?: string | null;
 }
 
 export class BalanceService {
@@ -168,7 +171,10 @@ export class BalanceService {
       const rows = await prisma.balanceAdjustment.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
-        include: { admin: { select: { name: true } } },
+        include: {
+          admin: { select: { name: true } },
+          editor: { select: { name: true } },
+        },
       });
 
       return rows.map((r) => ({
@@ -180,9 +186,109 @@ export class BalanceService {
         createdBy: r.createdBy,
         createdByName: r.admin?.name ?? null,
         createdAt: r.createdAt,
+        editedAt: r.editedAt,
+        editedByName: r.editor?.name ?? null,
       }));
     } catch (err) {
       logger.error('Erro ao listar ajustes de saldo', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Corrigir a DATA e o MOTIVO de um ajuste. Nunca o valor nem o tipo.
+   *
+   * ─── PORQUE É QUE O VALOR NÃO SE EDITA ────────────────────────────────────
+   *
+   * Porque mudar um valor muda o saldo, e ficaria sem rasto: o extrato passava
+   * a mostrar outro número e não haveria nada a dizer que ali esteve outro.
+   * Um valor errado corrige-se com um ajuste contrário, que é como se corrige
+   * dinheiro em qualquer lado — fica a linha errada, fica a correção, e a
+   * soma fica certa.
+   *
+   * A data é diferente: não entra em soma nenhuma. A view `driver_balances`
+   * não tem filtro temporal, por isso mudar a data não mexe um cêntimo no
+   * saldo. Só muda a ORDEM do extrato — e portanto os saldos corridos de cada
+   * linha, que é exatamente o que se quer arranjar quando um saldo de abertura
+   * foi lançado depois dos primeiros fechos.
+   */
+  async updateAdjustment(
+    actor: Actor,
+    adjustmentId: string,
+    input: { createdAt?: Date; reason?: string },
+  ): Promise<AdjustmentPublic> {
+    if (!canManageBalance(actor.role)) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const atual = await prisma.balanceAdjustment.findUnique({
+      where: { id: adjustmentId },
+      select: { id: true, createdAt: true, reason: true, userId: true },
+    });
+    if (!atual) {
+      throw new AppError('Ajuste não encontrado.', 404, 'ADJUSTMENT_NOT_FOUND');
+    }
+
+    if (input.createdAt) {
+      // Uma data no futuro põe o movimento no fim do extrato para sempre, e o
+      // saldo corrido das linhas seguintes deixa de fazer sentido até esse dia
+      // chegar. Uma margem de um dia cobre quem está noutro fuso.
+      const limite = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      if (input.createdAt > limite) {
+        throw new AppError('A data não pode ser no futuro.', 400, 'DATE_IN_FUTURE');
+      }
+      // Antes de 2020 é quase de certeza um ano mal escrito. O sistema não
+      // existia, e uma data assim manda o movimento para o princípio de tudo.
+      if (input.createdAt < new Date('2020-01-01')) {
+        throw new AppError('A data parece errada — anterior a 2020.', 400, 'DATE_TOO_OLD');
+      }
+    }
+
+    const mudouData = !!input.createdAt
+      && input.createdAt.getTime() !== atual.createdAt.getTime();
+    const novoMotivo = input.reason?.trim();
+    const mudouMotivo = novoMotivo !== undefined && novoMotivo !== atual.reason;
+
+    if (!mudouData && !mudouMotivo) {
+      throw new AppError('Nada foi alterado.', 400, 'NOTHING_TO_UPDATE');
+    }
+
+    try {
+      const atualizado = await prisma.balanceAdjustment.update({
+        where: { id: adjustmentId },
+        data: {
+          ...(mudouData ? { createdAt: input.createdAt } : {}),
+          ...(mudouMotivo ? { reason: novoMotivo } : {}),
+          // O rasto grava-se em qualquer alteração, não só na data.
+          editedAt: new Date(),
+          editedBy: actor.id,
+        },
+        include: {
+          admin: { select: { name: true } },
+          editor: { select: { name: true } },
+        },
+      });
+
+      logger.info(
+        `[balance] ${actor.id} editou o ajuste ${adjustmentId} do utilizador ${atual.userId}`
+        + (mudouData ? ` · data ${atual.createdAt.toISOString()} → ${input.createdAt!.toISOString()}` : '')
+        + (mudouMotivo ? ` · motivo "${atual.reason}" → "${novoMotivo}"` : ''),
+      );
+
+      return {
+        id: atualizado.id,
+        amount: Number(atualizado.amount),
+        type: atualizado.type as AdjustmentType,
+        reason: atualizado.reason,
+        userId: atualizado.userId,
+        createdBy: atualizado.createdBy,
+        createdByName: atualizado.admin?.name ?? null,
+        createdAt: atualizado.createdAt,
+        editedAt: atualizado.editedAt,
+        editedByName: atualizado.editor?.name ?? null,
+      };
+    } catch (err) {
+      logger.error('Erro ao editar ajuste de saldo', err);
       throw err;
     }
   }
