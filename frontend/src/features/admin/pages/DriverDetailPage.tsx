@@ -29,7 +29,7 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
 import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
-import { DriverLedgerCard } from '@/app/components/admin/driver-ledger';
+import { DriverLedgerCard } from '@/app/components/admin/driver-ledger-card';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
 import {
