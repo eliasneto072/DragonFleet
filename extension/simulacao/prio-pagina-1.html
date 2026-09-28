@@ -8,22 +8,23 @@
 <title>Simulação · Prio, página 1 de 2</title>
 <link rel="stylesheet" href="estilo.css">
 </head>
-<body>
-<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Prio.</div>
-<main>
-  <h1>Transações Frota <small class="pag">página 1 de 2</small></h1>
-  <p class="sub">Imita a tabela de <em>Transações de Cartões › Prio Frota</em>, com as mesmas colunas e o mesmo formato de células.</p>
-
-  <div class="filtro">
-    <label>INÍCIO <input id="inicio" value="21/09/2026" readonly></label>
-    <label>FIM <input id="fim" value="27/09/2026" readonly></label>
-    <button type="button">Pesquisar</button>
-  </div>
-
-  <p class="contagem">1 a 3 de 6 registos</p>
-
-  <div class="caixa">
-    <table>
+<body class="p-prio">
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet, com a disposição de <em>Transações de Cartões › Prio Frota</em>. Dados inventados. A disposição imita a do portal para a demonstração; não é o portal, e não tem nada dele além da forma da tabela.</div>
+<div class="p-app">
+  <aside class="p-menu">
+    <div class="p-logo">combustível · simulação</div>
+    <ul><li class="p-item"><span class="p-bola"></span>Home<i></i></li><li class="p-item"><span class="p-bola"></span>Gestão de Conta<i>▾</i></li><li class="p-item"><span class="p-bola"></span>Cartão Prio Frota<i>▾</i></li><li class="p-item"><span class="p-bola"></span>Cartão Prio Electric<i>▾</i></li><li class="p-item on"><span class="p-bola"></span>Transações de Cartões<i>▴</i></li><li class="p-sub on">Prio Frota</li><li class="p-sub">Prio Electric</li><li class="p-item"><span class="p-bola"></span>Portagens<i>▾</i></li><li class="p-item"><span class="p-bola"></span>Conta Corrente<i></i></li></ul>
+  </aside>
+  <div class="p-centro">
+    <header class="p-topo"><span class="p-user"><span class="p-avatar"></span>FROTA DEMO</span></header>
+    <main class="p-main">
+      <div class="p-cabeca">
+        <div><small>Transações</small><h1>Transações Frota</h1><a>Ver dados Gasóleo Profissional</a></div>
+        <span class="p-export">Exportar <b>⋯</b></span>
+      </div>
+      <p class="p-contagem">1 a 3 de 6 registos</p>
+      <div class="p-tabela">
+        <table>
       <thead>
         <tr>
           <th>Posto</th><th>Rede</th><th>Data</th><th>Cartão</th><th>Estado</th><th>Litros</th>
@@ -58,12 +59,26 @@
         </tr>
       </tbody>
     </table>
+      </div>
+      <nav class="paginas p-pag" aria-label="Páginas"><span class="off">‹</span> <b>1</b> <a href="prio-pagina-2.html">2</a> <a href="prio-pagina-2.html">›</a></nav>
+      <div class="p-total">TOTAL <span>(21/09/2026 a 27/09/2026)</span> <b>412.57 €</b></div>
+      <p class="p-aviso">Os valores apresentados podem estar sujeitos a arredondamentos.</p>
+    </main>
   </div>
-
-  <nav class="paginas" aria-label="Páginas"><span class="off">‹ Anterior</span> <b>1</b> <a href="prio-pagina-2.html">2</a> <a href="prio-pagina-2.html">Seguinte ›</a></nav>
-  <div class="total">TOTAL <span>(21/09/2026 a 27/09/2026)</span> <b>412.57 €</b></div>
-
-  <p class="nota">As MESMAS seis transações da página <a href="prio.html">prio.html</a>, repartidas por duas páginas, como a Prio faz quando a pesquisa tem mais linhas do que cabem numa. O TOTAL do rodapé é o da pesquisa inteira. Envie a página 1, depois a 2: no fim estão as seis, uma vez cada. Se já tinha enviado a prio.html, as duas dizem "0 novos · 3 já lá estavam".</p>
-</main>
+  <aside class="p-pesquisa">
+    <div class="p-pesq-cabeca">Pesquisa <span>⇥</span></div>
+    <div class="p-dois"><label>INÍCIO<input value="21/09/2026" readonly></label><label>FIM<input value="27/09/2026" readonly></label></div>
+    <label>ESTADO DO CARTÃO<span class="p-sel">Todos ▾</span></label>
+    <label>NÚMERO DE CARTÃO<span class="p-sel p-vazio">Pesquisar cartões ▾</span></label>
+    <label>GRUPO DE CARTÃO<span class="p-sel p-vazio">Selecione um grupo ▾</span></label>
+    <label class="p-check">GASÓLEO PROFISSIONAL<span class="p-caixa"></span></label>
+    <label>FATURAS<span class="p-sel p-vazio">Pesquisar faturas</span></label>
+    <label class="p-check">A AGUARDAR FATURA<span class="p-caixa"></span></label>
+    <label>PAÍS<span class="p-sel">Todos ▾</span></label>
+    <label>POSTOS DE ABASTECIMENTO<span class="p-sel p-vazio">Selecione um posto ▾</span></label>
+    <div class="p-botoes"><span class="p-limpar">LIMPAR</span><span class="p-pesquisar">PESQUISAR</span></div>
+  </aside>
+</div>
+<details class="nota-sim"><summary>O que esta página testa</summary><p>As MESMAS seis transações da <a href="prio.html">prio.html</a>, em duas páginas. O TOTAL do rodapé é o da pesquisa inteira. Envie a 1, depois a 2. Se já tinha enviado a prio.html, cada uma diz "0 novos · 3 já lá estavam".</p></details>
 </body>
 </html>

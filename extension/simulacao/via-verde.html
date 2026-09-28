@@ -5,25 +5,32 @@
 <!-- É isto que diz à extensão que página é esta. O portal real reconhece-se
      pelo endereço; um ficheiro local não tem endereço que o identifique. -->
 <meta name="dragonfleet-simulacao" content="VIA_VERDE">
-<title>Simulação · extratos e movimentos (formato Via Verde)</title>
+<title>Simulação · Via Verde, extratos e movimentos</title>
 <link rel="stylesheet" href="estilo.css">
 </head>
-<body>
-<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Via Verde.</div>
-<main>
-  <h1>Extratos e Movimentos</h1>
-  <p class="sub">Imita o separador <em>Movimentos</em>, com as mesmas colunas e o mesmo formato de células.</p>
-
-  <div class="filtro">
-    <label>De: <input id="de" value="14/09/2026" readonly></label>
-    <label>Até: <input id="ate" value="20/09/2026" readonly></label>
-    <button type="button">Filtrar</button>
-  </div>
-
-  <p class="contagem">9 movimentos filtrados</p>
-
-  <div class="caixa">
-    <table>
+<body class="p-vv">
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet, com a disposição de <em>Extratos e Movimentos › Movimentos</em> da Via Verde. Dados inventados. A disposição imita a do portal para a demonstração; não é o portal, e não tem nada dele além da forma da tabela.</div>
+<div class="v-app">
+  <main class="v-main">
+    <h1>Extratos e Movimentos</h1>
+    <div class="v-abas"><span class="v-aba">Extratos</span><span class="v-aba on">Movimentos</span></div>
+    <div class="v-cartao">
+      <div class="v-filtro">
+        <div class="v-filtro-cabeca">Filtrar por: <span>⌃</span></div>
+        <div class="v-campos">
+          <label>Contrato(s)<span class="v-sel">Todos ▾</span></label>
+          <label class="v-largo">Matrícula, Identificador ou Conta Mobilidade<span class="v-sel v-vazio"></span></label>
+          <label>Serviços<span class="v-sel">Todos ▾</span></label>
+          <label>Estado<span class="v-sel">Todos ▾</span></label>
+          <label>Meio de Pagamento<span class="v-sel">Todos ▾</span></label>
+          <label>De:<span class="v-sel v-data"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2"/></svg> 14/09/2026</span></label>
+          <label>Até:<span class="v-sel v-data"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2"/></svg> 20/09/2026</span></label>
+        </div>
+        <div class="v-botoes"><span class="v-limpar">Limpar</span><span class="v-filtrar">Filtrar</span></div>
+      </div>
+      <div class="v-linha-contagem"><span>9 movimentos filtrados</span><span class="v-export"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Exportar ▾</span></div>
+      <div class="v-tabela">
+        <table>
       <thead>
         <tr>
           <th>Identificador<br>/ Conta Mobilidade</th><th>Matrícula</th><th>Descrição</th>
@@ -105,10 +112,11 @@
         </tr>
       </tbody>
     </table>
-  </div>
-
-  <p class="nota">O que esta página exercita: a data dentro da descrição, com entrada e saída; o serviço e o estado como ícones sem texto visível; uma mensalidade, um estacionamento e um cancelado; dois carros que trocaram de mãos a meio da semana, na quinta 17 ao meio-dia; e uma matrícula que não existe no DragonFleet.</p>
-  <p class="nota"><strong>Por confirmar no portal real:</strong> como são desenhados os ícones do estado. Aqui o relógio e o visto têm um título, e o cancelado é um ✕ escrito. Se no portal forem diferentes, a extensão pode não reconhecer os cancelados — e eles aparecem na pré-visualização como descontáveis.</p>
-</main>
+      </div>
+    </div>
+  </main>
+  <aside class="v-menu"><ul><li>A Minha Via Verde</li><li>Centro de Mensagens</li><li>Veículos e Identificadores</li><li>Contratos e Meios de Pagamento</li><li class=on>Extratos e Movimentos</li><li>Serviços Digitais</li><li>Faturação</li><li>Os Meus Pedidos</li><li>Saldo Via Verde</li></ul></aside>
+</div>
+<details class="nota-sim"><summary>O que esta página testa</summary><p>A data dentro da descrição, com entrada e saída; o serviço e o estado como ícones sem texto visível; uma mensalidade, um estacionamento e um cancelado; dois carros que trocaram de mãos na quinta 17 ao meio-dia; e uma matrícula que não existe no DragonFleet.</p><p><strong>Por confirmar no portal real:</strong> como são desenhados os ícones do estado. Aqui o relógio e o visto têm um título, e o cancelado é um ✕ escrito.</p></details>
 </body>
 </html>

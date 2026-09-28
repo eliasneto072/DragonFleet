@@ -1,33 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-PT">
 <head>
 <meta charset="utf-8">
+<!-- É isto que diz à extensão que página é esta. O portal real reconhece-se
+     pelo endereço; um ficheiro local não tem endereço que o identifique. -->
 <meta name="dragonfleet-simulacao" content="BOLT">
-<title>Simulação · earnings per driver (formato Bolt)</title>
+<title>Simulação · Bolt, earnings per driver</title>
 <link rel="stylesheet" href="estilo.css">
 </head>
-<body>
-<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Bolt.</div>
-<main>
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px">
-    <h1>Earnings per driver</h1>
-    <span class="periodo-pill">21 Sep - 27 Sep</span>
+<body class="p-bolt">
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet, com a disposição de <em>Finances › Earnings per driver</em> da Bolt. Dados inventados. A disposição imita a do portal para a demonstração; não é o portal, e não tem nada dele além da forma da tabela.</div>
+<header class="b-topo">
+  <div class="b-marca">Fleet <small>simulação</small></div>
+  <nav class="b-nav"><span>Operations ▾</span><span class="on">Finances ▾</span><span>Supply ▾</span><span>Settings ▾</span></nav>
+  <div class="b-direita"><span class="b-bola b-mais">+</span><span class="b-bola"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span class="b-bola">!</span><span class="b-nome">Frota Demo</span></div>
+</header>
+<main class="b-main">
+  <div class="b-cabeca">
+    <div>
+      <h1>Earnings per driver</h1>
+      <p>Your company's and drivers' income for the chosen period. Values are recorded when each fare is finalised.</p>
+    </div>
+    <div class="b-datas"><span class="b-sel">Custom ▾</span><span class="b-sel b-periodo">21 Sep - 27 Sep <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2"/></svg></span></div>
   </div>
-  <p class="sub">Imita <em>Finances › Earnings per driver</em>, com as mesmas colunas. O período é escolhido à mão, de segunda a domingo — não "Last 7 days".</p>
-
-  <div class="kpis">
-    <div class="kpi"><small>Gross earnings (total)</small><b>921.30€</b></div>
-    <div class="kpi"><small>Net earnings</small><b>701.85€</b></div>
+  <div class="b-kpis">
+    <div class="b-kpi"><small>Gross earnings (total)</small><b>921.3<span>€</span></b></div><div class="b-kpi"><small>Total fees</small><b>216.45<span>€</span></b></div><div class="b-kpi"><small>Net earnings</small><b>701.85<span>€</span></b></div><div class="b-kpi"><small>Fleet campaign earnings</small><b>0<span>€</span></b></div><div class="b-kpi"><small>Fleet expense reimbursements</small><b>0<span>€</span></b></div>
+    <div class="b-kpi"><small>Gross earnings per hour</small><b>11.41<span>€/h</span></b></div><div class="b-kpi"><small>Net earnings per hour</small><b>8.69<span>€/h</span></b></div>
   </div>
-
-  <div class="caixa">
+  <div class="b-barra">
+    <span class="b-busca">Search by name, email, phone, or code <b>▾</b></span><span class="b-engr">⚙</span>
+    <span class="b-down">Download ▾</span>
+  </div>
+  <div class="b-tabela">
     <table>
       <thead>
         <tr>
-          <th>Driver</th><th>Gross earnings (total)</th><th>Gross earnings (in-app payment)</th>
-          <th>Gross earnings (cash payment)</th><th>Collected cash</th><th>Rider tips</th>
-          <th>Campaign earnings</th><th>Expense reimbursements</th><th>Cancellation fees</th>
-          <th>Net earnings</th><th>Gross earnings per hour</th>
+          <th class="b-ord">Driver</th><th class="b-i">Gross earnings (total)</th><th class="b-i">Gross earnings (in-app payment)</th>
+          <th class="b-i">Gross earnings (cash payment)</th><th class="b-i">Collected cash</th><th class="b-i">Rider tips</th>
+          <th class="b-i">Campaign earnings</th><th class="b-i">Expense reimbursements</th><th class="b-i">Cancellation fees</th>
+          <th class="b-i">Net earnings</th><th class="b-i">Gross earnings per hour</th>
         </tr>
       </thead>
       <tbody>
@@ -37,8 +48,7 @@
       </tbody>
     </table>
   </div>
-
-  <p class="nota">O que esta página exercita: os números à inglesa ("160.1 €" é cento e sessenta, não mil seiscentos e um); o valor líquido como o que conta; e um nome com acento que o DragonFleet escreve sem ele.</p>
 </main>
+<details class="nota-sim"><summary>O que esta página testa</summary><p>Os números à inglesa ("160.1 €" é cento e sessenta, não mil seiscentos e um); o valor líquido como o que conta; e um nome com acento ("Cárla") que o DragonFleet escreve sem ele. O período é escolhido à mão, de segunda a domingo, e não "Last 7 days".</p></details>
 </body>
 </html>

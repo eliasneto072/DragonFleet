@@ -2,34 +2,46 @@
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
+<!-- É isto que diz à extensão que página é esta. O portal real reconhece-se
+     pelo endereço; um ficheiro local não tem endereço que o identifique. -->
 <meta name="dragonfleet-simulacao" content="UBER">
 <title>Simulação · Uber, período errado</title>
 <link rel="stylesheet" href="estilo.css">
 </head>
-<body>
-<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Uber.</div>
-<main>
-  <p class="sub">Imita a página <em>Rendimentos</em> do portal de fornecedores, com as mesmas colunas.</p>
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+<body class="p-uber">
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet, com a disposição da página <em>Rendimentos</em> da Uber. Dados inventados. A disposição imita a do portal para a demonstração; não é o portal, e não tem nada dele além da forma da tabela.</div>
+<header class="u-topo">
+  <div class="u-empresa">FROTA DEMO, LDA.</div>
+  <nav class="u-nav">
+    <div><span>Página inicial</span><span>Documentos</span><span>Motoristas</span><span>Veículos</span><span>Desempenho</span><span>Relatórios</span><span class="on">Rendimentos</span></div>
+    <div><span>Mapa em tempo real</span><span>Promoções</span><span>Empresas</span><span>Página bancária</span><span>Faturas</span><span>Caixa de entrada</span></div>
+  </nav>
+  <div class="u-conta"><span class="u-avatar"></span>▾</div>
+</header>
+<main class="u-main">
+  <div class="u-cabeca">
     <h1>Rendimentos</h1>
-    <span class="periodo-pill">22/09/2026 04:01 AM - 28/09/2026 07:42 PM</span>
+    <div class="u-acoes">
+      <span class="u-pill">22/09/2026 04:01 AM - 28/09/2026 07:42 PM <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2"/></svg></span>
+      <span class="u-link"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Fazer o download do relatório</span>
+    </div>
   </div>
-
-  <div class="duas">
-    <aside class="saldo">
-      Saldo final
-      <p class="grande">1718,32 €</p>
-      <div><span>Saldo inicial</span><span>0,00 €</span></div>
-      <div><span>Rendimentos totais</span><span>1695,75 €</span></div>
-      <div><span>Reembolsos e despesas</span><span>20,80 €</span></div>
-      <div><span>Ajustes de períodos anteriores</span><span>1,77 €</span></div>
-      <div><span>Pagamento</span><span>0,00 €</span></div>
-      <div><strong>Saldo final</strong><strong>1718,32 €</strong></div>
+  <div class="u-grelha">
+    <aside class="u-saldo">
+      <div class="u-saldo-topo">Saldo final<b>1718,32 €</b></div>
+      <div class="u-l"><span>Saldo inicial</span><span>0,00 €</span></div>
+      <div class="u-l"><span>Rendimentos totais</span><span>1695,75 € <i class="u-ch">⌄</i></span></div>
+      <div class="u-l"><span>Reembolsos e despesas</span><span>20,80 € <i class="u-ch">⌄</i></span></div>
+      <div class="u-l"><span>Ajustes de períodos anteriores</span><span>1,77 €</span></div>
+      <div class="u-l"><span>Pagamento</span><span>0,00 €</span></div>
+      <div class="u-l u-fim"><span>Saldo final</span><span>1718,32 €</span></div>
     </aside>
-
     <section>
-      <h2 style="font-size:18px;margin:0 0 10px">Rendimentos do motorista</h2>
-      <div class="caixa">
+      <div class="u-sec-cabeca">
+        <h2>Rendimentos do motorista</h2>
+        <span class="u-busca"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Nome do motorista</span>
+      </div>
+      <div class="u-tabela">
         <table>
           <thead>
             <tr>
@@ -38,17 +50,20 @@
             </tr>
           </thead>
           <tbody>
-            <tr><td><span class="avatar"></span>Ana Sofia Martins</td><td class="num">612,40 €</td><td class="num">8,50 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">620,90 €</td><td>›</td></tr>
-            <tr><td><span class="avatar"></span>Bruno Sousa</td><td class="num">455,10 €</td><td class="num">0,00 €</td><td class="num">1,77 €</td><td class="num">0,00 €</td><td class="num">456,87 €</td><td>›</td></tr>
-            <tr><td><span class="avatar"></span>Carla Pinto</td><td class="num">530,25 €</td><td class="num">12,30 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">542,55 €</td><td>›</td></tr>
-            <tr><td><span class="avatar"></span>Rui Tavares</td><td class="num">98,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">98,00 €</td><td>›</td></tr>
+            <tr><td><span class="avatar"></span>Ana Sofia Martins</td><td class="num">612,40 €</td><td class="num">8,50 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">620,90 €</td><td><span class="u-seta">›</span></td></tr>
+            <tr><td><span class="avatar"></span>Bruno Sousa</td><td class="num">455,10 €</td><td class="num">0,00 €</td><td class="num">1,77 €</td><td class="num">0,00 €</td><td class="num">456,87 €</td><td><span class="u-seta">›</span></td></tr>
+            <tr><td><span class="avatar"></span>Carla Pinto</td><td class="num">530,25 €</td><td class="num">12,30 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">542,55 €</td><td><span class="u-seta">›</span></td></tr>
+            <tr><td><span class="avatar"></span>Rui Tavares</td><td class="num">98,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">98,00 €</td><td><span class="u-seta">›</span></td></tr>
           </tbody>
         </table>
       </div>
+      <div class="u-rodape">
+        <span class="u-linhas">10 linhas ▾</span>
+        <span class="u-pags"><span>« Primeira página</span><span>‹ Anterior</span><span>Seguinte ›</span></span>
+      </div>
     </section>
   </div>
-
-  <p class="nota">A mesma tabela da <a href="uber.html">uber.html</a>, mas com o intervalo de terça 22/09 a segunda 28/09 — seis dias de uma semana de fecho e um da seguinte. A extensão lê a tabela, e o DragonFleet recusa: nenhuma das duas semanas pode ficar com este total. A mensagem diz que semana escolher no portal. Nada é gravado.</p>
 </main>
+<details class="nota-sim"><summary>O que esta página testa</summary><p>A mesma tabela da <a href="uber.html">uber.html</a>, com o intervalo de terça 22/09 a segunda 28/09: seis dias de uma semana de fecho e um da seguinte. O DragonFleet recusa, diz que semana escolher, e não grava nada.</p></details>
 </body>
 </html>
