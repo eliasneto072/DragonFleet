@@ -224,7 +224,7 @@ function SupportPanel() {
               <div className="mt-2 space-y-2">
                 {/* A mensagem original, para não ser preciso abrir o Suporte só
                     para saber ao que se está a responder. */}
-                <p className="rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
+                <p className="whitespace-pre-line rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
                   {t.message}
                 </p>
                 <Textarea

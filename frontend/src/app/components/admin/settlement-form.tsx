@@ -44,6 +44,7 @@ import {
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import { platformLabel } from '@/shared/lib/platform-labels';
+import { SettlementExpenses } from './settlement-expenses';
 
 // ── Datas ─────────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,36 @@ function MoneyField({
       </div>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
+  );
+}
+
+// ── Pista com "Usar" ──────────────────────────────────────────────────────────
+//
+// O que chegou da plataforma nesta semana — recolhido pela extensão ou
+// comunicado pelo motorista — ao lado do campo, com um botão para o copiar.
+// Não preenche sozinho, pela mesma razão das despesas: quem fecha a semana
+// tem de olhar para o número antes de ele entrar.
+
+function ReportedHint({
+  total, value, onUse,
+}: { total: number; value: string; onUse: (v: string) => void }) {
+  if (total <= 0) return null;
+  const emUso = Math.abs((value.trim() === '' ? 0 : Number(value)) - total) < 0.005;
+  return (
+    <span className="flex flex-wrap items-center gap-x-2">
+      <span>Registado nesta semana: {formatCurrency(total)}</span>
+      {emUso ? (
+        <span className="text-muted-foreground">· em uso</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onUse(String(total))}
+          className="font-medium text-primary underline-offset-2 hover:underline"
+        >
+          Usar
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -551,20 +582,24 @@ export function SettlementForm({
               <MoneyField
                 id="uber" label="Uber"
                 value={amounts.uberAmount} onChange={setAmount('uberAmount')}
-                hint={
-                  reportedFor('UBER') > 0
-                    ? `O motorista comunicou ${formatCurrency(reportedFor('UBER'))}`
-                    : undefined
-                }
+                hint={reportedFor('UBER') > 0 && (
+                  <ReportedHint
+                    total={reportedFor('UBER')}
+                    value={amounts.uberAmount}
+                    onUse={setAmount('uberAmount')}
+                  />
+                )}
               />
               <MoneyField
                 id="bolt" label="Bolt"
                 value={amounts.boltAmount} onChange={setAmount('boltAmount')}
-                hint={
-                  reportedFor('BOLT') > 0
-                    ? `O motorista comunicou ${formatCurrency(reportedFor('BOLT'))}`
-                    : undefined
-                }
+                hint={reportedFor('BOLT') > 0 && (
+                  <ReportedHint
+                    total={reportedFor('BOLT')}
+                    value={amounts.boltAmount}
+                    onUse={setAmount('boltAmount')}
+                  />
+                )}
               />
               <MoneyField
                 id="otherRevenue" label="Outras receitas"
@@ -575,7 +610,7 @@ export function SettlementForm({
                 <div className="flex gap-2 rounded-lg border border-border bg-secondary p-3 sm:col-span-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <p className="text-xs text-muted-foreground">
-                    Nesta semana o motorista comunicou{' '}
+                    Registado nesta semana:{' '}
                     {reported.map((r, i) => (
                       <span key={r.platform}>
                         {i > 0 && ', '}
@@ -585,7 +620,8 @@ export function SettlementForm({
                         em {platformLabel(r.platform)}
                       </span>
                     ))}
-                    . Serve de conferência — esses lançamentos não creditam nada.
+                    , entre o que a extensão recolheu dos portais e o que o motorista comunicou.
+                    Nada disto credita sozinho: só o fecho registado.
                   </p>
                 </div>
               )}
@@ -600,6 +636,16 @@ export function SettlementForm({
               </p>
             </CardHeader>
             <CardContent className="grid gap-4 p-4 pt-0 sm:grid-cols-2 sm:p-6 sm:pt-0">
+              {/* O que a extensão trouxe da Prio e da Via Verde. Não preenche
+                  nada sozinho: oferece, e o administrador carrega em Usar. */}
+              <SettlementExpenses
+                userId={userId}
+                weekStart={weekStart}
+                fuelValue={amounts.fuelAmount}
+                tollsValue={amounts.tollsAmount}
+                onUseFuel={setAmount('fuelAmount')}
+                onUseTolls={setAmount('tollsAmount')}
+              />
               <MoneyField
                 id="tolls" label="Via Verde"
                 value={amounts.tollsAmount} onChange={setAmount('tollsAmount')}

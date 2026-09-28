@@ -30,6 +30,10 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
     receiptKey: true,
     paidToIban: true,
     paidToHolder: true,
+    bankAccountId: true,
+    // O nome que o motorista deu à conta escolhida. Da relação e não de uma
+    // cópia: se ele lhe mudar o nome, o histórico acompanha — é a mesma conta.
+    bankAccount: { select: { label: true } },
     companyId: true,
     companyOther: true,
     companySetById: true,
@@ -41,11 +45,21 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
   } as const;
 
   /** Achata a relação: as telas recebem companyName e não um objeto aninhado. */
-  private toPublic<T extends { amount: { toNumber(): number }; company?: { name: string } | null }>(
-    row: T,
-  ) {
-    const { company, ...rest } = row as T & { company?: { name: string } | null };
-    return { ...rest, amount: row.amount.toNumber(), companyName: company?.name ?? null };
+  private toPublic<T extends {
+    amount: { toNumber(): number };
+    company?: { name: string } | null;
+    bankAccount?: { label: string | null } | null;
+  }>(row: T) {
+    const { company, bankAccount, ...rest } = row as T & {
+      company?: { name: string } | null;
+      bankAccount?: { label: string | null } | null;
+    };
+    return {
+      ...rest,
+      amount: row.amount.toNumber(),
+      companyName: company?.name ?? null,
+      bankAccountLabel: bankAccount?.label ?? null,
+    };
   }
 
   /**
@@ -194,6 +208,7 @@ export class WithdrawalsRepository implements IWithdrawalRepository {
           userId: data.userId,
           receiptUrl: data.receiptUrl,
           receiptKey: data.receiptKey,
+          bankAccountId: data.bankAccountId ?? null,
           // status omitido — Prisma aplica PENDING por default
         },
         select: this.publicSelect,

@@ -92,7 +92,7 @@ function TicketDetailModal({ ticket, onClose }: { ticket: ApiTicket; onClose: ()
           {/* Mensagem original */}
           <div className="bg-muted rounded-lg p-3">
             <p className="text-xs font-medium text-muted-foreground mb-1">Mensagem original</p>
-            <p className="text-sm">{ticket.message}</p>
+            <p className="whitespace-pre-line text-sm">{ticket.message}</p>
           </div>
 
           {/* Respostas */}
@@ -105,7 +105,7 @@ function TicketDetailModal({ ticket, onClose }: { ticket: ApiTicket; onClose: ()
                   <p className={`text-xs font-medium mb-1 ${isMe ? 'text-white/80' : 'text-muted-foreground'}`}>
                     {isAdmin && !isMe ? '🛡️ Suporte DragonFleet' : r.author.name}
                   </p>
-                  <p className="text-sm">{r.message}</p>
+                  <p className="whitespace-pre-line text-sm">{r.message}</p>
                   <p className={`text-xs mt-1 ${isMe ? 'text-white/60' : 'text-muted-foreground'}`}>
                     {new Date(r.createdAt).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                   </p>

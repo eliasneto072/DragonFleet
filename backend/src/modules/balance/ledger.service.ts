@@ -16,6 +16,12 @@
 //   + ajustes de crédito
 //   − ajustes de débito
 //   − retiradas APPROVED e PAID
+//   − aplicações em investimentos        (principal, na data da aplicação)
+//   + resgates de investimentos          (payout, na data do resgate)
+//
+// Os ganhos diários dos investimentos NÃO são linhas do extrato: acumulam na
+// aplicação e só entram no saldo no resgate, dentro do payout. É o que a view
+// faz, e o extrato tem de explicar o número da view, não outro.
 //
 // As retiradas PENDING NÃO entram. Decisão do cliente, e é a certa: uma
 // pendente ainda pode ser recusada, e mostrar no extrato uma linha que pode
@@ -65,7 +71,7 @@ import { cents } from '../../shared/utils/money';
 // uma funcionalidade; se isso se fizer, faz-se de proposito e num pacote so.
 type Actor = { id: string; role?: UserRole };
 
-export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL';
+export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'REDEMPTION';
 
 export interface LedgerEntry {
   id: string;
@@ -82,6 +88,8 @@ export interface LedgerEntry {
   balance: number;
   /** Só nos fechos, para a tela poder ligar à linha correspondente. */
   settlementId?: string;
+  /** Só nas aplicações e resgates, para a tela abrir a aplicação. */
+  investmentId?: string;
 }
 
 export interface LedgerReconciliation {
@@ -132,7 +140,7 @@ export const ledgerService = {
       // discordar.
       const resumo = await balanceService.getSummary(actor, userId);
 
-      const [fechos, ajustes, retiradas] = await Promise.all([
+      const [fechos, ajustes, retiradas, aplicacoes] = await Promise.all([
         prisma.weeklySettlement.findMany({
           where: { userId, status: SettlementStatus.REGISTERED },
           select: { id: true, weekStart: true, weekEnd: true, netToDriver: true },
@@ -147,6 +155,14 @@ export const ledgerService = {
           // duas contas precisamente para isso não passar em silêncio.
           where: { userId, status: { in: ['APPROVED', 'PAID'] } },
           select: { id: true, amount: true, requestedAt: true, status: true },
+        }),
+        prisma.investment.findMany({
+          where: { userId },
+          select: {
+            id: true, principal: true, createdAt: true, status: true,
+            payout: true, closedAt: true, closeReason: true,
+            plan: { select: { name: true } },
+          },
         }),
       ]);
 
@@ -179,6 +195,42 @@ export const ledgerService = {
           detail: null,
           amount: -cents(Number(r.amount)),
         })),
+
+        // Aplicar: sai o principal, no instante da aplicação.
+        ...aplicacoes.map((i) => ({
+          id: `i:${i.id}`,
+          kind: 'INVESTMENT' as const,
+          date: i.createdAt.toISOString(),
+          label: 'Aplicação em investimento',
+          detail: i.plan.name,
+          amount: -cents(Number(i.principal)),
+          investmentId: i.id,
+        })),
+
+        // Resgatar: entra o payout, no instante do resgate. Só as fechadas.
+        //
+        // A condição tem de ser a MESMA da view, que soma o payout de toda a
+        // aplicação CLOSED. A versão anterior exigia também `closedAt`, porque
+        // precisava dele para datar a linha — e assim uma aplicação fechada sem
+        // `closedAt` tinha o dinheiro contado na view e AUSENTE do extrato.
+        //
+        // Hoje esse estado é impossível pela aplicação: o único sítio que fecha
+        // grava `payout` e `closedAt` juntos. Mas é impossível por convenção e
+        // não por garantia — não há restrição na base, e um acerto manual abria
+        // a divergência. O extrato existe para explicar o número da view; não
+        // pode nunca deixar cair um valor que ela conta. Sem `closedAt`, a linha
+        // assenta na data da aplicação, e o dinheiro fica contado.
+        ...aplicacoes
+          .filter((i) => i.status === 'CLOSED' && i.payout != null)
+          .map((i) => ({
+            id: `r:${i.id}`,
+            kind: 'REDEMPTION' as const,
+            date: (i.closedAt ?? i.createdAt).toISOString(),
+            label: i.closeReason === 'MATURED' ? 'Investimento terminado' : 'Resgate de investimento',
+            detail: i.plan.name,
+            amount: cents(Number(i.payout)),
+            investmentId: i.id,
+          })),
       ];
 
       // Ordem cronológica. O desempate por `id` não é decorativo: sem ele, dois

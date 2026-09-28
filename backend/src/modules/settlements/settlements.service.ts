@@ -25,6 +25,7 @@ import type {
   SettlementPublic,
 } from './settlements.types';
 import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
+import { gatherWeek, type WeekCandidate } from './settlement-drafts';
 
 /** Limite superior para o intervalo de um fecho, como guarda contra enganos. */
 const MAX_WEEK_DAYS = 31;
@@ -220,15 +221,31 @@ export class SettlementsService {
     const rate = await this.resolveRate(input);
     const taxRate = await this.resolveTaxRate(input);
 
-    return settlementsRepository.create({
-      userId: input.userId,
-      vehicleId: input.vehicleId ?? null,
-      weekStart,
-      weekEnd,
-      status: SettlementStatus.DRAFT,
-      createdById: actor.id,
-      ...this.buildData(input, rate, taxRate),
-    });
+    try {
+      // `await` e não só `return`: sem ele a rejeição passava por fora do catch.
+      return await settlementsRepository.create({
+        userId: input.userId,
+        vehicleId: input.vehicleId ?? null,
+        weekStart,
+        weekEnd,
+        status: SettlementStatus.DRAFT,
+        createdById: actor.id,
+        ...this.buildData(input, rate, taxRate),
+      });
+    } catch (err: any) {
+      // O índice único (motorista, início da semana) ainda conta os fechos
+      // CANCELADOS, embora a verificação de sobreposição os ignore. Sem isto,
+      // criar um fecho numa semana cujo anterior foi cancelado dava 500.
+      if (err?.code === 'P2002') {
+        throw new AppError(
+          'Já existe um fecho cancelado deste motorista a começar nesta segunda-feira. ' +
+          'Apague-o na lista de fechos e volte a criar este.',
+          409,
+          'WEEK_TAKEN_BY_CANCELLED',
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -382,6 +399,143 @@ export class SettlementsService {
     }
 
     await settlementsRepository.delete(id);
+  }
+
+  // ── Rascunhos da semana, a partir do que a extensão importou ────────────────
+  //
+  // Decisões do cliente: um botão (e não a cada envio), só para quem tem dados
+  // na semana, e quem já tem fecho nessa semana é saltado — nada do que foi
+  // escrito à mão se perde.
+  //
+  // NUNCA regista. Cria rascunhos, que alguém revê e regista um a um. Dinheiro
+  // na conta do motorista continua a exigir uma pessoa.
+
+  private parseSegunda(weekStart: string): { inicio: Date; fim: Date } {
+    const inicio = parseDay(weekStart, 'weekStart');
+    if (inicio.getUTCDay() !== 1) {
+      throw new AppError(
+        'A semana tem de começar a uma segunda-feira: é assim que os portais e os fechos a contam.',
+        400,
+        'WEEK_START_NOT_MONDAY',
+      );
+    }
+    return { inicio, fim: new Date(inicio.getTime() + 6 * 86_400_000) };
+  }
+
+  private descreverOrigem(c: WeekCandidate, quem: string): string {
+    const partes: string[] = [];
+    const a = c.amounts;
+    if (c.counts.uber) partes.push(`Uber ${eur(a.uberAmount)}`);
+    if (c.counts.bolt) partes.push(`Bolt ${eur(a.boltAmount)}`);
+    if (c.counts.other) partes.push(`outras ${eur(a.otherRevenue)}`);
+    if (c.counts.fuel) partes.push(`Prio ${eur(a.fuelAmount)} (${c.counts.fuel} mov.)`);
+    if (c.counts.tolls) partes.push(`Via Verde ${eur(a.tollsAmount)} (${c.counts.tolls} mov.)`);
+    const hoje = new Date().toISOString().slice(0, 10).split('-').reverse().join('/');
+    const troca = c.otherPlates.length
+      ? ` Trocou de carro na semana (também ${c.otherPlates.join(', ')}); a viatura é a de ${c.vehiclePlate}.`
+      : '';
+    return `Rascunho gerado dos portais em ${hoje} por ${quem}: ${partes.join(', ')}.${troca}`;
+  }
+
+  /** O que o botão vai fazer, sem fazer nada. */
+  async draftsPreview(actor: Actor, weekStart: string) {
+    this.ensureManager(actor);
+    const { inicio, fim } = this.parseSegunda(weekStart);
+
+    const [candidatos, rate, taxRate] = await Promise.all([
+      gatherWeek(inicio),
+      this.resolveRate({}),
+      this.resolveTaxRate({}),
+    ]);
+
+    const toCreate = candidatos
+      .filter((c) => !c.existing)
+      .map((c) => ({
+        userId: c.userId,
+        userName: c.userName,
+        vehicleId: c.vehicleId,
+        vehiclePlate: c.vehiclePlate,
+        otherPlates: c.otherPlates,
+        ...c.amounts,
+        counts: c.counts,
+        netToDriver: computeTotals({ ...c.amounts, commissionRate: rate, taxRate }).netToDriver,
+      }));
+
+    const skipped = candidatos
+      .filter((c) => c.existing)
+      .map((c) => ({
+        userId: c.userId,
+        userName: c.userName,
+        settlementId: c.existing!.id,
+        status: c.existing!.status,
+      }));
+
+    return {
+      weekStart: inicio.toISOString().slice(0, 10),
+      weekEnd: fim.toISOString().slice(0, 10),
+      commissionRate: rate,
+      taxRate,
+      toCreate,
+      skipped,
+    };
+  }
+
+  /**
+   * Cria os rascunhos. Correr duas vezes não duplica: quem já tem fecho é
+   * saltado, e o índice único (motorista, início da semana) apanha o caso de
+   * dois cliques em simultâneo.
+   */
+  async generateDrafts(actor: Actor, weekStart: string) {
+    this.ensureManager(actor);
+    const { inicio, fim } = this.parseSegunda(weekStart);
+
+    const [candidatos, rate, taxRate, autor] = await Promise.all([
+      gatherWeek(inicio),
+      this.resolveRate({}),
+      this.resolveTaxRate({}),
+      prisma.user.findUnique({ where: { id: actor.id }, select: { name: true } }),
+    ]);
+
+    const created: SettlementPublic[] = [];
+    const skipped: { userId: string; userName: string; settlementId: string | null; status: string }[] = [];
+
+    for (const c of candidatos) {
+      if (c.existing) {
+        skipped.push({ userId: c.userId, userName: c.userName, settlementId: c.existing.id, status: c.existing.status });
+        continue;
+      }
+      try {
+        // A mesma verificação do formulário, de novo aqui: entre a leitura e a
+        // escrita pode ter sido criado um fecho à mão.
+        await this.validateWeek(c.userId, inicio, fim);
+        const s = await settlementsRepository.create({
+          userId: c.userId,
+          vehicleId: c.vehicleId,
+          weekStart: inicio,
+          weekEnd: fim,
+          status: SettlementStatus.DRAFT,
+          createdById: actor.id,
+          ...this.buildData(
+            { ...c.amounts, internalNotes: this.descreverOrigem(c, autor?.name ?? actor.id) },
+            rate,
+            taxRate,
+          ),
+        });
+        created.push(s);
+      } catch (err: any) {
+        const ocupado = err?.code === 'P2002'
+          || (err instanceof AppError && err.code === 'OVERLAPPING_SETTLEMENT');
+        if (!ocupado) throw err;
+        skipped.push({ userId: c.userId, userName: c.userName, settlementId: null, status: 'EXISTS' });
+      }
+    }
+
+    logger.info(
+      `[settlement] ${actor.id} gerou ${created.length} rascunhos da semana ${inicio.toISOString().slice(0, 10)}` +
+      (skipped.length ? `; ${skipped.length} saltados por já terem fecho` : ''),
+    );
+
+    return { weekStart: inicio.toISOString().slice(0, 10), created, skipped };
   }
 
   /**

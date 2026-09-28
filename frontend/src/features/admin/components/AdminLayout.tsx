@@ -1,79 +1,118 @@
 // src/features/admin/components/AdminLayout.tsx
+//
+// A moldura do painel de administração: o menu e quem vê o quê.
+//
+// ─── PORQUE É QUE O MENU TEM GRUPOS ─────────────────────────────────────────
+//
+// Eram dezasseis entradas numa lista seguida. Ninguém lê dezasseis entradas —
+// procura-se a que interessa com os olhos, todas as vezes, e a que se usa
+// menos fica escondida no meio das outras. Agrupadas por assunto, encontra-se
+// primeiro o grupo e só depois a entrada, e o menu deixa de ser uma lista para
+// passar a ser um mapa.
+//
+// Quatro grupos, quatro ou cinco entradas cada. A ordem dentro do grupo é a do
+// trabalho e não a alfabética: primeiro o que se abre todos os dias.
+//
+// ─── E PORQUE É QUE É CONSTRUÍDO A PARTIR DAS PERMISSÕES ────────────────────
+//
+// Antes havia duas listas escritas no código a dizer o que cada papel via.
+// Agora cada entrada declara a ÁREA a que pertence, e o menu mostra as que a
+// pessoa pode abrir. Acrescentar uma tela nova passa a ser declarar a área
+// dela — e não lembrar-se de ir a duas listas noutro ficheiro.
+//
+// Um grupo onde não sobra nenhuma entrada desaparece inteiro, título incluído.
 
 import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck,
+  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import type { Area } from '@/shared/lib/areas';
 
-/**
- * As entradas que só a Administração vê.
- *
- * Não é decoração: o backend já recusa estas quatro a um MANAGER, e sem o
- * filtro ele veria as telas, escreveria os valores e levaria 403 no Guardar.
- * Mostrar um caminho que acaba em erro é pior do que não o mostrar.
- *
- * A segurança continua a ser do servidor. Isto é honestidade da interface.
- */
-const SO_ADMIN = new Set([
-  '/app/admin/settings',        // comissão, imposto, limites
-  '/app/admin/green-receipts',  // sociedades
-  '/app/admin/team',            // papéis
-]);
+interface Entrada {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  area: Area;
+}
 
-/**
- * O que o SUPPORT vê. É uma lista do que ENTRA, e não do que sai.
- *
- * Escrita ao contrário das outras de propósito: acrescentar uma tela nova ao
- * painel não deve dar acesso ao suporte por omissão. Com uma lista de exclusão,
- * cada tela nova ficaria visível para ele até alguém se lembrar de a excluir —
- * e ninguém se lembra.
- *
- * Ele lê estas quatro e só escreve na última.
- */
-const VE_SUPORTE = new Set([
-  '/app/admin/drivers',
-  '/app/admin/documents',
-  '/app/admin/financial',
-  '/app/admin/support',
-]);
-
-const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/app/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard'     },
-  { to: '/app/admin/drivers',       icon: Users,           label: 'Motoristas'    },
-  { to: '/app/admin/documents',     icon: FileText,        label: 'Documentos'    },
-  // Rótulo curto de propósito: a barra lateral tem cerca de 200px úteis e
-  // "Registo semanal de faturação" quebraria em três linhas. O nome completo
-  // é o título da página.
-  { to: '/app/admin/settlements',   icon: ReceiptText,     label: 'Faturação'     },
-  { to: '/app/admin/financial',     icon: DollarSign,      label: 'Financeiro'    },
-  // Logo a seguir ao Financeiro porque é a mesma tarefa vista de outro ângulo:
-  // ali decide-se e classifica-se, aqui consulta-se o que ficou registado.
-  { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes' },
-  { to: '/app/admin/fleet',         icon: Car,             label: 'Frotas'        },
-  { to: '/app/admin/analytics',     icon: TrendingUp,      label: 'Análises'      },
-  { to: '/app/admin/notifications', icon: Bell,            label: 'Notificações'  },
-  { to: '/app/admin/support',       icon: MessageCircle,   label: 'Suporte'       },
-  { to: '/app/admin/settings',      icon: Settings,        label: 'Configurações' },
-  // No fim e não junto aos Motoristas: mexer em papéis é raro e não pertence
-  // ao trabalho do dia.
-  { to: '/app/admin/team',          icon: ShieldCheck,     label: 'Equipa'        },
+const MENU: { titulo: string; entradas: Entrada[] }[] = [
+  {
+    titulo: 'Operação',
+    entradas: [
+      { to: '/app/admin/dashboard',  icon: LayoutDashboard, label: 'Dashboard',   area: 'DASHBOARD' },
+      { to: '/app/admin/drivers',    icon: Users,           label: 'Motoristas',  area: 'DRIVERS' },
+      { to: '/app/admin/documents',  icon: FileText,        label: 'Documentos',  area: 'DOCUMENTS' },
+      { to: '/app/admin/fleet',      icon: Car,             label: 'Frotas',      area: 'FLEET' },
+      { to: '/app/admin/ranks',      icon: Trophy,          label: 'Níveis',      area: 'RANKS' },
+    ],
+  },
+  {
+    titulo: 'Dinheiro',
+    entradas: [
+      // Rótulo curto de propósito: a barra lateral tem cerca de 200px úteis e
+      // "Registo semanal de faturação" quebraria em três linhas. O nome
+      // completo é o título da página.
+      { to: '/app/admin/settlements',    icon: ReceiptText,     label: 'Faturação',      area: 'SETTLEMENTS' },
+      { to: '/app/admin/financial',      icon: DollarSign,      label: 'Financeiro',     area: 'FINANCIAL' },
+      { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes', area: 'GREEN_RECEIPTS' },
+      { to: '/app/admin/analytics',      icon: TrendingUp,      label: 'Análises',       area: 'ANALYTICS' },
+    ],
+  },
+  {
+    titulo: 'Investimento',
+    entradas: [
+      { to: '/app/admin/investments', icon: PiggyBank, label: 'Investimentos', area: 'INVESTMENTS' },
+      { to: '/app/admin/investors',   icon: Landmark,  label: 'Investidores',  area: 'INVESTORS' },
+      { to: '/app/admin/projects',    icon: Handshake, label: 'Projetos',      area: 'PROJECTS' },
+    ],
+  },
+  {
+    titulo: 'Sistema',
+    entradas: [
+      { to: '/app/admin/notifications', icon: Bell,          label: 'Notificações',  area: 'NOTIFICATIONS' },
+      { to: '/app/admin/support',       icon: MessageCircle, label: 'Suporte',       area: 'SUPPORT' },
+      { to: '/app/admin/settings',      icon: Settings,      label: 'Configurações', area: 'SETTINGS' },
+      { to: '/app/admin/team',          icon: ShieldCheck,   label: 'Equipa',        area: 'TEAM' },
+    ],
+  },
 ];
 
+/**
+ * A primeira tela a que esta pessoa tem acesso.
+ *
+ * Serve para quem não pode abrir o Dashboard: mandá-lo para lá dava um salto
+ * imediato para outro sítio, ou um ecrã em branco. Percorre o menu pela ordem
+ * em que está e devolve a primeira entrada que ele pode abrir.
+ */
+export function primeiraTelaPermitida(can: (a: Area) => boolean): string | null {
+  for (const grupo of MENU) {
+    for (const e of grupo.entradas) if (can(e.area)) return e.to;
+  }
+  return null;
+}
+
 export function AdminLayout() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
 
   if (user?.role === 'DRIVER') {
     return <Navigate to="/app/driver" replace />;
   }
 
-  const navItems =
-    user?.role === 'ADMIN'   ? NAV_ITEMS
-  : user?.role === 'SUPPORT' ? NAV_ITEMS.filter((i) => VE_SUPORTE.has(i.to))
-  :                            NAV_ITEMS.filter((i) => !SO_ADMIN.has(i.to));
+  const navGroups = MENU
+    .map((g) => ({
+      title: g.titulo,
+      items: g.entradas
+        .filter((e) => can(e.area))
+        .map(({ to, icon, label }): NavItem => ({ to, icon, label })),
+    }))
+    // Um grupo sem entradas desaparece com o título: um cabeçalho "Dinheiro"
+    // sozinho, sem nada por baixo, é pior do que não existir.
+    .filter((g) => g.items.length > 0);
 
   return (
     // Sem "Ver como Motorista": o botão levava o administrador ao painel do
@@ -84,7 +123,7 @@ export function AdminLayout() {
     // O caminho inverso, em DriverLayout, fica: um administrador que chegue ao
     // painel do motorista precisa de voltar.
     <AppShell
-      navItems={navItems}
+      navGroups={navGroups}
       area="Painel Administrativo"
     />
   );

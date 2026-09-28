@@ -208,7 +208,11 @@ class IngestService {
     }
 
     if (!sameWeek(periodStart, periodEnd)) {
-      const sugestao = suggestWeek(periodEnd);
+      // A semana que tem MAIS dias do período, e não a do último dia. Com o
+      // "Last 7 days" da Bolt (terça a segunda), a do último dia era a semana
+      // em curso, ainda por acabar: a sugestão mandava escolher a errada.
+      const meio = new Date(periodStart.getTime() + Math.floor((periodEnd.getTime() - periodStart.getTime()) / 86_400_000 / 2) * 86_400_000);
+      const sugestao = suggestWeek(meio);
       throw new AppError(
         `O período de ${input.periodStart} a ${input.periodEnd} atravessa duas semanas de ` +
         `fecho e não pode ser atribuído a nenhuma delas. No portal, escolha ` +

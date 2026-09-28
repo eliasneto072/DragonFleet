@@ -13,6 +13,7 @@
 // See docs/EMAIL_SETUP.md for the domain-verification steps.
 
 import { Resend } from 'resend';
+import { escaparHtml, mensagemParaHtml } from './notification-html';
 
 const API_KEY = process.env.RESEND_API_KEY ?? '';
 const FROM = process.env.MAIL_FROM ?? 'DragonFleet <onboarding@resend.dev>';
@@ -162,11 +163,14 @@ export const emailService = {
   },
 
   async sendNotification(to: string, driverName: string, title: string, message: string) {
+    // O título vai escapado e o corpo passa pelo formatador partilhado: um
+    // aviso escrito em parágrafos tem de chegar em parágrafos, e um "<" no
+    // meio de uma frase não pode comer o resto do email.
     return dispatch(to, `🔔 ${title} — DragonFleet`, shell(
       driverName,
       `<div style="background:#fff;border-left:4px solid #108865;padding:16px;border-radius:4px;margin:16px 0">
-         <h3 style="margin:0 0 8px;color:#1D1D1D">${title}</h3>
-         <p style="margin:0;color:#444;line-height:1.6">${message}</p>
+         <h3 style="margin:0 0 10px;color:#1D1D1D">${escaparHtml(title)}</h3>
+         ${mensagemParaHtml(message)}
        </div>`,
       { href: `${APP_URL}/app/driver/notifications`, label: 'Ver Notificações' },
     ));

@@ -16,6 +16,12 @@ export const userIdParamSchema = z.object({
 export const createWithdrawalSchema = z.object({
   body: z.object({
     amount: z.coerce.number().positive(),
+    /**
+     * Para qual das contas bancárias. Opcional: sem ela usa-se a principal,
+     * que é o que acontece a quem só tem uma — e a quem pediu antes de este
+     * campo existir.
+     */
+    bankAccountId: z.string().min(1).optional(),
   }),
 });
 

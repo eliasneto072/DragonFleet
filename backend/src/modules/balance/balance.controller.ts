@@ -4,7 +4,9 @@ import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
 import { balanceService } from './balance.service';
 import { ledgerService } from './ledger.service';
-import { balanceUserParamSchema, createAdjustmentSchema } from './balance.schemas';
+import {
+  balanceUserParamSchema, createAdjustmentSchema, updateAdjustmentSchema,
+} from './balance.schemas';
 
 function getActor(req: AuthRequest) {
   if (!req.user?.id) {
@@ -50,6 +52,17 @@ export class BalanceController {
       parsed.body,
     );
     return ok(res, { adjustment }, 201);
+  };
+
+  /** PATCH /balance/adjustments/:adjustmentId — corrigir a data ou o motivo. */
+  updateAdjustment = async (req: AuthRequest, res: Response) => {
+    const parsed = updateAdjustmentSchema.parse({ params: req.params, body: req.body });
+    const adjustment = await balanceService.updateAdjustment(
+      getActor(req),
+      parsed.params.adjustmentId,
+      parsed.body,
+    );
+    return ok(res, { adjustment });
   };
 }
 

@@ -7,6 +7,13 @@ export function balanceRouter(): Router {
 
   router.use(authMiddleware);
 
+  // ANTES do '/:userId'. O Express testa as rotas pela ordem em que foram
+  // declaradas, e '/adjustments/xxx' não colide com um GET '/:userId' (métodos
+  // diferentes) — mas basta alguém acrescentar amanhã um GET aqui para
+  // 'adjustments' passar a ser lido como o id de um utilizador. Declarar o
+  // caminho literal primeiro fecha essa porta antes de ela existir.
+  router.patch('/adjustments/:adjustmentId', balanceController.updateAdjustment);
+
   // Dono ou admin/manager (validado no service)
   router.get('/:userId', balanceController.getSummary);
   router.get('/:userId/adjustments', balanceController.listAdjustments);

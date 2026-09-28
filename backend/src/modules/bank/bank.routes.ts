@@ -10,7 +10,8 @@ export function bankRouter(): Router {
 
   router.use(authMiddleware);
 
-  // Antes de '/:userId': "me" e "pending" seriam lidos como identificadores.
+  // Antes de '/:userId': "me", "pending" e "accounts" seriam lidos como
+  // identificadores de utilizador.
   router.get('/me', bankController.getMine);
   router.get('/pending', bankController.listPending);
 
@@ -18,8 +19,14 @@ export function bankRouter(): Router {
   // prova, que é o que a aprovação existe para impedir.
   router.post('/', upload.single('proof'), bankController.submit);
 
+  // As operações sobre UMA conta. Por id e não por utilizador: com três contas
+  // por pessoa, "a conta do motorista X" deixou de identificar alguma coisa.
+  router.patch('/accounts/:id/review', bankController.review);
+  router.patch('/accounts/:id/primary', bankController.setPrimary);
+  router.patch('/accounts/:id', bankController.rename);
+  router.delete('/accounts/:id', bankController.archive);
+
   router.get('/:userId', bankController.getByUser);
-  router.patch('/:userId/review', bankController.review);
 
   return router;
 }

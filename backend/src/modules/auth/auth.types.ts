@@ -8,5 +8,6 @@ export type LoginInput = {
 export type LoginResult = {
   token: string;
   refreshToken: string;
-  user: IUserPublic;
+  /** Com as permissões por área, para o painel saber já o que desenhar. */
+  user: IUserPublic & { permissions: Record<string, string> };
 };

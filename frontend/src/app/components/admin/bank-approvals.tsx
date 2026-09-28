@@ -91,9 +91,11 @@ export function BankApprovals() {
   const pageInfo = data?.page;
 
   const { mutate: review, isPending: reviewing } = useMutation({
-    mutationFn: ({ userId, approve, reason }: {
-      userId: string; approve: boolean; reason?: string;
-    }) => bankService.review(userId, { approve, reason }),
+    // Por conta e não por motorista: com até três contas por pessoa, "a conta
+    // do motorista X" deixou de identificar uma linha.
+    mutationFn: ({ accountId, approve, reason }: {
+      accountId: string; approve: boolean; reason?: string;
+    }) => bankService.review(accountId, { approve, reason }),
     onSuccess: (_r, vars) => {
       // Além da fila: aprovar destranca os pedidos de retirada do motorista.
       invalidateAfterBank(queryClient);
@@ -169,10 +171,19 @@ export function BankApprovals() {
           ) : (
             <ul className="space-y-5">
               {accounts.map((a) => (
-                <li key={a.userId} className="border-b border-border pb-5 last:border-0 last:pb-0">
+                <li key={a.id} className="border-b border-border pb-5 last:border-0 last:pb-0">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{a.user.name}</p>
+                      <p className="truncate text-sm font-medium">
+                        {a.user.name}
+                        {/* Qual das contas dele. Sem isto, três pedidos do
+                            mesmo motorista eram três linhas iguais. */}
+                        {a.label && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            {a.label}
+                          </span>
+                        )}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">{a.user.email}</p>
                     </div>
                     <p className="shrink-0 text-xs text-muted-foreground">
@@ -230,7 +241,7 @@ export function BankApprovals() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       size="sm" className="h-8" disabled={reviewing}
-                      onClick={() => review({ userId: a.userId, approve: true })}
+                      onClick={() => review({ accountId: a.id, approve: true })}
                     >
                       <CheckCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                       Aprovar
@@ -298,7 +309,7 @@ export function BankApprovals() {
               disabled={reviewing || !rejectReason.trim()}
               className="w-full sm:w-auto"
               onClick={() => review({
-                userId: rejectTarget!.userId,
+                accountId: rejectTarget!.id,
                 approve: false,
                 reason: rejectReason.trim(),
               })}

@@ -266,6 +266,9 @@ describe('ingest — quem pode enviar', () => {
     // A mensagem tem de dizer QUAL o intervalo a escolher, senão quem a lê
     // fica a saber que errou sem saber como acertar.
     expect(res.body.message).toContain('2026-08-17');
+    // E a semana sugerida é a que tem seis dos sete dias, não a do último dia,
+    // que ainda estava por acabar.
+    expect(res.body.message).toContain('escolha 2026-08-10 a 2026-08-16');
     expect(await testDb.earning.count()).toBe(0);
   });
 

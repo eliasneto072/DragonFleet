@@ -32,6 +32,8 @@ import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 import { ThemeToggle } from '@/app/components/ui/theme-toggle';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { documentsService } from '@/features/driver/services/documents.service';
+import { ranksService } from '@/shared/services/ranks.service';
+import { RankBadge } from '@/app/components/ranks/rank-visuals';
 import { queryKeys } from '@/shared/lib/query-keys';
 
 export interface NavItem {
@@ -134,6 +136,27 @@ export function AppShell({
     navigate('/login', { replace: true });
   }
 
+  // O nível do motorista, para o emblema ao lado do nome. Só para motoristas:
+  // o portal de administração usa o mesmo shell, e ali o nível não existe.
+  //
+  // A chave é a mesma do cartão no painel, portanto isto não acrescenta um
+  // pedido — quem abre o painel já o trouxe, e o React Query reaproveita.
+  const ehMotorista = user?.role === 'DRIVER';
+  const rankQ = useQuery({
+    queryKey: queryKeys.ranks.me,
+    queryFn: () => ranksService.me(),
+    enabled: ehMotorista,
+  });
+  const rankConfigsQ = useQuery({
+    queryKey: queryKeys.ranks.configs,
+    queryFn: () => ranksService.configs(),
+    enabled: ehMotorista,
+    staleTime: 5 * 60 * 1000,
+  });
+  const meuNivel = rankConfigsQ.data?.configs.find(
+    (c) => c.tier === rankQ.data?.status.tier,
+  );
+
   const initials = user?.name
     ? user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
     : '–';
@@ -211,7 +234,11 @@ export function AppShell({
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+          {meuNivel ? (
+            <RankBadge config={meuNivel} size="sm" title={`O seu nível: ${meuNivel.label}`} />
+          ) : (
+            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+          )}
         </div>
         <ThemeToggle />
         <button

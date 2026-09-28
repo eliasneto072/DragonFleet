@@ -12,6 +12,7 @@ import {
   updateSettlementSchema,
   previewSettlementSchema,
   cancelSettlementSchema,
+  generateDraftsSchema,
 } from './settlements.schemas';
 
 function getActor(req: AuthRequest) {
@@ -43,6 +44,18 @@ export class SettlementsController {
     const parsed = createSettlementSchema.parse({ body: req.body });
     const settlement = await settlementsService.create(getActor(req), parsed.body);
     return ok(res, { settlement }, 201);
+  };
+
+  // POST /settlements/drafts/preview — quem teria rascunho, sem gravar
+  draftsPreview = async (req: AuthRequest, res: Response) => {
+    const parsed = generateDraftsSchema.parse({ body: req.body });
+    return ok(res, await settlementsService.draftsPreview(getActor(req), parsed.body.weekStart));
+  };
+
+  // POST /settlements/drafts — cria os rascunhos da semana
+  generateDrafts = async (req: AuthRequest, res: Response) => {
+    const parsed = generateDraftsSchema.parse({ body: req.body });
+    return ok(res, await settlementsService.generateDrafts(getActor(req), parsed.body.weekStart), 201);
   };
 
   // POST /settlements/preview — calcula sem gravar

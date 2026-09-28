@@ -27,6 +27,7 @@ import {
 import { usersService } from '@/features/admin/services/users.service';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import type { ApiUser, UserRole } from '@/shared/types/api';
+import { PermissionsDialog } from '@/app/components/admin/permissions-editor';
 
 const EQUIPA_KEY = ['users', 'equipa'] as const;
 
@@ -57,6 +58,7 @@ export function TeamManagement() {
 
   const [procura, setProcura] = useState('');
   const [porPromover, setPorPromover] = useState<{ alvo: ApiUser; papel: UserRole } | null>(null);
+  const [aVerAcessos, setAVerAcessos] = useState<string | null>(null);
 
   // Duas consultas em vez de uma filtrada no browser: a lista de motoristas
   // tem milhares de registos e a de escritório tem meia dúzia. Trazer tudo
@@ -155,8 +157,18 @@ export function TeamManagement() {
                     <p className="text-sm text-muted-foreground truncate">{u.email}</p>
                   </div>
 
-                  <div className="flex gap-2 shrink-0">
-                    {/* Nada de botões na própria linha. O servidor recusa na
+                  <div className="flex gap-2 shrink-0 flex-wrap">
+                    {/* Os acessos vêm PRIMEIRO: é o que se mexe todas as
+                        semanas. Mudar o papel de alguém é raro e passou a ser
+                        quase só uma etiqueta — quem decide o que a pessoa vê
+                        são as permissões. */}
+                    <Button variant="outline" size="sm"
+                      onClick={() => setAVerAcessos(u.id)}>
+                      <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                      Acessos
+                    </Button>
+
+                    {/* Nada de botões de papel na própria linha. O servidor recusa na
                         mesma — CANNOT_CHANGE_OWN_ROLE — mas oferecer um botão
                         que só serve para dar erro é pior do que não o mostrar. */}
                     {/* Os outros dois papéis, sejam quais forem. Com três,
@@ -301,6 +313,10 @@ export function TeamManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {aVerAcessos && (
+        <PermissionsDialog userId={aVerAcessos} onClose={() => setAVerAcessos(null)} />
+      )}
     </div>
   );
 }

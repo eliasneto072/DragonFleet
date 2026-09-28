@@ -1,1 +1,7 @@
+/* Work Sans — a letra da frota, e a letra de interface dos dois portais. */
 @import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700;800&display=swap');
+
+/* Cormorant Garamond — só o portal do investidor a usa, nos números e nos
+   títulos. Vem de uma folha à parte para o site da frota não pagar o download
+   de uma letra que nunca mostra. */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');

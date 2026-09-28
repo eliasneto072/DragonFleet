@@ -7,7 +7,7 @@
 //   cada seção com barra de progresso enviados/exigidos
 
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -20,7 +20,7 @@ import {
 import {
   ArrowLeft, Loader2, AlertCircle, UserCheck, UserX, Ban, Mail, Wallet,
   Plus, Minus, TrendingUp, Clock, ArrowDownCircle,
-  CheckCircle, XCircle, Eye, CalendarClock, History, User, Car,
+  CheckCircle, XCircle, Eye, CalendarClock, User, Car,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usersService } from '@/features/admin/services/users.service';
@@ -29,6 +29,9 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
 import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
+import { FuelCards } from '@/app/components/admin/fuel-cards';
+import { useAuth } from '@/features/auth/context/AuthContext';
+import { DriverLedgerCard } from '@/app/components/admin/driver-ledger-card';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
 import {
@@ -98,6 +101,10 @@ function viewDocument(id: string) {
 
 export function DriverDetailPage() {
   const { id = '' } = useParams();
+  // O suporte abre esta ficha para responder a tickets, mas os cartões Prio não
+  // lhe dizem respeito — e o servidor recusa-lhos.
+  const { user: sessao } = useAuth();
+  const veCartoes = sessao?.role === 'ADMIN' || sessao?.role === 'MANAGER';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -423,43 +430,23 @@ export function DriverDetailPage() {
                   </div>
                 </div>
 
-                {/* Extrato de ajustes */}
-                <div>
-                  <p className="text-sm font-medium flex items-center gap-1 mb-3">
-                    <History className="h-4 w-4" />Histórico de ajustes
+                {/* O que está aplicado já saiu do disponível mas continua a
+                    ser dele. Sem esta linha, um saldo que desceu 1000 € de um
+                    dia para o outro parecia um erro. */}
+                {(balance.investedActive ?? 0) > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Tem ainda <span className="font-medium text-foreground">{eur(balance.investedActive)}</span> aplicados
+                    em investimentos (fora do saldo disponível) — ver em{' '}
+                    <Link to="/app/admin/investments" className="font-medium text-accent hover:underline">Investimentos</Link>.
                   </p>
-                  {adjustmentsQ.isLoading ? (
-                    <p className="text-sm text-muted-foreground">Carregando…</p>
-                  ) : adjustments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">
-                      Nenhum ajuste manual registado.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {adjustments.map((adj) => (
-                        <div key={adj.id} className="flex items-center justify-between border rounded-lg p-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${adj.type === 'CREDIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {adj.type === 'CREDIT' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {adj.reason || <span className="text-muted-foreground italic">Sem motivo</span>}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatDate(adj.createdAt)}
-                                {adj.createdByName ? ` · por ${adj.createdByName}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <p className={`font-semibold shrink-0 ml-2 ${adj.type === 'CREDIT' ? 'text-green-600' : 'text-destructive'}`}>
-                            {adj.type === 'CREDIT' ? '+' : '−'}{eur(adj.amount)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                )}
+
+                {/* Extrato completo.
+                    Era só a lista dos ajustes manuais, e os fechos — a maior
+                    parte do dinheiro — não apareciam aqui. Agora é o mesmo
+                    extrato que o motorista vê, com o saldo depois de cada
+                    movimento, que é o que permite verificar se bate certo. */}
+                <DriverLedgerCard userId={id} ajustes={adjustments} />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Não foi possível carregar o saldo.</p>
@@ -551,6 +538,8 @@ export function DriverDetailPage() {
             que carros esta pessoa conduziu, e quando. */}
 
         <DriverVehicleHistory userId={id} />
+
+        {veCartoes && <FuelCards userId={id} />}
 
           {/* Ações de estado no fim, e não no topo: são destrutivas, e nenhuma
               delas é a razão comum para abrir a ficha. */}

@@ -25,6 +25,17 @@ export interface IWithdrawal {
   paidToHolder?: string | null;
 
   /**
+   * Qual das contas bancárias o motorista escolheu ao pedir.
+   *
+   * Nula nas retiradas anteriores a haver mais do que uma conta. O nome vem
+   * junto para a tela do administrador poder dizer "Millennium" em vez de
+   * mostrar vinte e cinco dígitos — e para ele saber que foi uma ESCOLHA e
+   * não o IBAN por omissão.
+   */
+  bankAccountId?: string | null;
+  bankAccountLabel?: string | null;
+
+  /**
    * A quem foi emitido o recibo verde. Registado na aprovação.
    *
    * Quatro estados, e a diferença entre os dois últimos importa:

@@ -100,6 +100,548 @@ partilhado) e `SEED_ADMIN_PASSWORD` apagada do Render.
 
 ---
 
+## 2.1 Setembro de 2026 — trabalho feito sem o programador
+
+O cliente passou a fazer alterações com o Claude (Anthropic), diretamente nos
+ficheiros. Registo do que entrou e das decisões:
+
+**Saldo antes e depois (frontend apenas).** O detalhe da semana mostra "Tinha
+antes / Este fecho / Ficou com", e o painel ganhou "Movimentos da conta", um
+extrato clicável (fechos, ajustes, retiradas, investimentos). Vem do mesmo
+`GET /balance/:userId/ledger` da administração — o dono já podia lê-lo. As
+notificações de ajuste e de fecho abrem o movimento a que se referem
+(ligação pelo texto da mensagem; a tabela `notifications` não guarda ligação).
+
+**Investimentos.** O motorista aplica parte do saldo num plano e rende todos
+os dias. Decisões do cliente:
+
+- **Juros simples**: ganho do dia = principal × taxa ÷ 100 ÷ 365.
+- **Fixos**: taxa, prazo e penalização congelados na aplicação. Resgate
+  antecipado permitido com **penalização em % do valor aplicado**. No fim do
+  prazo o job fecha e devolve ao saldo.
+- **Flexíveis**: taxa mudada pelo admin com data (`investment_plan_rates`),
+  nunca para o passado. Resgate **a qualquer momento**.
+- Rende do dia da aplicação (inclusive) ao dia do resgate (exclusive), em
+  dias civis de **Lisboa**. Uma linha por dia em `investment_accruals`, com
+  única (aplicação, dia): correr o job duas vezes não paga duas vezes.
+- A view `driver_balances` passou a subtrair `invested` e somar
+  `investment_returns`; o passivo do painel soma o aplicado ativo e os ganhos.
+- Job às 00:15 de Lisboa e também no arranque; recupera dias em falta.
+- Só `ADMIN` cria/edita planos; `MANAGER` e `SUPPORT` veem; só `DRIVER`
+  aplica; o titular ou o `ADMIN` resgata.
+- Contas de **investidor** (subdomínio próprio) ficam para uma segunda fase.
+
+**Níveis (ranks).** Cinco níveis — Dragon Driver, Elite, Leader, Manager e
+Master — com nomes, cores, metas e vantagens editáveis no painel. Decisões:
+
+- **Temporadas de dois meses do calendário** (jan–fev, mar–abr, …). As metas de
+  faturação e de semanas contam dentro da temporada; o investido e o saldo são
+  do momento.
+- **Dentro da temporada o rank acompanha as metas nos dois sentidos**, em tempo
+  real. Atinge, sobe e ganha as vantagens; deixa de cumprir, desce e perde-as.
+- **No fim da temporada o rank alcançado fica garantido 30 dias**
+  (`floorTier`/`floorUntil`). A temporada nova começa do zero, e sem isto toda a
+  gente caía no dia 1. A proteção é só para baixo: quem sobe, sobe logo.
+- Metas a **zero não contam** — é assim que se desliga um critério. Nasce tudo a
+  zero de propósito: ninguém sobe por engano no dia do deploy.
+- `requireValidDocuments` trava a subida de quem tem documentos expirados.
+- Os planos de investimento podem exigir um **nível mínimo** (`minRank`); o
+  motorista vê o plano trancado, com o nível que lhe falta.
+- Recálculo às 00:45 (Lisboa) e também quando o motorista abre o portal, para a
+  subida se ver na hora.
+- **Os descontos ficam registados mas ainda NÃO são aplicados ao fecho semanal.**
+  Essa é a fase seguinte; até lá aplicam-se à mão ao registar o fecho.
+
+Testes: `ranks.math.test.ts` e `investments.math.test.ts` (unitários, corridos) e
+`investments.integration.test.ts` e `ranks.integration.test.ts` (integração,
+**escritos mas não corridos fora da CI** — o ambiente onde foram escritos não
+tinha npm).
+
+---
+
+## 2.2 Portal do investidor — invest.dragonfleet.pt
+
+Segundo site, MESMO projeto e MESMO deploy. `shared/config/portal.ts` lê o
+endereço por onde a aplicação foi aberta e escolhe o router e o tema. A
+alternativa — dois projetos — obrigava a corrigir tudo duas vezes.
+
+**Cloudflare Pages:** `invest.dragonfleet.pt` é um *custom domain* acrescentado
+ao MESMO projeto Pages. Não há projeto novo nem build novo.
+
+### O modelo do dinheiro
+
+Uma conta de investidor tem **dois bolsos**: `CAPITAL` (o que foi depositado) e
+`EARNINGS` (o que os juros somaram). Separados porque o rendimento pode ser
+levantado sem tocar no capital e porque o juro de cada dia conta sobre o capital
+— juros simples, a mesma regra dos investimentos dos motoristas.
+
+- Não há coluna de saldo. O saldo é a soma de `investor_movements`, feita na view
+  `investor_balances`. Mesmo princípio do `driver_balances`.
+- `amount` é **com sinal**: entradas positivas, saídas negativas.
+- A **taxa é uma série com datas** (`investor_rates`), não uma coluna. Baixar a
+  taxa hoje não reescreve os juros já pagos. Mudar a taxa de dias já pagos é
+  recusado (`RATE_IN_THE_PAST`) — para corrigir o passado usa-se um acerto, que
+  fica escrito no extrato com o motivo.
+- Juro diário às **00:20 (Lisboa)** e também sempre que alguém abre a conta.
+  Restrição única parcial `(conta, dia) WHERE kind='ACCRUAL'` impede pagar duas
+  vezes. Dias de capital zero avançam o marcador sem escrever linha nenhuma.
+- Um depósito com data retroativa **apaga e refaz** os juros desses dias, porque
+  o capital deles mudou.
+- Pedidos de resgate **PENDENTES reservam** o dinheiro (descontados do
+  disponível na view). Só viram movimento quando a administração marca como
+  pago. **Nada é transferido pelo site** — o botão regista que a transferência
+  já foi feita no banco.
+- Aviso prévio (`noticeDays`) só se aplica ao capital; o rendimento sai sempre
+  de imediato.
+
+### O isolamento
+
+`routes/routes.ts` monta `/auth` e `/investors` e **só depois** o
+`denyInvestor`. Tudo o que estiver abaixo dessa linha fica fechado a contas
+`INVESTOR` — incluindo rotas que ainda não existem. É uma **lista branca**: uma
+rota nova nasce protegida sem ninguém se lembrar de a proteger. O teste
+`investors.integration.test.ts` percorre catorze rotas da frota e exige 403 em
+todas.
+
+Os investidores também foram tirados das listas de utilizadores
+(`users.repository`): sem isso apareciam misturados com os motoristas.
+
+### Decisões tomadas
+
+- Contas criadas **só pela administração** — não há registo público no portal.
+- Depósitos **registados à mão** depois de confirmar a transferência no banco.
+  Sem Multibanco, sem cartão, sem pagamentos no site.
+- O portal é **sempre escuro** (o `ThemeProvider` força-o): em claro o ouro fica
+  amarelo-mostarda.
+- Marca própria: **DragonFleet Capital**, losango dourado, Cormorant Garamond
+  nos números. Deliberadamente diferente do site da frota.
+
+### Ainda por fazer
+
+- Contrato/documentos do investidor no portal (hoje não há documentos).
+- O investidor não pode mudar a palavra-passe sozinho.
+- Relatório anual de rendimentos para efeitos fiscais.
+
+Testes: `investors.math.test.ts` (24 unitários, corridos) e
+`investors.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
+## 2.3 Até três contas bancárias por motorista
+
+`bank_accounts` deixou de ter `user_id` único. Cada motorista pode ter até três
+contas ativas (`MAX_BANK_ACCOUNTS`), uma delas **principal**.
+
+- **Cada conta tem a SUA aprovação.** Aprovar uma não aprova as outras — a
+  confiança é por conta, não por pessoa. A rota de aprovação passou a ser
+  `PATCH /bank/accounts/:id/review` (era por `userId`, que já não identifica
+  nada).
+- **Índice parcial** `bank_accounts_one_primary_per_user` garante uma principal
+  por motorista mesmo com dois pedidos simultâneos. Outro índice parcial impede
+  o mesmo IBAN repetido na mesma pessoa.
+- **Arquivar, não apagar** (`archived_at`): uma conta que já recebeu dinheiro é
+  histórico. Recusa arquivar a última conta e uma com retirada por decidir.
+- **A retirada guarda `bank_account_id`** (a escolha) e continua a congelar
+  `paid_to_iban` **na aprovação**. O `resolveAccount` valida que a conta é mesmo
+  do motorista — sem isso, trocar o id no pedido mandava a transferência para
+  fora. Há um teste dedicado a isso.
+- `GET /bank/me` e `GET /bank/:userId` devolvem agora `{ accounts: [...] }`.
+
+Testes: `bank-accounts.integration.test.ts` (só na CI).
+
+---
+
+## 2.4 Decisões fechadas sobre os PROJETOS de investimento
+
+Confirmadas pelo cliente, ainda **por implementar**:
+
+1. **O capital fica investido enquanto o carro render** e é devolvido quando o
+   carro for vendido; a mais-valia ou menos-valia da venda reparte-se na mesma
+   proporção. NÃO há amortização mensal do capital.
+2. **O lucro do carro é apurado automaticamente** a partir dos fechos semanais
+   do motorista que tem esse carro, com botão de acerto manual para despesas
+   que não passam no fecho (seguro, revisão, pneus).
+3. **Distribuição mensal.**
+
+Nota do cliente sobre a economia disto: o lucro é alto para ele, os investidores
+recuperam o capital em cerca de 2 anos de distribuições e continuam a receber
+enquanto o carro rodar. Ou seja, **as distribuições não amortizam capital** — a
+dívida de capital mantém-se até à venda. Convém o projeto poder ter um prazo
+opcional, senão um carro que dure 6 anos devolve mais de 300%.
+
+**Aviso dado ao cliente (uma vez, não repetir):** juntar dinheiro de várias
+pessoas com participação nos lucros cai no regime do financiamento colaborativo
+de capital (Lei 102/2015) e pode exigir registo na CMVM conforme a forma e o
+público. O enquadramento é com o contabilista dele.
+
+---
+
+## 2.5 Projetos de investimento — participação nos lucros de um carro
+
+Implementado. Vive dentro do portal do investidor (`/investors/projects`), para
+ficar dentro da lista branca que o `denyInvestor` protege.
+
+### A regra que toda a gente assume ao contrário
+
+**As distribuições mensais NÃO amortizam o capital.** Quem pôs 10 000 €
+continua com 10 000 € em dívida depois de já ter recebido 10 000 € de lucros.
+O capital só volta na liquidação. Há um teste de integração chamado
+`AS DISTRIBUIÇÕES NÃO ABATEM O CAPITAL` só para isso.
+
+### Como o dinheiro se move
+
+- Subscrever **não cria movimento nenhum**: o capital continua na conta, só
+  deixa de estar disponível. A view `investor_balances` ganhou
+  `invested_in_projects`, que `available_capital` desconta.
+- Distribuir cria um `InvestorMovement` por participação, bucket `EARNINGS`,
+  kind **`PROFIT_SHARE`** (novo). Não se reaproveitou o `ACCRUAL` porque esse
+  tem índice único por (conta, dia) — dois projetos no mesmo dia rebentavam.
+- Liquidar grava só a **diferença** (kind `PROJECT_RESULT`, bucket `CAPITAL`):
+  o capital já lá estava, o que muda é deixar de estar trancado.
+
+### O lucro é apurado dos fechos
+
+`comissão + aluguer da viatura` dos fechos **REGISTADOS** cujo `week_start` cai
+no mês, **menos** as despesas lançadas à mão (seguro, revisão, pneus).
+Combustível e portagens não entram: são adiantados e descontados ao motorista no
+mesmo fecho, efeito nulo. As parcelas ficam guardadas em `project_periods` —
+sem elas, "de onde vem este valor" não tem resposta.
+
+Dois interruptores por projeto (`include_commission`, `include_vehicle_fee`)
+porque é uma decisão de negócio, não uma verdade universal.
+
+### Os cêntimos
+
+`allocate()` usa o **método do maior resto**: a soma das partes é sempre
+exatamente o total. Há um teste que verifica isso em mil repartições seguidas.
+Sem ele, dividir 100 € por três perdia um cêntimo por mês, todos os meses.
+
+### Liquidação
+
+Os investidores são donos da fração que financiaram (`raised / target`). Com
+venda, reparte-se `venda × fração`; sem venda (projeto que chega ao prazo),
+devolve-se o capital tal como entrou. Pode devolver menos do que entrou — é a
+contrapartida de terem recebido lucros sem que isso abatesse o capital.
+
+### Prazo opcional
+
+`ends_on` vazio = corre até vender. Preenchido = liquida nessa data. Existe
+porque um carro que dure seis anos devolveria o capital mais de três vezes só em
+distribuições.
+
+### Ainda por fazer
+
+- O prazo (`ends_on`) **não fecha o projeto sozinho** — não há job. Fecha-se à
+  mão na tela.
+- Sem mercado secundário (transferir uma participação a outro investidor).
+- Sem fotografias do carro no projeto (`image_url` existe, não há upload).
+
+Testes: `projects.math.test.ts` (27 unitários, corridos) e
+`projects.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
+## 2.6 Diário de bordo dos projetos, e destaques da carteira
+
+### O diário (`project_updates`)
+
+Entre o financiamento fechar e o carro render passam semanas. Nesse tempo o
+investidor tem dinheiro parado num projeto que não distribui nada, e a única
+forma de saber o que se passa é **telefonar**. É esse telefonema que o diário
+substitui.
+
+- Uma tabela e não um campo de estado: um estado responde a "onde está", mas
+  não a "o que aconteceu" nem "quando" — e um projeto parado há três semanas
+  não se distingue de um que anda depressa.
+- `happened_on` é o dia a que a entrada se refere, **não** o dia em que foi
+  escrita (pagamento na sexta, registado na segunda).
+- `stage` é enum (lista fechada) para desenhar a escada de progresso; o título
+  e o corpo são texto livre. `MAINTENANCE`, `INCIDENT` e `OTHER` **não** contam
+  como degraus — senão uma avaria fazia o projeto parecer mais adiantado.
+- `visible = false` → nota interna, que o investidor não vê.
+- **Quando a última subscrição fecha a meta**, o `subscribe` cria sozinho a
+  entrada `FUNDING_COMPLETE` e notifica os participantes, dentro da mesma
+  transação. É exatamente o momento em que o investidor passa a ter dinheiro
+  parado à espera de um carro.
+- Fotografias: o formulário envia a imagem pelo `/upload` que já existe e
+  guarda só o endereço.
+
+### Com ou sem motorista
+
+O detalhe do projeto devolve `driver: { active, since }`, lido da
+`vehicle_assignments` ativa. **Sem o nome do motorista** — o investidor é
+alguém de fora da empresa e quem conduz não é assunto dele. Há um teste que
+verifica que o nome não sai na resposta.
+
+### Destaques e filtros (`GET /investors/stats`)
+
+Quem está connosco há mais tempo, quem tem mais capital, quem mais ganhou,
+juros já pagos (um **custo**, não um lucro), e o lucro dos projetos repartido
+entre empresa e investidores — só dos meses já **distribuídos**, porque um mês
+apurado e por pagar ainda não é lucro de ninguém.
+
+`GET /investors/accounts` aceita `search`, `status` e `sort`. A ordenação é
+traduzida de uma **lista fechada** para SQL; interpolar texto do pedido numa
+cláusula ORDER BY é como se abre a porta a uma injeção.
+
+### Ainda por fazer
+
+- O diário não tem paginação (um projeto com 200 entradas traz-nas todas).
+- Não há entradas automáticas a partir de eventos da frota — por exemplo,
+  atribuir o carro a um motorista não escreve `DRIVER_ASSIGNED` sozinho.
+
+---
+
+## 2.7 Permissões por pessoa, e o menu reorganizado
+
+### O menu
+
+Eram dezasseis entradas numa lista seguida. Passaram a quatro grupos:
+**Operação** (Dashboard, Motoristas, Documentos, Frotas, Níveis), **Dinheiro**
+(Faturação, Financeiro, Recibos Verdes, Análises), **Investimento**
+(Investimentos, Investidores, Projetos) e **Sistema** (Notificações, Suporte,
+Configurações, Equipa). Um grupo sem entradas visíveis desaparece com o título.
+
+O menu é **construído a partir das permissões**: cada entrada declara a sua
+`Area` em `AdminLayout.tsx`. As duas listas `SO_ADMIN` / `VE_SUPORTE`
+desapareceram.
+
+### As permissões
+
+`staff_permissions`: uma linha por (pessoa, área), 16 áreas, três níveis —
+`NONE`, `VIEW`, `MANAGE`.
+
+**Duas regras que não se mexem:**
+
+1. **O ADMIN tem tudo, sempre**, e a tabela é ignorada para ele. Sem isto uma
+   configuração errada tranca o dono fora do sistema — e o ecrã que corrige
+   isso também estaria trancado. Guardar permissões para um ADMIN é recusado
+   (`ADMIN_HAS_EVERYTHING`).
+2. **Sem linhas configuradas, vale o comportamento antigo do papel**
+   (`PADRAO_DO_PAPEL`). É o que faz este deploy não mudar nada para ninguém no
+   dia em que entra. Basta UMA área configurada para a configuração passar a
+   mandar por inteiro — não se volta a misturar com o padrão.
+
+### A guarda é do servidor
+
+`requireArea(area, nivel)` em `area.middleware.ts`, aplicado a roteadores
+inteiros no `routes.ts`. A regra que torna isso seguro: **só constrange quem é
+da equipa** (ADMIN/MANAGER/SUPPORT). Um motorista ou investidor passa em
+frente — as rotas são partilhadas (o mesmo `/withdrawals` serve quem pede e
+quem aprova) e quem decide o que um motorista vê dos SEUS dados são os
+serviços, como sempre foi.
+
+Sem sessão identificada a guarda também passa em frente, senão partia o
+**registo público** em `POST /users`.
+
+Vai à base a cada pedido e não ao token: tirar um acesso tem de fazer efeito
+**agora**, não na próxima sessão. Há um teste que confirma isso com o mesmo
+token.
+
+As permissões vêm no `/auth/me` **e na resposta do login** — sem o segundo,
+haveria uma janela entre entrar e o primeiro `me` com o menu desenhado vazio.
+
+### Perfis
+
+Sete conjuntos prontos (Faturação, Suporte, Frota, Financeiro, Investimento,
+Só leitura, Sem acesso). **Não são papéis**: preenchem as 16 áreas de uma vez e
+a partir daí muda-se o que for preciso.
+
+### A Equipa continua a ser só do ADMIN
+
+Não é uma área configurável de propósito: dá-la por permissão seria dar a chave
+para alguém se dar todas as outras.
+
+### Ainda por fazer
+
+- Dentro de cada área, `MANAGE` vs `VIEW` é imposto por roteador; alguns
+  serviços ainda têm as suas próprias verificações de ADMIN por baixo, que
+  continuam a valer (é redundância a favor, não contra).
+- Não há registo de quem mudou o quê nas permissões além de `updated_by`.
+
+Testes: `permissions.integration.test.ts` (**escrito, corre só na CI**).
+
+---
+
+## 2.8 O texto das notificações tinha forma, e o ecrã deitava-a fora
+
+O cliente enviou um aviso longo, escrito em títulos, parágrafos e listas.
+Chegou ao motorista como um bloco corrido de vinte linhas.
+
+### A causa
+
+`<p>{notification.message}</p>`. O HTML trata qualquer sequência de espaços e
+quebras de linha como **um** espaço. O texto ia inteiro — só não tinha forma
+nenhuma.
+
+O email tinha o mesmo defeito e mais um: `<p>${message}</p>` **sem escapar**.
+Um `<` numa frase inocente ("faturação < 500€") comia o resto do email, e
+marcação escrita numa mensagem entrava como marcação.
+
+### A solução
+
+Um formatador com quatro regras, e só quatro:
+
+```
+## Um título          →  título
+- Um item             →  lista (aceita "-", "*" e "•")
+linha em branco       →  separa parágrafos
+**negrito**           →  negrito
+```
+
+Uma quebra de linha **simples** dentro de um parágrafo é mantida: quem a
+escreveu queria-a ali.
+
+Duas implementações da mesma gramática, de propósito:
+
+- `frontend/src/shared/lib/notification-format.ts` — devolve **blocos**, não
+  HTML. Nada vindo da mensagem chega ao DOM como marcação, por isso não há
+  porta aberta a HTML injetado num aviso. Desenhado por
+  `app/components/ui/notification-body.tsx`.
+- `backend/src/shared/services/notification-html.ts` — escapa primeiro,
+  formata depois (a ordem importa: ao contrário, o `<strong>` que nós próprios
+  escrevemos seria escapado a seguir e aparecia como texto). Estilos em
+  atributos `style` e `<br>` em vez de `white-space:pre-line`, porque o Outlook
+  ignora o segundo.
+
+**Não se usou uma biblioteca de markdown.** Precisávamos de três coisas; uma
+biblioteca traz tabelas, imagens, ligações e HTML embutido. O texto é escrito
+na administração mas é lido por toda a gente, e um email não se corrige depois
+de enviado.
+
+### O resto do mesmo defeito
+
+O mesmo `<p>` esmagava todo o texto escrito por pessoas. Corrigido com
+`whitespace-pre-line` em: mensagens e respostas de suporte (motorista e
+administração), notas do fecho semanal (nas duas vistas), descrição dos planos
+de investimento e a mensagem original na fila de trabalho.
+
+### No painel
+
+A caixa de escrita passou de 3 para 10 linhas, com a ajuda da formatação
+escrita por baixo e um botão **Pré-visualizar** que usa o MESMO componente que
+o motorista vê — uma pré-visualização que desenha de outra maneira mente.
+
+Na lista de avisos, uma mensagem com mais de 260 caracteres dobra atrás de um
+"Ver mais", com o estado por cartão. O `resumirMensagem` tira as marcas nas
+pré-visualizações de uma linha: `## Níveis` num resumo é ruído, não é um
+título.
+
+Corrigido também um `toLocaleDateString('pt-BR')` no histórico.
+
+Testes: `notification-html.test.ts`, 13 casos, **corridos** — escape, quebras,
+listas, títulos, `**` sem par, `\r\n` do Windows, mensagem vazia e uma de 500
+linhas.
+
+### Ainda por fazer
+
+- O formatador existe duas vezes (frontend e backend). São 80 linhas cada e o
+  monorepo não tem pacote partilhado; se divergirem, o sintoma é a
+  pré-visualização deixar de bater certo com o email.
+- Os avisos automáticos (fecho, ajuste, documento a expirar) continuam a ser
+  escritos numa linha só — passam a poder ter forma, mas ainda não têm.
+
+---
+
+## 2.9 A ficha do motorista mostrava metade do dinheiro
+
+A ficha individual tinha "Histórico de ajustes" — só os ajustes manuais. Os
+**fechos semanais**, que são a maior parte do que entra, não apareciam ali.
+
+Pior: os mosaicos não fechavam. Ganhos + Créditos − Débitos − Levantado −
+Reservado **não dava** o saldo disponível que estava por cima deles, e a
+diferença eram exatamente os fechos. (O mosaico "Ganhos" é
+`reported_earnings`, da tabela `earnings` — não é `settlements`.) Quem olhava
+para a ficha não tinha como saber que faltava lá coisa; só fazendo a conta à
+mão e reparando que não batia — que foi como o problema foi encontrado.
+
+### O que ficou
+
+`app/components/admin/driver-ledger.tsx`, a substituir a lista de ajustes.
+Consome o `GET /balance/:userId/ledger` que já existia e o motorista já lia:
+fechos, ajustes, retiradas e investimentos, com o saldo depois de cada linha.
+
+Três decisões:
+
+- **Abre no mais antigo**, ao contrário do extrato do motorista. A pergunta
+  aqui é "isto bate certo?", e responde-se seguindo a coluna do saldo de cima
+  para baixo. Há botão para trocar.
+- **O saldo de cada linha vem do servidor**, não é recalculado no ecrã: dois
+  sítios a somar o mesmo é um sítio a mais para discordarem.
+- **A caixa de reconciliação** no fim mostra os três números, porque a última
+  linha do extrato NÃO é o disponível — as retiradas por decidir ainda não
+  estão lá dentro.
+
+O autor do ajuste ("por Diogo Isaias") não vem no extrato; é reposto cruzando
+com a consulta de ajustes que a página já fazia.
+
+### Nota sobre datas de movimentos
+
+O saldo total **não usa datas** (a view `driver_balances` soma tudo sem filtro
+temporal). As datas decidem só a ORDEM no extrato, e portanto os saldos
+corridos de cada linha. Cada tipo ancora numa coluna diferente:
+
+| Movimento | Tabela | Coluna |
+|---|---|---|
+| Fecho | `weekly_settlements` | `week_start` |
+| Ajuste | `balance_adjustments` | `created_at` |
+| Retirada | `withdrawals` | `requested_at` |
+| Investimento | `investments` | `created_at` / `closed_at` |
+
+Corrigir a data de um ajuste ou de uma retirada é seguro — muda a ordem, não
+muda o total. Corrigir a de um **fecho** não é: há `@@unique(user_id,
+week_start)`, e os fechos alimentam as temporadas dos níveis e o lucro mensal
+dos projetos, que podem já ter sido distribuídos.
+
+### Corrigir a data de um ajuste pelo painel
+
+Feito a seguir, para deixar de ser preciso SQL à mão em produção.
+
+`PATCH /balance/adjustments/:id`, com `createdAt` e/ou `reason`. Carregar numa
+linha de ajuste no extrato da ficha abre o diálogo
+(`adjustment-edit-dialog.tsx`).
+
+**O valor e o tipo NÃO são editáveis**, e o teste de integração confirma que
+enviá-los no corpo não faz nada. Mudar um valor mudaria o saldo sem deixar
+rasto; um valor errado corrige-se com um ajuste contrário, que preserva as
+duas linhas. A data é outra coisa: a view não tem filtro temporal, por isso
+mudá-la não mexe um cêntimo — só a ordem.
+
+Migração `20260928090000_adjustment_edit_trace`: `edited_at` e `edited_by` em
+`balance_adjustments`, nulos em tudo o que já existe (nunca foi editado).
+Corrigir sem registar trocava um problema por outro pior — daqui a seis meses
+ninguém saberia se a data é a original.
+
+Guardas: `canManageBalance` (ADMIN/MANAGER), data no futuro recusada
+(`DATE_IN_FUTURE`, com um dia de margem para fusos), anterior a 2020 recusada
+(`DATE_TOO_OLD`, é um ano mal escrito), e um PATCH que não altera nada dá erro
+em vez de 200.
+
+No diálogo há uma **pré-visualização da posição** ("passa do 3.º para o 1.º de
+7") e um botão "Pôr antes de todos os outros", que é o caso de nove em dez.
+
+**Armadilha de datas, já apanhada:** o campo é `<input type="date">` e o
+movimento tem hora. Com `setFullYear` (local) e `toISOString` (UTC), um
+movimento gravado às 23:30 UTC abria como dia 13 e, gravado sem lhe tocar,
+voltava como dia 12 — recuava um dia sozinho em qualquer fuso a leste de
+Greenwich, Lisboa no verão incluída. Tudo em UTC (`setUTCFullYear`,
+`setUTCDate`); verificado a correr em UTC, Europe/Lisbon e Pacific/Auckland.
+
+Testes: `adjustment-edit.integration.test.ts`, 12 casos (**escrito, corre só
+na CI**) — sendo os dois que importam "muda a ordem e não muda o saldo" e
+"o valor enviado no corpo é ignorado".
+
+### Ainda por fazer
+
+- Só os AJUSTES são corrigíveis. Os fechos não (unique em `(user_id,
+  week_start)`, e alimentam temporadas e meses de projeto já distribuídos); as
+  retiradas não (a data é o registo de quando o motorista pediu); os
+  investimentos não (os juros estão gravados dia a dia).
+- O rasto guarda quem e quando, não o valor anterior. Para saber a data antiga
+  é preciso ir aos registos do servidor.
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está

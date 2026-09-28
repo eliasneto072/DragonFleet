@@ -78,6 +78,30 @@ export function invalidateAfterSettlement(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
 }
 
+/**
+ * Aplicação ou resgate de investimento.
+ *
+ * Move dinheiro entre o saldo principal e a aplicação: o saldo e o extrato
+ * mudam, e o passivo do painel também (o aplicado continua a ser devido).
+ */
+export function invalidateAfterInvestment(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: queryKeys.investments.all });
+  qc.invalidateQueries({ queryKey: queryKeys.balance.all });
+  qc.invalidateQueries({ queryKey: queryKeys.analytics.all });
+  qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
+}
+
+/**
+ * Metas ou benefícios de um nível alterados.
+ *
+ * Invalida também o estado de cada motorista: mexer numa meta muda quem está
+ * em que nível, e o cartão do motorista tem de refletir isso sem recarregar.
+ */
+export function invalidateAfterRank(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: queryKeys.ranks.all });
+  qc.invalidateQueries({ queryKey: queryKeys.investments.all });
+}
+
 /** Ajuste manual de saldo. */
 export function invalidateAfterAdjustment(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: queryKeys.balance.all });

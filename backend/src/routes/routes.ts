@@ -15,24 +15,54 @@ import { balanceRouter } from '../modules/balance/balance.routes';
 import { settlementsRouter } from '../modules/settlements/settlements.routes';
 import { bankRouter } from '../modules/bank/bank.routes';
 import { companiesRouter } from '../modules/companies/companies.routes';
+import { investmentsRouter } from '../modules/investments/investments.routes';
+import { ranksRouter } from '../modules/ranks/ranks.routes';
+import { investorsRouter } from '../modules/investors/investors.routes';
+import { denyInvestor } from '../middlewares/deny-investor.middleware';
+import { permissionsRouter } from '../modules/permissions/permissions.routes';
+import { expensesRouter } from '../modules/expenses/expenses.routes';
+import { requireArea } from '../middlewares/area.middleware';
 
 const router = Router();
 
+// ─── As duas rotas abertas a uma conta de investidor ───────────────────────
+//
+// Autenticação e o portal dele. Mais nada.
 router.use('/auth', authRouter())
-router.use('/users', usersRouter())
-router.use('/vehicles', vehiclesRouter())
-router.use('/earnings', earningsRouter())
-router.use('/withdrawals', withdrawalsRouter())
-router.use('/documents', documentsRouter())
-router.use('/notifications', notificationsRouter())
+router.use('/investors', investorsRouter())
+
+// ─── A partir daqui é a frota ──────────────────────────────────────────────
+//
+// Lista BRANCA: tudo o que estiver abaixo desta linha fica fechado a contas de
+// investidor, incluindo rotas que ainda não existem. Uma rota nova nasce
+// protegida sem ninguém se lembrar de a proteger — que é a única forma de isto
+// se manter verdadeiro daqui a um ano.
+router.use(denyInvestor)
+
+// As permissões vivem à parte das áreas que protegem: quem perdeu o acesso a
+// tudo tem de continuar a poder perguntar o que pode, senão o painel não sabe
+// sequer que menu desenhar.
+router.use('/permissions', permissionsRouter())
+
+router.use('/users', requireArea('DRIVERS'), usersRouter())
+router.use('/vehicles', requireArea('FLEET'), vehiclesRouter())
+router.use('/earnings', requireArea('SETTLEMENTS'), earningsRouter())
+router.use('/withdrawals', requireArea('FINANCIAL'), withdrawalsRouter())
+router.use('/documents', requireArea('DOCUMENTS'), documentsRouter())
+router.use('/notifications', requireArea('NOTIFICATIONS'), notificationsRouter())
 router.use('/upload', uploadRoutes);
-router.use('/analytics', analyticsRouter());
-router.use('/support', supportRouter());
-router.use('/reports', reportsRouter());
-router.use('/settings', settingsRouter());
-router.use('/balance', balanceRouter());
-router.use('/settlements', settlementsRouter());
-router.use('/bank', bankRouter());
-router.use('/companies', companiesRouter());
+router.use('/analytics', requireArea('ANALYTICS'), analyticsRouter());
+router.use('/support', requireArea('SUPPORT'), supportRouter());
+router.use('/reports', requireArea('FINANCIAL'), reportsRouter());
+router.use('/settings', requireArea('SETTINGS'), settingsRouter());
+router.use('/balance', requireArea('FINANCIAL'), balanceRouter());
+router.use('/settlements', requireArea('SETTLEMENTS'), settlementsRouter());
+// Despesas importadas (Prio e Via Verde): alimentam o fecho, portanto vivem na
+// mesma área. Depois do denyInvestor, como tudo o que é da frota.
+router.use('/expenses', requireArea('SETTLEMENTS'), expensesRouter());
+router.use('/bank', requireArea('FINANCIAL'), bankRouter());
+router.use('/companies', requireArea('GREEN_RECEIPTS'), companiesRouter());
+router.use('/investments', requireArea('INVESTMENTS'), investmentsRouter());
+router.use('/ranks', requireArea('RANKS'), ranksRouter());
 
 export { router };

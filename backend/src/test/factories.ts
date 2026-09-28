@@ -70,10 +70,15 @@ export async function criaAdmin() {
 export async function criaContaAprovada(userId: string, opts: {
   iban?: string;
   holderName?: string;
+  label?: string;
+  /** A conta por omissão. A primeira de cada motorista costuma ser. */
+  isPrimary?: boolean;
 } = {}) {
   return testDb.bankAccount.create({
     data: {
       userId,
+      label: opts.label ?? 'Conta principal',
+      isPrimary: opts.isPrimary ?? true,
       iban: opts.iban ?? 'PT50003300004567890123437',
       holderName: opts.holderName ?? 'Motorista de Teste',
       reviewedAt: new Date(),
@@ -82,10 +87,11 @@ export async function criaContaAprovada(userId: string, opts: {
 }
 
 /** Conta submetida e à espera de decisão: existe, mas não serve para receber. */
-export async function criaContaPendente(userId: string) {
+export async function criaContaPendente(userId: string, opts: { label?: string } = {}) {
   return testDb.bankAccount.create({
     data: {
       userId,
+      label: opts.label ?? 'Conta pendente',
       pendingIban: 'PT50002700000001234567833',
       pendingHolderName: 'Motorista de Teste',
       pendingProofUrl: 'https://exemplo.local/comprovativo.pdf',
@@ -116,6 +122,10 @@ export async function criaFecho(opts: {
   otherDeductions?: number;
   commissionRate?: number;
   taxRate?: number;
+  /** O carro da semana. Os projetos apuram o lucro por aqui. */
+  vehicleId?: string;
+  /** Encargo da viatura cobrado ao motorista — receita do carro. */
+  vehicleFee?: number;
 }) {
   const amounts = {
     uberAmount: opts.uberAmount ?? 1000,
@@ -123,7 +133,7 @@ export async function criaFecho(opts: {
     otherRevenue: 0,
     tollsAmount: 0,
     fuelAmount: opts.fuelAmount ?? 0,
-    vehicleFee: 0,
+    vehicleFee: opts.vehicleFee ?? 0,
     otherDeductions: opts.otherDeductions ?? 0,
   };
   const commissionRate = opts.commissionRate ?? 0;
@@ -140,6 +150,7 @@ export async function criaFecho(opts: {
     data: {
       userId: opts.userId,
       createdById: opts.createdById,
+      vehicleId: opts.vehicleId ?? null,
       weekStart,
       weekEnd,
       ...amounts,
@@ -202,4 +213,36 @@ export async function criaRetirada(opts: {
 /** Sociedade a quem se emite recibo verde. */
 export async function criaSociedade(name = 'Sociedade de Teste') {
   return testDb.company.create({ data: { name } });
+}
+
+
+/**
+ * Um carro na frota.
+ *
+ * `commissionRate` não vive aqui: a comissão é do fecho. Este construtor serve
+ * os testes que precisam de um veículo a que ligar fechos — os projetos de
+ * investimento apuram o lucro pelo carro.
+ */
+export async function criaVeiculo(opts: {
+  plate?: string;
+  brand?: string;
+  model?: string;
+  weeklyFee?: number;
+  userId?: string;
+} = {}) {
+  seq += 1;
+  return testDb.vehicle.create({
+    data: {
+      brand: opts.brand ?? 'Peugeot',
+      model: opts.model ?? '308',
+      // Matrícula única por execução: o campo tem índice único e dois testes
+      // seguidos com a mesma matrícula falhariam por uma razão que não é a
+      // que se está a testar.
+      plate: opts.plate ?? `TS-${String(seq).padStart(2, '0')}-TS`,
+      year: 2022,
+      status: 'ACTIVE',
+      weeklyFee: opts.weeklyFee ?? 0,
+      userId: opts.userId ?? null,
+    },
+  });
 }

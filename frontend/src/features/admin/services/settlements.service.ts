@@ -217,4 +217,53 @@ export const settlementsService = {
   reported(userId: string, from: string, to: string): Promise<{ reported: ReportedByPlatform[] }> {
     return apiClient.get(`/earnings/reported${query({ userId, from, to })}`);
   },
+
+  /** POST /settlements/drafts/preview — quem teria rascunho na semana, sem gravar. */
+  draftsPreview(weekStart: string): Promise<DraftsPreview> {
+    return apiClient.post('/settlements/drafts/preview', { weekStart });
+  },
+
+  /** POST /settlements/drafts — cria os rascunhos. Nunca regista. */
+  generateDrafts(weekStart: string): Promise<{ weekStart: string; created: ApiSettlement[]; skipped: DraftSkipped[] }> {
+    return apiClient.post('/settlements/drafts', { weekStart });
+  },
 };
+
+// ── Rascunhos da semana ───────────────────────────────────────────────────────
+
+/** Um motorista que vai ter rascunho, com os valores que o servidor juntou. */
+export interface DraftCandidate {
+  userId: string;
+  userName: string;
+  vehicleId: string | null;
+  vehiclePlate: string | null;
+  /** Outros carros que teve na semana, se trocou a meio. */
+  otherPlates: string[];
+  uberAmount: number;
+  boltAmount: number;
+  otherRevenue: number;
+  fuelAmount: number;
+  tollsAmount: number;
+  vehicleFee: number;
+  otherDeductions: number;
+  counts: { uber: number; bolt: number; other: number; fuel: number; tolls: number };
+  /** Calculado no servidor, com a comissão e o imposto das Configurações. */
+  netToDriver: number;
+}
+
+/** Quem foi saltado por já ter fecho, e de que tipo. */
+export interface DraftSkipped {
+  userId: string;
+  userName: string;
+  settlementId: string | null;
+  status: 'DRAFT' | 'REGISTERED' | 'CANCELLED' | 'EXISTS';
+}
+
+export interface DraftsPreview {
+  weekStart: string;
+  weekEnd: string;
+  commissionRate: number;
+  taxRate: number;
+  toCreate: DraftCandidate[];
+  skipped: DraftSkipped[];
+}

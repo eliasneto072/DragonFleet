@@ -6,6 +6,8 @@ export type CreateWithdrawalData = {
   /** Obrigatório: a empresa não paga sem fatura. */
   receiptUrl: string;
   receiptKey: string;
+  /** Qual das contas bancárias do motorista recebe. */
+  bankAccountId?: string | null;
   // status omitido — Prisma usa PENDING por default
 };
 

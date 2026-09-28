@@ -73,6 +73,63 @@ export const queryKeys = {
     allUnpaged: ['users', 'all'] as const,
   },
 
+  // Investimentos. Sob a mesma raiz tudo o que muda quando se aplica ou
+  // resgata: invalidar `investments.all` refresca planos (totais do admin),
+  // as aplicações do motorista e a vista geral de uma vez.
+  investments: {
+    all: ['investments'] as const,
+    plans: (all: boolean) => ['investments', 'plans', all] as const,
+    mine: ['investments', 'mine'] as const,
+    forUser: (userId: string) => ['investments', 'user', userId] as const,
+    overview: (status: string, planId: string, search: string) =>
+      ['investments', 'overview', status, planId, search] as const,
+    detail: (id: string) => ['investments', 'detail', id] as const,
+    rates: (planId: string) => ['investments', 'rates', planId] as const,
+  },
+
+  // Portal do investidor (invest.dragonfleet.pt)
+  //
+  // Tudo sob a mesma raiz: registar um depósito ou decidir um resgate muda o
+  // saldo, o extrato, a lista de contas e os totais da empresa ao mesmo tempo.
+  // Invalidar `investors.all` refresca os quatro de uma vez, que é sempre o que
+  // se quer — uma tela dessas com um número velho é pior do que um segundo de
+  // espera.
+  investors: {
+    all: ['investors'] as const,
+    me: ['investors', 'me'] as const,
+    statement: (accountId: string, page: number, kind: string) =>
+      ['investors', 'statement', accountId, page, kind] as const,
+    monthly: (accountId: string) => ['investors', 'monthly', accountId] as const,
+    withdrawals: (accountId: string) => ['investors', 'withdrawals', accountId] as const,
+    notifications: ['investors', 'notifications'] as const,
+    accounts: ['investors', 'accounts'] as const,
+    account: (id: string) => ['investors', 'account', id] as const,
+    overview: ['investors', 'overview'] as const,
+    pending: ['investors', 'pending'] as const,
+  },
+
+  // Projetos de investimento
+  //
+  // Sob raiz própria mas invalidados junto com `investors.all`: subscrever ou
+  // distribuir muda o saldo do investidor E o estado do projeto ao mesmo
+  // tempo, e uma das duas telas ficaria com um número velho.
+  projects: {
+    all: ['projects'] as const,
+    list: (status: string, search: string) => ['projects', 'list', status, search] as const,
+    detail: (id: string) => ['projects', 'detail', id] as const,
+    mine: ['projects', 'mine'] as const,
+  },
+
+  // Níveis (ranks)
+  ranks: {
+    all: ['ranks'] as const,
+    configs: ['ranks', 'configs'] as const,
+    me: ['ranks', 'me'] as const,
+    forUser: (userId: string) => ['ranks', 'user', userId] as const,
+    events: (userId: string) => ['ranks', 'events', userId] as const,
+    overview: (tier: string, search: string) => ['ranks', 'overview', tier, search] as const,
+  },
+
   // Balance (admin)
   balance: {
     all: ['balance'] as const,
@@ -142,6 +199,17 @@ export const queryKeys = {
     detail: (id: string) => ['settlements', 'detail', id] as const,
     reported: (userId: string, from: string, to: string) =>
       ['settlements', 'reported', userId, from, to] as const,
+  },
+
+  // Despesas importadas (Prio, Via Verde). Invalidar por prefixo
+  // (expenses.all) depois de importar, atribuir ou mudar um cartão: o
+  // formulário do fecho e a fila leem daqui.
+  expenses: {
+    all: ['expenses'] as const,
+    forSettlement: (userId: string, weekStart: string) =>
+      ['expenses', 'for-settlement', userId, weekStart] as const,
+    unmatched: ['expenses', 'unmatched'] as const,
+    cards: (owner: string) => ['expenses', 'cards', owner] as const,
   },
 
   // Settings (admin)

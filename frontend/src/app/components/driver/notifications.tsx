@@ -1,14 +1,17 @@
 // src/app/components/driver/notifications.tsx
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { Bell, Check, AlertCircle, Info, CheckCircle, Trash2, Loader2 } from 'lucide-react';
+import { Bell, Check, AlertCircle, Info, CheckCircle, ChevronRight, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { notificationsService } from '@/features/driver/services/notifications.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { ApiNotification } from '@/shared/types/api';
+import { linkFromNotification } from '@/app/components/driver/account-movements';
+import { NotificationBody } from '@/app/components/ui/notification-body';
 
 // O backend não tem campo "type" — inferimos pelo título como fallback visual
 function inferType(title: string): 'info' | 'success' | 'warning' | 'error' {
@@ -41,6 +44,7 @@ function formatDate(dateString: string) {
 
 export function Notifications() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // ── Leitura ──────────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery({
@@ -149,13 +153,20 @@ export function Notifications() {
       <div className="space-y-3">
         {notifications.map((notification) => {
           const type = inferType(notification.title);
+          // Fechos e ajustes abrem o detalhe no painel. Antes o toque só
+          // marcava como lida, e o motorista ficava sem saber o que mudou.
+          const link = linkFromNotification(notification);
           return (
             <Card
               key={notification.id}
               className={`transition-colors cursor-pointer ${
                 !notification.read ? 'border-l-4 border-l-[#108865] bg-[#108865]/5' : ''
               }`}
-              onClick={() => !notification.read && markAsRead(notification.id)}
+              onClick={() => {
+                if (!notification.read) markAsRead(notification.id);
+                if (link?.kind === 'INVESTMENTS') navigate('/app/driver/investments');
+                else if (link) navigate('/app/driver/dashboard', { state: { openMovement: link } });
+              }}
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
@@ -169,9 +180,11 @@ export function Notifications() {
                             <Badge variant="secondary" className="text-xs">Novo</Badge>
                           )}
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {notification.message}
-                        </p>
+                        <NotificationBody
+                          texto={notification.message}
+                          dobravel
+                          className="mt-1"
+                        />
                       </div>
                       <Button
                         variant="ghost"
@@ -185,9 +198,16 @@ export function Notifications() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(notification.createdAt)}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(notification.createdAt)}
+                      </p>
+                      {link && (
+                        <span className="flex items-center text-xs font-medium text-[#108865]">
+                          Ver detalhe <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>

@@ -60,7 +60,16 @@ export class UsersRepository  implements IUserRepository{
                 : {}
 
             const where = {
-                ...(filter.role ? { role: filter.role as never } : {}),
+                // Sem filtro pedido, a lista exclui os INVESTIDORES.
+                //
+                // São contas de gente de fora da empresa, criadas na tela de
+                // Investidores e geridas lá. Sem esta exclusão apareciam
+                // misturados com os motoristas, com saldo zero e sem
+                // documentos — e alguém acabaria por lhes mandar uma
+                // notificação de frota ou por tentar registar-lhes um fecho.
+                ...(filter.role
+                    ? { role: filter.role as never }
+                    : { role: { not: 'INVESTOR' } as never }),
                 ...(filter.status ? { status: filter.status as never } : {}),
                 ...pendencias,
                 ...buildSearchWhere(filter.terms ?? [], ['name', 'email']),
@@ -138,9 +147,14 @@ export class UsersRepository  implements IUserRepository{
     async findAll(): Promise<IUserPublic[]> {
         try{
             
+            // Sem os investidores, pelo mesmo motivo da lista paginada: isto
+            // alimenta seletores de motorista e mapas de nomes do painel, e um
+            // investidor num seletor de "atribuir viatura" não é uma opção —
+            // é um engano à espera de acontecer.
             return await prisma.user.findMany({
-               select: this.publicSelect, 
-               orderBy: {createdAt: 'desc'} 
+               where: { role: { not: 'INVESTOR' as never } },
+               select: this.publicSelect,
+               orderBy: {createdAt: 'desc'}
               })
 
         } catch(err) {

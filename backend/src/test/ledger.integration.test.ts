@@ -411,3 +411,109 @@ describe('o extrato CONCORDA com a view driver_balances', () => {
       .toBeCloseTo(v.available + v.pendingWithdrawals, 2);
   });
 });
+
+describe('o extrato CONCORDA com a view — com investimentos', () => {
+  // ─── PORQUE ESTE BLOCO EXISTE ─────────────────────────────────────────────
+  //
+  // O bloco acima compara o extrato com a view, e era a unica garantia de que
+  // os dois nao divergem. Mas foi escrito antes de haver investimentos: so cria
+  // fechos, ajustes e retiradas. Com INVESTMENT e REDEMPTION a entrar pelos dois
+  // lados — no extrato por codigo, na view por migracao —, esse teste continuava
+  // a passar SEM os ver. Uma divergencia nas linhas novas passava em silencio.
+  //
+  // Estes casos poem investimentos em todos os estados e voltam a exigir as duas
+  // formas da igualdade.
+
+  async function plano() {
+    return testDb.investmentPlan.create({
+      data: { name: 'Flexivel', type: 'FLEXIBLE', annualRate: 3.65 },
+    });
+  }
+
+  async function aplicacao(planoId: string, o: {
+    principal: number;
+    fechada?: { payout: number; reason: 'MATURED' | 'EARLY' | 'WITHDRAWN'; closedAt: string | null };
+  }) {
+    return testDb.investment.create({
+      data: {
+        userId: motorista.id,
+        planId: planoId,
+        principal: o.principal,
+        planType: 'FLEXIBLE',
+        annualRate: 3.65,
+        startDate: dia('2026-02-01'),
+        createdAt: dia('2026-02-01'),
+        ...(o.fechada
+          ? {
+              status: 'CLOSED',
+              payout: o.fechada.payout,
+              closeReason: o.fechada.reason,
+              closedAt: o.fechada.closedAt ? dia(o.fechada.closedAt) : null,
+            }
+          : { status: 'ACTIVE' }),
+      },
+    });
+  }
+
+  async function comparar() {
+    const r = await extrato().expect(200);
+    const v = (await request(app)
+      .get(`/balance/${motorista.id}`)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .expect(200)).body.data.balance;
+    return { rec: r.body.data.reconciliation, entries: r.body.data.entries, v };
+  }
+
+  it('bate com aplicacoes ativas, resgatadas e terminadas', async () => {
+    await criaFecho({ weekStart: '2026-01-05', netToDriver: 2000 });
+    const p = await plano();
+
+    await aplicacao(p.id, { principal: 200 });                                                          // ativa
+    await aplicacao(p.id, { principal: 300, fechada: { payout: 310.5, reason: 'WITHDRAWN', closedAt: '2026-03-01' } }); // resgatada com ganho
+    await aplicacao(p.id, { principal: 100, fechada: { payout: 98, reason: 'EARLY', closedAt: '2026-03-02' } });        // penalizada
+    await aplicacao(p.id, { principal: 400, fechada: { payout: 412.2, reason: 'MATURED', closedAt: '2026-03-03' } });   // terminada
+
+    const { rec, v } = await comparar();
+
+    // A forma explicita, agora com as duas parcelas dos investimentos.
+    const esperado = v.totalSettlements + v.totalCredits - v.totalDebits - v.totalWithdrawn
+                   - v.totalInvested + v.totalInvestmentReturns;
+    expect(rec.accountBalance).toBeCloseTo(esperado, 2);
+
+    // E a forma que apanha uma divergencia se alguem mexer na view.
+    expect(rec.accountBalance).toBeCloseTo(v.available + v.pendingWithdrawals, 2);
+
+    // Conta a mao, para nao depender so da view: 2000 - 1000 aplicado + 820.7 devolvido.
+    expect(rec.accountBalance).toBeCloseTo(1820.7, 2);
+  });
+
+  it('uma aplicacao fechada sem closedAt continua contada no extrato', async () => {
+    // O estado e impossivel pela aplicacao — o unico sitio que fecha grava
+    // payout e closedAt juntos. Mas nao ha restricao na base. Antes desta
+    // correcao, a view contava o payout e o extrato deixava-o cair.
+    await criaFecho({ weekStart: '2026-01-05', netToDriver: 1000 });
+    const p = await plano();
+    await aplicacao(p.id, { principal: 500, fechada: { payout: 520, reason: 'WITHDRAWN', closedAt: null } });
+
+    const { rec, entries, v } = await comparar();
+
+    expect(entries.some((e: any) => e.kind === 'REDEMPTION')).toBe(true);
+    expect(rec.accountBalance).toBeCloseTo(v.available + v.pendingWithdrawals, 2);
+    expect(rec.accountBalance).toBeCloseTo(1020, 2);
+  });
+
+  it('os ganhos diarios de uma aplicacao ativa NAO sao linhas do extrato', async () => {
+    // Acumulam na aplicacao e so entram no saldo no resgate, dentro do payout.
+    // E o que a view faz, e o extrato tem de explicar esse numero e nao outro.
+    await criaFecho({ weekStart: '2026-01-05', netToDriver: 1000 });
+    const p = await plano();
+    const inv = await aplicacao(p.id, { principal: 300 });
+    await testDb.investment.update({ where: { id: inv.id }, data: { accrued: 12.5 } });
+
+    const { rec, entries, v } = await comparar();
+
+    expect(entries.map((e: any) => e.kind)).toEqual(['SETTLEMENT', 'INVESTMENT']);
+    expect(rec.accountBalance).toBeCloseTo(700, 2);
+    expect(rec.accountBalance).toBeCloseTo(v.available + v.pendingWithdrawals, 2);
+  });
+});

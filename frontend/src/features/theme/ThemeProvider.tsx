@@ -8,6 +8,7 @@
 //   const { theme, setTheme } = useTheme()  // 'light' | 'dark' | 'system'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { isInvestPortal } from '@/shared/config/portal';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -29,7 +30,11 @@ function getSystemTheme(): 'light' | 'dark' {
 
 function applyTheme(resolved: 'light' | 'dark') {
   const root = document.documentElement;
-  if (resolved === 'dark') root.classList.add('dark');
+  // O portal do investidor é sempre escuro. Não é preferência, é a identidade
+  // do site: em claro, o ouro sobre branco fica amarelo-mostarda e todo o
+  // efeito se perde. Aqui o tema do sistema não manda — e a tela de definições
+  // que deixa escolher só existe do lado da frota.
+  if (isInvestPortal || resolved === 'dark') root.classList.add('dark');
   else root.classList.remove('dark');
 }
 
@@ -39,7 +44,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return (localStorage.getItem(STORAGE_KEY) as Theme) ?? 'system';
   });
 
-  const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
+  const resolvedTheme: 'light' | 'dark' = isInvestPortal
+    ? 'dark'
+    : (theme === 'system' ? getSystemTheme() : theme);
 
   useEffect(() => {
     applyTheme(resolvedTheme);

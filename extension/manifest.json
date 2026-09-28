@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "DragonFleet — recolha de rendimentos",
-  "version": "0.2.0",
-  "description": "Lê a tabela de rendimentos da Uber e da Bolt e envia-a para o DragonFleet, para conferência.",
+  "name": "DragonFleet — recolha dos portais",
+  "version": "0.3.0",
+  "description": "Lê as tabelas da Uber, Bolt, Prio e Via Verde e envia-as para o DragonFleet, para conferência.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,6 +11,8 @@
   "host_permissions": [
     "https://supplier.uber.com/*",
     "https://fleets.bolt.eu/*",
+    "https://www.viaverde.pt/*",
+    "https://www.myprio.com/*",
     "http://localhost/*",
     "http://localhost:3000/*"
   ],
@@ -20,6 +22,6 @@
   ],
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "Recolher rendimentos"
+    "default_title": "Recolher do portal"
   }
 }

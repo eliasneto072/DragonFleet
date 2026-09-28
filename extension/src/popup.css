@@ -22,3 +22,11 @@ td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
 .aviso { margin-top:8px; padding:8px; border-radius:6px; background:#fff8e6; border:1px solid #f0d9a0; font-size:12px; }
 .erro { margin-top:10px; padding:8px; border-radius:6px; background:#fdecea; border:1px solid #f5c4be; color:var(--erro); font-size:12px; white-space:pre-wrap; }
 footer { margin-top:10px; text-align:center; }
+
+/* Despesas */
+#avisos > div { margin-bottom:6px; }
+.certo { padding:6px 8px; border-radius:6px; background:#eaf6ef; border:1px solid #bfe3cd; color:#0d6b4f; font-size:12px; }
+.erro-leve { padding:6px 8px; border-radius:6px; background:#fdecea; border:1px solid #f5c4be; color:var(--erro); font-size:12px; }
+.suave { color:var(--suave); }
+td.solto { color:#a15c00; font-style:italic; }
+tr.nao-desconta td { color:var(--suave); text-decoration:line-through; }

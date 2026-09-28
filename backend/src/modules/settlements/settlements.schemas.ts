@@ -110,3 +110,13 @@ export const cancelSettlementSchema = z.object({
     reason: z.string().max(2000).optional(),
   }),
 });
+
+/**
+ * POST /settlements/drafts e /settlements/drafts/preview — a semana a gerar.
+ *
+ * Só o dia; que seja segunda-feira verifica o serviço, com uma mensagem que
+ * diz porquê.
+ */
+export const generateDraftsSchema = z.object({
+  body: z.object({ weekStart: dayString }),
+});
