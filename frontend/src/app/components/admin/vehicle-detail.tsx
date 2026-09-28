@@ -35,6 +35,7 @@ import {
   VEHICLE_STATUS_LABELS, VEHICLE_STATUS_STYLES, VEHICLE_REQUIRED_DOCS,
 } from '@/shared/lib/vehicle-labels';
 import { DOCUMENT_TYPE_LABELS } from '@/shared/lib/document-labels';
+import { FuelCards } from './fuel-cards';
 
 function docStatusBadge(status: DocumentStatus) {
   const map: Record<DocumentStatus, { cls: string; label: string; Icon: typeof CheckCircle }> = {
@@ -296,6 +297,9 @@ export function VehicleDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Cartões Prio associados ao CARRO, e não a um motorista. */}
+          <FuelCards vehicleId={id} />
         </div>
       </div>
 

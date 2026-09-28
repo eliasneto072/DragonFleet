@@ -1,0 +1,44 @@
+/* Páginas de simulação. Neutras de propósito: imitam a ESTRUTURA das tabelas
+   dos portais (cabeçalhos, células de duas linhas, ícones), não o aspeto. */
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1d2320; background: #f4f5f4; }
+.faixa { background: #fff4d6; border-bottom: 1px solid #e8cf8a; color: #6b4e00; padding: 10px 24px; font-size: 13px; }
+.faixa b { letter-spacing: .04em; }
+main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 60px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+.sub { color: #5d6a63; margin: 0 0 22px; }
+.filtro { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; background: #fff; border: 1px solid #dfe3e0; padding: 16px; border-radius: 8px; margin-bottom: 18px; }
+.filtro label { display: flex; flex-direction: column; font-size: 12px; color: #5d6a63; gap: 4px; }
+.filtro input { padding: 7px 9px; border: 1px solid #cfd5d1; border-radius: 6px; font: inherit; }
+.filtro button { padding: 8px 16px; border: 0; border-radius: 6px; background: #2f4f43; color: #fff; font: inherit; cursor: pointer; }
+.contagem { color: #5d6a63; margin: 0 0 10px; }
+.caixa { overflow-x: auto; background: #fff; border: 1px solid #dfe3e0; border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th { text-align: left; background: #eef1ef; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; padding: 10px 10px; vertical-align: bottom; }
+td { padding: 9px 10px; border-top: 1px solid #eceeed; vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2a9d63; margin-right: 4px; }
+.info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #3a6ea5; color: #fff; font-size: 10px; font-weight: 700; margin-right: 6px; }
+.total { display: flex; justify-content: space-between; background: #fff; border: 1px solid #dfe3e0; border-radius: 8px; margin-top: 10px; padding: 12px 14px; font-weight: 600; }
+.total span { color: #5d6a63; font-weight: 400; }
+.estado svg, .servico svg { width: 18px; height: 18px; }
+.cancel { font-size: 16px; color: #7a7f7c; }
+.nota { margin-top: 26px; font-size: 12.5px; color: #5d6a63; max-width: 70ch; }
+
+/* Uber e Bolt */
+.duas { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 760px) { .duas { grid-template-columns: 1fr; } }
+.saldo { background: #fff; border: 1px solid #dfe3e0; border-radius: 12px; padding: 16px; font-size: 13px; }
+.saldo .grande { font-size: 28px; font-weight: 700; margin: 2px 0 12px; }
+.saldo div { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid #eceeed; }
+.periodo-pill { display: inline-block; background: #eceeed; border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: 13px; }
+.avatar { display: inline-block; width: 22px; height: 22px; border-radius: 50%; vertical-align: middle; margin-right: 8px; background: #c7d1cc; }
+.kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.kpi { background: #fff; border: 1px solid #dfe3e0; border-radius: 10px; padding: 10px 14px; min-width: 150px; }
+.kpi small { display: block; color: #5d6a63; font-size: 12px; }
+.kpi b { font-size: 20px; }
+.vat { display: block; color: #7a837e; font-size: 11px; }
+.links { display: grid; gap: 10px; max-width: 520px; }
+.links a { display: block; background: #fff; border: 1px solid #dfe3e0; border-radius: 8px; padding: 12px 14px; color: inherit; text-decoration: none; }
+.links a:hover { border-color: #2f4f43; }
+.links small { display: block; color: #5d6a63; }

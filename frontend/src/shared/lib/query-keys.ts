@@ -201,6 +201,17 @@ export const queryKeys = {
       ['settlements', 'reported', userId, from, to] as const,
   },
 
+  // Despesas importadas (Prio, Via Verde). Invalidar por prefixo
+  // (expenses.all) depois de importar, atribuir ou mudar um cartão: o
+  // formulário do fecho e a fila leem daqui.
+  expenses: {
+    all: ['expenses'] as const,
+    forSettlement: (userId: string, weekStart: string) =>
+      ['expenses', 'for-settlement', userId, weekStart] as const,
+    unmatched: ['expenses', 'unmatched'] as const,
+    cards: (owner: string) => ['expenses', 'cards', owner] as const,
+  },
+
   // Settings (admin)
   settings: {
     all: ['settings'] as const,

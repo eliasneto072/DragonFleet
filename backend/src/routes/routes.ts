@@ -20,6 +20,7 @@ import { ranksRouter } from '../modules/ranks/ranks.routes';
 import { investorsRouter } from '../modules/investors/investors.routes';
 import { denyInvestor } from '../middlewares/deny-investor.middleware';
 import { permissionsRouter } from '../modules/permissions/permissions.routes';
+import { expensesRouter } from '../modules/expenses/expenses.routes';
 import { requireArea } from '../middlewares/area.middleware';
 
 const router = Router();
@@ -56,6 +57,9 @@ router.use('/reports', requireArea('FINANCIAL'), reportsRouter());
 router.use('/settings', requireArea('SETTINGS'), settingsRouter());
 router.use('/balance', requireArea('FINANCIAL'), balanceRouter());
 router.use('/settlements', requireArea('SETTLEMENTS'), settlementsRouter());
+// Despesas importadas (Prio e Via Verde): alimentam o fecho, portanto vivem na
+// mesma área. Depois do denyInvestor, como tudo o que é da frota.
+router.use('/expenses', requireArea('SETTLEMENTS'), expensesRouter());
 router.use('/bank', requireArea('FINANCIAL'), bankRouter());
 router.use('/companies', requireArea('GREEN_RECEIPTS'), companiesRouter());
 router.use('/investments', requireArea('INVESTMENTS'), investmentsRouter());

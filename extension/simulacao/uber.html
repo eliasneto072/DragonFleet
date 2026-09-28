@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="dragonfleet-simulacao" content="UBER">
+<title>Simulação · rendimentos (formato Uber)</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Uber.</div>
+<main>
+  <p class="sub">Imita a página <em>Rendimentos</em> do portal de fornecedores, com as mesmas colunas.</p>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+    <h1>Rendimentos</h1>
+    <span class="periodo-pill">21/09/2026 04:00 AM - 27/09/2026 11:59 PM</span>
+  </div>
+
+  <div class="duas">
+    <aside class="saldo">
+      Saldo final
+      <p class="grande">1718,32 €</p>
+      <div><span>Saldo inicial</span><span>0,00 €</span></div>
+      <div><span>Rendimentos totais</span><span>1695,75 €</span></div>
+      <div><span>Reembolsos e despesas</span><span>20,80 €</span></div>
+      <div><span>Ajustes de períodos anteriores</span><span>1,77 €</span></div>
+      <div><span>Pagamento</span><span>0,00 €</span></div>
+      <div><strong>Saldo final</strong><strong>1718,32 €</strong></div>
+    </aside>
+
+    <section>
+      <h2 style="font-size:18px;margin:0 0 10px">Rendimentos do motorista</h2>
+      <div class="caixa">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome do motorista</th><th>Rendimentos totais</th><th>Reembolsos e despesas</th>
+              <th>Ajustes</th><th>Pagamento</th><th>Rendimentos líquidos</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="avatar"></span>Ana Sofia Martins</td><td class="num">612,40 €</td><td class="num">8,50 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">620,90 €</td><td>›</td></tr>
+            <tr><td><span class="avatar"></span>Bruno Sousa</td><td class="num">455,10 €</td><td class="num">0,00 €</td><td class="num">1,77 €</td><td class="num">0,00 €</td><td class="num">456,87 €</td><td>›</td></tr>
+            <tr><td><span class="avatar"></span>Carla Pinto</td><td class="num">530,25 €</td><td class="num">12,30 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">542,55 €</td><td>›</td></tr>
+            <tr><td><span class="avatar"></span>Rui Tavares</td><td class="num">98,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">0,00 €</td><td class="num">98,00 €</td><td>›</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <p class="nota">O que esta página exercita: o nome completo da Uber ("Ana Sofia Martins") contra o nome curto no DragonFleet ("Ana Martins") — emparelha pelo primeiro e último nome; os reembolsos separados dos rendimentos, para não entrarem na base do imposto; e um motorista que não existe no DragonFleet, que fica de fora.</p>
+</main>
+</body>
+</html>

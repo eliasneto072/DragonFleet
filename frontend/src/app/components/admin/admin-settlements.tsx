@@ -34,7 +34,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileSpreadsheet, FileText, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileSpreadsheet, FileText, ListPlus, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
@@ -46,6 +46,7 @@ import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import type { SettlementStatus } from '@/shared/types/api';
 import { SettlementForm } from './settlement-form';
+import { GenerateDraftsDialog } from './generate-drafts-dialog';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { Pagination } from '@/app/components/ui/list-toolbar';
 
@@ -344,6 +345,8 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   const [cancelReason, setCancelReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ApiSettlement | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Gerar os rascunhos da semana a partir do que a extensão importou.
+  const [gerarAberto, setGerarAberto] = useState(false);
 
   // ─── FASE 4 ────────────────────────────────────────────────────────────────
   //
@@ -415,9 +418,13 @@ export function AdminSettlements({ hideHeader = false }: Props) {
           : <FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />}
         Exportar Excel
       </Button>
+      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setGerarAberto(true)}>
+        <ListPlus className="mr-2 h-4 w-4" aria-hidden="true" />Gerar rascunhos da semana
+      </Button>
       <Button className="w-full sm:w-auto" onClick={() => setMode({ view: 'form' })}>
         <Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo fecho
       </Button>
+      <GenerateDraftsDialog open={gerarAberto} onOpenChange={setGerarAberto} />
     </>
   );
 

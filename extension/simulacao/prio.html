@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<!-- É isto que diz à extensão que página é esta. O portal real reconhece-se
+     pelo endereço; um ficheiro local não tem endereço que o identifique. -->
+<meta name="dragonfleet-simulacao" content="PRIO">
+<title>Simulação · transações de cartões (formato Prio)</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Prio.</div>
+<main>
+  <h1>Transações Frota</h1>
+  <p class="sub">Imita a tabela de <em>Transações de Cartões › Prio Frota</em>, com as mesmas colunas e o mesmo formato de células.</p>
+
+  <div class="filtro">
+    <label>INÍCIO <input id="inicio" value="21/09/2026" readonly></label>
+    <label>FIM <input id="fim" value="27/09/2026" readonly></label>
+    <button type="button">Pesquisar</button>
+  </div>
+
+  <p class="contagem">1 a 6 de 6 registos</p>
+
+  <div class="caixa">
+    <table>
+      <thead>
+        <tr>
+          <th>Posto</th><th>Rede</th><th>Data</th><th>Cartão</th><th>Estado</th><th>Litros</th>
+          <th>Comb.</th><th>Recibo</th><th>Km's</th><th>ID Cond.</th><th>Fatura</th>
+          <th>V. Unit.<br>(S/IVA)</th><th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Lisboa Olivais</td><td>Geral</td>
+          <td><div>21/09/2026</div><div>08:14</div></td>
+          <td><div>7824000011112222</div><div>AA-01-DF</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">38.20 L</td><td>ECO DIESEL</td>
+          <td>900101</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.7650 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>82,93€</td>
+        </tr>
+        <tr>
+          <td>Sintra IC19</td><td>Geral</td>
+          <td><div>22/09/2026</div><div>19:02</div></td>
+          <td><div>7824000033334444</div><div>BB-02-DF</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">42.00 L</td><td>TOP DIESEL</td>
+          <td>900102</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.7797 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>91,94€</td>
+        </tr>
+        <tr>
+          <td>Loures A8</td><td>Geral</td>
+          <td><div>23/09/2026</div><div>13:40</div></td>
+          <td><div>7824000077778888</div><div>CC-03-DF</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">30.50 L</td><td>ECO DIESEL</td>
+          <td>900103</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.7650 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>66,21€</td>
+        </tr>
+        <tr>
+          <td>Oeiras Marginal</td><td>Geral</td>
+          <td><div>24/09/2026</div><div>07:55</div></td>
+          <td><div>7824000011112222</div><div>AA-01-DF</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">25.00 L</td><td>ECO DIESEL</td>
+          <td>900104</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.8000 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>55,35€</td>
+        </tr>
+        <tr>
+          <td>Almada Centro</td><td>Geral</td>
+          <td><div>25/09/2026</div><div>22:31</div></td>
+          <td><div>7824000055556666</div><div>ZZ-99-ZZ</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">20.00 L</td><td>ECO DIESEL</td>
+          <td>900105</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.8000 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>44,28€</td>
+        </tr>
+        <tr>
+          <td>Cascais Torre</td><td>Geral</td>
+          <td><div>26/09/2026</div><div>10:05</div></td>
+          <td><div>7824000033334444</div><div>BB-02-DF</div></td>
+          <td><span class="ponto"></span>Ativo</td><td class="num">33.10 L</td><td>ECO DIESEL</td>
+          <td>900106</td><td>1</td><td>01</td><td>A aguardar fatura</td>
+          <td class="num">1.7650 €</td><td class="num"><span class="info" title="Detalhe da transação">i</span>71,86€</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="total">TOTAL <span>(21/09/2026 a 27/09/2026)</span> <b>412.57 €</b></div>
+
+  <p class="nota">O que esta página exercita: a data e o cartão em duas linhas dentro da mesma célula; o ícone de informação antes do valor; o TOTAL do rodapé escrito com ponto decimal, ao contrário das linhas; e quatro formas de emparelhar — cartão de um motorista, cartão de um carro, cartão desconhecido com matrícula conhecida, e nenhum dos dois.</p>
+</main>
+</body>
+</html>

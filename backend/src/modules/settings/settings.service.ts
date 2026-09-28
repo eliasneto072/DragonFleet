@@ -35,7 +35,20 @@ export class SettingsService {
   async get() {
     const existing = await prisma.systemSettings.findUnique({ where: { id: GLOBAL_ID } });
     if (existing) return existing;
-    return prisma.systemSettings.create({ data: { id: GLOBAL_ID } });
+    try {
+      return await prisma.systemSettings.create({ data: { id: GLOBAL_ID } });
+    } catch (err: any) {
+      // Dois pedidos ao mesmo tempo numa base onde a linha ainda não existe:
+      // ambos a procuram, ambos a tentam criar, e o segundo choca com o
+      // primeiro. Não é um erro — a linha que ele queria já lá está.
+      //
+      // Acontecia na primeira utilização de uma base nova, e foi apanhado pelo
+      // gerador de rascunhos, que pede a comissão e o imposto em paralelo.
+      if (err?.code === 'P2002') {
+        return prisma.systemSettings.findUniqueOrThrow({ where: { id: GLOBAL_ID } });
+      }
+      throw err;
+    }
   }
 
   /** ADMIN-only update. Validates ranges and ignores unknown keys. */

@@ -169,7 +169,8 @@ async function lerPagina() {
 // ─── Pré-visualização e envio ─────────────────────────────────────────────────
 
 function desenhar(dados, previsto) {
-  $('portal').textContent = dados.platform;
+  $('portal').textContent = dados.platform + (dados.simulacao ? ' · simulação' : '');
+  $('avisos').replaceChildren();
 
   $('periodo').textContent = dados.periodo
     ? `${dados.periodo.periodStart} a ${dados.periodo.periodEnd}`
@@ -210,6 +211,7 @@ async function rever() {
     const dados = await lerPagina();
     if (!dados) throw new Error('Não consegui ler esta página.');
     if (dados.erro) throw new Error(dados.erro);
+    if (dados.kind === 'EXPENSES') return await reverDespesas(dados);
     if (dados.rows.length === 0) throw new Error('Nenhum motorista encontrado na tabela.');
 
     estado.dados = dados;
@@ -245,6 +247,7 @@ async function rever() {
 async function enviar() {
   erro('');
   $('enviar').disabled = true;
+  if (estado.dados?.kind === 'EXPENSES') return enviarDespesas();
 
   try {
     const { dados } = estado;
@@ -266,6 +269,162 @@ async function enviar() {
       `${r.inserted} criados · ${r.skippedDuplicates} repetidos · ${r.unmatched.length} por emparelhar`;
     $('linhas').innerHTML =
       '<tr><td colspan="2">Enviado. Confira em Faturação › Por confirmar.</td></tr>';
+  } catch (e) {
+    erro(e.message);
+    $('enviar').disabled = false;
+  }
+}
+
+// ─── Despesas: Prio e Via Verde ───────────────────────────────────────────────
+//
+// O mesmo princípio dos ganhos — ler, pré-visualizar, só depois enviar — com
+// três diferenças que mudam o que se mostra:
+//
+//   1. Não há período a escolher. Cada linha traz a sua data, e o servidor põe
+//      cada uma na semana certa (a Via Verde na semana seguinte).
+//   2. O que não emparelha NÃO se perde: grava-se sem motorista e fica na fila
+//      para atribuir à mão. Nos ganhos, o que não emparelha não entra.
+//   3. Há linhas que entram mas não se descontam — a mensalidade da Via Verde,
+//      os cancelados. Mostram-se riscadas para se ver que foram lidas.
+//
+// Tudo o que vem da página é escrito com textContent e nunca com innerHTML: um
+// nome de posto ou uma descrição de trajeto são texto de terceiros.
+
+const NOME_FONTE = { PRIO: 'Prio', VIA_VERDE: 'Via Verde' };
+
+function dataCurta(dia) {
+  const [a, m, d] = String(dia).slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
+}
+
+function el(tag, props = {}, ...filhos) {
+  const n = document.createElement(tag);
+  Object.assign(n, props);
+  for (const f of filhos) n.append(f);
+  return n;
+}
+
+function aviso(texto, tipo = 'aviso') {
+  $('avisos').append(el('div', { className: tipo, textContent: texto }));
+}
+
+async function pedirDespesas(rota, dados) {
+  const res = await fetch(`${estado.api}${rota}`, {
+    method: 'POST',
+    headers: cabecalhos(),
+    body: JSON.stringify({ source: dados.source, rows: dados.rows }),
+  });
+  const json = await respostaJson(res, estado.api);
+  if (!res.ok) throw new Error(json?.message ?? 'O pedido falhou.');
+  return json.data ?? json;
+}
+
+async function reverDespesas(dados) {
+  if (dados.rows.length === 0) {
+    throw new Error(
+      'A tabela está vazia.\n\n' +
+      (dados.source === 'PRIO'
+        ? 'Escolha o INÍCIO e o FIM na pesquisa e carregue em Pesquisar.'
+        : 'Abra o filtro, escolha as datas De e Até, e carregue em Filtrar.'),
+    );
+  }
+  estado.dados = dados;
+  estado.previsto = await pedirDespesas('/expenses/ingest/preview', dados);
+  desenharDespesas(dados, estado.previsto);
+}
+
+function desenharDespesas(dados, s) {
+  $('portal').textContent = NOME_FONTE[dados.source] + (dados.simulacao ? ' · simulação' : '');
+  $('avisos').replaceChildren();
+
+  // O intervalo que de facto se leu, e não o que o filtro diz.
+  const dias = s.rows.map((r) => r.day).sort();
+  $('periodo').textContent = dias.length
+    ? `Movimentos de ${dataCurta(dias[0])} a ${dataCurta(dias[dias.length - 1])}` +
+      (dados.source === 'VIA_VERDE' ? ' — descontam no fecho da semana seguinte' : '')
+    : '';
+
+  $('resumo').textContent =
+    `${s.total} movimento${s.total !== 1 ? 's' : ''} · ${eur(s.chargeableTotal)} a descontar`;
+
+  // Só parte da lista está no ecrã?
+  if (dados.anunciadas && dados.anunciadas > dados.rows.length) {
+    aviso(
+      `O portal diz ${dados.anunciadas}, a página mostra ${dados.rows.length}. ` +
+      'Há mais páginas: envie esta, passe à seguinte e envie outra vez. ' +
+      'O que se repetir não entra duas vezes.',
+    );
+  }
+
+  // Conferência com o TOTAL da Prio.
+  if (dados.totalPortal != null) {
+    const lido = Math.round(s.rows.reduce((a, r) => a + r.amount, 0) * 100) / 100;
+    if (Math.abs(lido - dados.totalPortal) > 0.01) {
+      aviso(
+        `A soma das linhas lidas (${eur(lido)}) não bate com o TOTAL do portal ` +
+        `(${eur(dados.totalPortal)}). Alguma linha ficou de fora ou não se leu.`,
+      );
+    } else {
+      aviso(`Bate com o TOTAL do portal: ${eur(dados.totalPortal)}.`, 'certo');
+    }
+  }
+
+  if (s.invalid.length) {
+    aviso(
+      `${s.invalid.length} linha${s.invalid.length !== 1 ? 's' : ''} por ler — ` +
+      s.invalid.slice(0, 3).map((i) => `linha ${i.index + 1}: ${i.reason}`).join('; ') +
+      (s.invalid.length > 3 ? '…' : '') + '. Não serão gravadas.',
+      'erro-leve',
+    );
+  }
+
+  // As linhas.
+  const corpo = s.rows.slice(0, 14).map((r) => {
+    const quem = r.userName ?? '— por atribuir';
+    const tr = el('tr', {},
+      el('td', { textContent: quem, className: r.userId ? '' : 'solto' }),
+      el('td', { textContent: r.plate ?? '', className: 'suave' }),
+      el('td', { textContent: eur(r.amount) }),
+    );
+    if (!r.chargeable) {
+      tr.className = 'nao-desconta';
+      tr.title = r.category === 'FEE' ? 'Mensalidade — fica na empresa' : `Não desconta: ${r.statusText ?? ''}`;
+    }
+    return tr;
+  });
+  if (s.rows.length > 14) {
+    corpo.push(el('tr', {}, el('td', { colSpan: 3, className: 'suave', textContent: `…e mais ${s.rows.length - 14}` })));
+  }
+  $('linhas').replaceChildren(...corpo);
+
+  if (s.unmatched > 0) {
+    $('porEmparelhar').hidden = false;
+    $('porEmparelhar').replaceChildren(
+      el('strong', { textContent: `${s.unmatched} sem motorista` }),
+      el('br'),
+      document.createTextNode(
+        'Cartão e matrícula desconhecidos, ou carro sem ninguém atribuído nessa hora. ' +
+        'Serão gravados na mesma e ficam na fila de Faturação para atribuir à mão.',
+      ),
+    );
+  } else {
+    $('porEmparelhar').hidden = true;
+  }
+
+  $('enviar').disabled = s.total === 0;
+}
+
+async function enviarDespesas() {
+  try {
+    const s = await pedirDespesas('/expenses/ingest', estado.dados);
+    $('avisos').replaceChildren();
+    $('resumo').textContent =
+      `${s.inserted} novos · ${s.duplicates} já lá estavam · ${s.unmatched} por atribuir`;
+    $('linhas').replaceChildren(el('tr', {}, el('td', {
+      colSpan: 3,
+      textContent: 'Enviado. Os valores aparecem no formulário do fecho de cada motorista.',
+    })));
+    $('porEmparelhar').hidden = true;
   } catch (e) {
     erro(e.message);
     $('enviar').disabled = false;

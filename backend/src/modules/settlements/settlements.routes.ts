@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { settlementsController } from './settlements.controller';
+import { requireArea } from '../../middlewares/area.middleware';
 
 export function settlementsRouter(): Router {
   const router = Router();
@@ -19,6 +20,12 @@ export function settlementsRouter(): Router {
 
   // Escrita — apenas ADMIN ou MANAGER, garantido em settlementsService.
   router.post('/preview', settlementsController.preview);
+
+  // Rascunhos da semana, a partir do que a extensão importou. Criar é uma
+  // escrita em lote: pede a Faturação em MANAGE, como a importação das
+  // despesas. A pré-visualização só lê.
+  router.post('/drafts/preview', settlementsController.draftsPreview);
+  router.post('/drafts', requireArea('SETTLEMENTS', 'MANAGE'), settlementsController.generateDrafts);
   router.post('/', settlementsController.create);
   router.patch('/:id', settlementsController.update);
   router.post('/:id/register', settlementsController.register);

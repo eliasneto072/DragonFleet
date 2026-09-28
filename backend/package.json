@@ -18,7 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:all": "npm test && npm run test:integration",
-    "seed:perf": "tsx prisma/seed-perf.ts"
+    "seed:perf": "tsx prisma/seed-perf.ts",
+    "seed:despesas": "tsx prisma/seed-despesas.ts"
   },
   "keywords": [],
   "author": "",

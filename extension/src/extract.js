@@ -176,4 +176,181 @@ function lerLinhasDeDivs(raiz) {
   return linhas;
 }
 
-const extrator = { encontrarTabela, lerLinhasDeTable, lerLinhasDeDivs, texto, normalizar };
+// ─── TABELAS DE MOVIMENTOS: Prio e Via Verde ─────────────────────────────────
+//
+// As tabelas acima são de GANHOS: um nome e um valor por linha. As da Prio e da
+// Via Verde são de MOVIMENTOS — data, matrícula, valor — e têm duas coisas que
+// as de ganhos não têm:
+//
+//   1. Células com DUAS LINHAS. A data da Prio é "23/09/2026" por cima de
+//      "14:02"; o cartão é o número por cima da matrícula.
+//   2. Colunas que são ÍCONES. O estado da Via Verde é um X ou um relógio.
+//
+// Daí um leitor próprio. Continua a não haver seletores CSS: a tabela é
+// encontrada pelo texto dos cabeçalhos, como nas outras.
+
+/**
+ * O texto de uma célula, com as quebras de linha PRESERVADAS.
+ *
+ * `textContent` cola o que o portal desenha em blocos separados: a data
+ * "23/09/2026" por cima de "14:02" chegava como "23/09/202614:02", e do outro
+ * lado já não há forma de a separar. `innerText` segue a disposição que o
+ * browser desenhou e põe um "\n" entre as duas. O servidor sabe ler isso.
+ */
+function textoCelula(el) {
+  if (!el) return '';
+  const bruto = typeof el.innerText === 'string' ? el.innerText : (el.textContent ?? '');
+  return bruto
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * O que um ícone quer dizer, lido do que o descreve.
+ *
+ * Por ordem de confiança: os atributos que existem para isto (title,
+ * aria-label, alt, o <title> de um SVG); depois um glifo sozinho ("✕");
+ * por último o nome das classes, que é uma aposta.
+ *
+ * Devolve null quando não encontra nada. É melhor do que adivinhar: o
+ * servidor trata "sem estado" como "não cancelado", e a linha aparece na
+ * pré-visualização para alguém ver.
+ */
+function descreverIcone(el) {
+  if (!el) return null;
+  const nos = [el, ...el.querySelectorAll('*')];
+
+  const ditos = [];
+  for (const n of nos) {
+    for (const a of ['title', 'aria-label', 'alt', 'data-original-title', 'data-tooltip', 'data-title']) {
+      const v = n.getAttribute?.(a);
+      if (v && v.trim()) ditos.push(v.trim());
+    }
+    if (n.tagName && n.tagName.toLowerCase() === 'title' && n.textContent.trim()) {
+      ditos.push(n.textContent.trim());
+    }
+  }
+  if (ditos.length) return [...new Set(ditos)].join(' · ');
+
+  const t = textoCelula(el);
+  if (/^[×✕✖✗xX]$/.test(t)) return 'Cancelado';
+  if (/^[✓✔]$/.test(t)) return 'Pago';
+
+  const classes = nos.map((n) => n.getAttribute?.('class') ?? '').join(' ').toLowerCase();
+  if (/cancel|anulad|\bicon-close\b|\bfa-times\b|\bfa-xmark\b|\bx-mark\b/.test(classes)) return 'Cancelado (pelo ícone)';
+  if (/clock|pending|pendente|hourglass|\bfa-clock\b/.test(classes)) return 'Pendente (pelo ícone)';
+  if (/\bcheck\b|success|\bpaid\b|\bpago\b|fa-check/.test(classes)) return 'Pago (pelo ícone)';
+
+  return t || null;
+}
+
+/**
+ * Encontra a grelha cujos cabeçalhos contêm todos os textos pedidos, e devolve
+ * os cabeçalhos e as linhas como listas de células.
+ *
+ * Três formas, porque os portais usam as três:
+ *   - <table> com cabeçalho e corpo na mesma tabela;
+ *   - <table> de cabeçalho separada da <table> do corpo (cabeçalho fixo);
+ *   - grelha ARIA: role="table"/"grid", role="row", role="cell".
+ */
+function encontrarGrelha(cabecalhosProcurados) {
+  const procurados = cabecalhosProcurados.map(normalizar);
+  const temTodos = (cabs) => procurados.every((p) => cabs.some((c) => c === p || c.startsWith(p)));
+
+  for (const tabela of document.querySelectorAll('table')) {
+    const linhaCab = tabela.querySelector('thead tr')
+      ?? [...tabela.querySelectorAll('tr')].find((tr) => tr.querySelector('th'));
+    if (!linhaCab) continue;
+
+    const cabecalhos = [...linhaCab.children].map((c) => normalizar(texto(c)));
+    if (!temTodos(cabecalhos)) continue;
+
+    let linhas = [...tabela.querySelectorAll('tr')]
+      .filter((tr) => tr !== linhaCab && !tr.closest('thead') && !tr.closest('tfoot'))
+      .map((tr) => [...tr.children]);
+
+    // Cabeçalho fixo: a tabela do cabeçalho não tem corpo. O corpo é a tabela
+    // seguinte com o mesmo número de colunas.
+    if (linhas.filter((l) => l.length > 1).length === 0) {
+      const todas = [...document.querySelectorAll('table')];
+      for (const outra of todas.slice(todas.indexOf(tabela) + 1)) {
+        const candidatas = [...outra.querySelectorAll('tr')].map((tr) => [...tr.children]);
+        if (candidatas.some((l) => l.length === cabecalhos.length)) {
+          linhas = candidatas;
+          break;
+        }
+      }
+    }
+    return { cabecalhos, linhas };
+  }
+
+  for (const grelha of document.querySelectorAll('[role="table"], [role="grid"], [role="treegrid"]')) {
+    const cabecalhos = [...grelha.querySelectorAll('[role="columnheader"]')].map((c) => normalizar(texto(c)));
+    if (!temTodos(cabecalhos)) continue;
+
+    const linhas = [...grelha.querySelectorAll('[role="row"]')]
+      .filter((r) => !r.querySelector('[role="columnheader"]'))
+      .map((r) => [...r.querySelectorAll('[role="cell"], [role="gridcell"]')]);
+    return { cabecalhos, linhas };
+  }
+
+  return null;
+}
+
+/**
+ * Lê as linhas de uma grelha, campo a campo, pelo nome da coluna.
+ *
+ * `mapa` é { campo: 'cabecalho' }. Devolve, por linha, o ELEMENTO de cada
+ * célula e não o texto: cada portal decide como ler cada célula — umas pelo
+ * texto, outras pelo ícone.
+ *
+ * Linhas vazias e de TOTAL ficam de fora. Linhas com menos células do que as
+ * colunas pedidas também, porque costumam ser separadores ou detalhes
+ * expandidos, e ler posições nelas daria valores trocados.
+ */
+function lerGrelha(obrigatorios, mapa) {
+  const grelha = encontrarGrelha(obrigatorios);
+  if (!grelha) return null;
+
+  const indices = {};
+  for (const [campo, procurado] of Object.entries(mapa)) {
+    const alvo = normalizar(procurado);
+    indices[campo] = grelha.cabecalhos.findIndex((c) => c === alvo || c.startsWith(alvo));
+  }
+  const maiorIndice = Math.max(...Object.values(indices).filter((i) => i >= 0));
+
+  const linhas = [];
+  for (const celulas of grelha.linhas) {
+    if (celulas.length <= maiorIndice) continue;
+    const primeira = normalizar(texto(celulas[0]));
+    if (!primeira && celulas.every((c) => !texto(c))) continue;
+    if (primeira.startsWith('total')) continue;
+
+    const linha = {};
+    for (const [campo, i] of Object.entries(indices)) linha[campo] = i >= 0 ? celulas[i] : null;
+    linhas.push(linha);
+  }
+
+  return { linhas, colunasEmFalta: Object.keys(indices).filter((k) => indices[k] < 0) };
+}
+
+/**
+ * Só a quantia de uma célula de valor.
+ *
+ * A célula do TOTAL da Prio tem um ícone de informação antes do número, e a do
+ * valor da Via Verde tem um ícone depois. Fica a última coisa que parece uma
+ * quantia — de preferência uma com casas decimais.
+ */
+function quantiaDe(t) {
+  const achadas = String(t ?? '').match(/-?\d[\d.,\s]*\d\s*€?|-?\d\s*€?/g) ?? [];
+  const decimais = achadas.filter((a) => /[.,]\d{1,4}/.test(a));
+  const escolhida = (decimais.length ? decimais : achadas).pop();
+  return escolhida ? escolhida.replace(/\s+/g, '') : null;
+}
+
+const extrator = {
+  encontrarTabela, lerLinhasDeTable, lerLinhasDeDivs, texto, normalizar,
+  textoCelula, descreverIcone, encontrarGrelha, lerGrelha, quantiaDe,
+};

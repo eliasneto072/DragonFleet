@@ -29,6 +29,8 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals-card';
 import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
+import { FuelCards } from '@/app/components/admin/fuel-cards';
+import { useAuth } from '@/features/auth/context/AuthContext';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
 import {
@@ -98,6 +100,10 @@ function viewDocument(id: string) {
 
 export function DriverDetailPage() {
   const { id = '' } = useParams();
+  // O suporte abre esta ficha para responder a tickets, mas os cartões Prio não
+  // lhe dizem respeito — e o servidor recusa-lhos.
+  const { user: sessao } = useAuth();
+  const veCartoes = sessao?.role === 'ADMIN' || sessao?.role === 'MANAGER';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -562,6 +568,8 @@ export function DriverDetailPage() {
             que carros esta pessoa conduziu, e quando. */}
 
         <DriverVehicleHistory userId={id} />
+
+        {veCartoes && <FuelCards userId={id} />}
 
           {/* Ações de estado no fim, e não no topo: são destrutivas, e nenhuma
               delas é a razão comum para abrir a ficha. */}

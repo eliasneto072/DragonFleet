@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="dragonfleet-simulacao" content="BOLT">
+<title>Simulação · earnings per driver (formato Bolt)</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="faixa"><b>SIMULAÇÃO</b> — página para testar a extensão do DragonFleet. Dados inventados. Não é o portal da Bolt.</div>
+<main>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px">
+    <h1>Earnings per driver</h1>
+    <span class="periodo-pill">21 Sep - 27 Sep</span>
+  </div>
+  <p class="sub">Imita <em>Finances › Earnings per driver</em>, com as mesmas colunas. O período é escolhido à mão, de segunda a domingo — não "Last 7 days".</p>
+
+  <div class="kpis">
+    <div class="kpi"><small>Gross earnings (total)</small><b>921.30€</b></div>
+    <div class="kpi"><small>Net earnings</small><b>701.85€</b></div>
+  </div>
+
+  <div class="caixa">
+    <table>
+      <thead>
+        <tr>
+          <th>Driver</th><th>Gross earnings (total)</th><th>Gross earnings (in-app payment)</th>
+          <th>Gross earnings (cash payment)</th><th>Collected cash</th><th>Rider tips</th>
+          <th>Campaign earnings</th><th>Expense reimbursements</th><th>Cancellation fees</th>
+          <th>Net earnings</th><th>Gross earnings per hour</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Ana Martins</td><td class="num">210.40 €</td><td class="num">204.40 €<span class="vat">VAT: 9.85 €</span></td><td class="num">—</td><td class="num">—</td><td class="num">2.0 €</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">160.1 €</td><td class="num">10.52 €/h</td></tr>
+        <tr><td>Bruno Sousa</td><td class="num">380.00 €</td><td class="num">372.30 €<span class="vat">VAT: 18.02 €</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">7.7 €</td><td class="num">289.5 €</td><td class="num">12.67 €/h</td></tr>
+        <tr><td>Cárla Pinto</td><td class="num">330.90 €</td><td class="num">330.90 €<span class="vat">VAT: 15.76 €</span></td><td class="num">—</td><td class="num">—</td><td class="num">1.0 €</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">252.25 €</td><td class="num">11.03 €/h</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="nota">O que esta página exercita: os números à inglesa ("160.1 €" é cento e sessenta, não mil seiscentos e um); o valor líquido como o que conta; e um nome com acento que o DragonFleet escreve sem ele.</p>
+</main>
+</body>
+</html>
