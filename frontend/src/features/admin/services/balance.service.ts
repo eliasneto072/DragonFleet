@@ -34,6 +34,9 @@ export interface Adjustment {
   createdBy: string | null;
   createdByName: string | null;
   createdAt: string;
+  /** Nulos enquanto nunca foi editado. */
+  editedAt?: string | null;
+  editedByName?: string | null;
 }
 
 interface CreateAdjustmentInput {
@@ -114,5 +117,18 @@ export const balanceService = {
   /** POST /balance/:userId/adjustments — admin/manager */
   createAdjustment(userId: string, input: CreateAdjustmentInput): Promise<{ adjustment: Adjustment }> {
     return apiClient.post(`/balance/${userId}/adjustments`, input);
+  },
+
+  /**
+   * PATCH /balance/adjustments/:id — corrigir a data ou o motivo.
+   *
+   * O valor e o tipo não se editam: mudá-los mexeria no saldo sem deixar
+   * rasto. Um valor errado corrige-se com um ajuste contrário.
+   */
+  updateAdjustment(
+    adjustmentId: string,
+    input: { createdAt?: string; reason?: string },
+  ): Promise<{ adjustment: Adjustment }> {
+    return apiClient.patch(`/balance/adjustments/${adjustmentId}`, input);
   },
 };

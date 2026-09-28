@@ -20,7 +20,7 @@ import {
 import {
   ArrowLeft, Loader2, AlertCircle, UserCheck, UserX, Ban, Mail, Wallet,
   Plus, Minus, TrendingUp, Clock, ArrowDownCircle,
-  CheckCircle, XCircle, Eye, CalendarClock, History, User, Car,
+  CheckCircle, XCircle, Eye, CalendarClock, User, Car,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usersService } from '@/features/admin/services/users.service';
@@ -31,6 +31,7 @@ import { DriverWithdrawalsCard } from '@/app/components/admin/driver-withdrawals
 import { DriverVehicleHistory } from '@/app/components/admin/driver-vehicle-history';
 import { FuelCards } from '@/app/components/admin/fuel-cards';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { DriverLedgerCard } from '@/app/components/admin/driver-ledger-card';
 import { DriverAvatar, findProfilePhoto } from '@/app/components/ui/driver-avatar';
 import { queryKeys } from '@/shared/lib/query-keys';
 import {
@@ -440,43 +441,12 @@ export function DriverDetailPage() {
                   </p>
                 )}
 
-                {/* Extrato de ajustes */}
-                <div>
-                  <p className="text-sm font-medium flex items-center gap-1 mb-3">
-                    <History className="h-4 w-4" />Histórico de ajustes
-                  </p>
-                  {adjustmentsQ.isLoading ? (
-                    <p className="text-sm text-muted-foreground">Carregando…</p>
-                  ) : adjustments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center border rounded-lg">
-                      Nenhum ajuste manual registado.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {adjustments.map((adj) => (
-                        <div key={adj.id} className="flex items-center justify-between border rounded-lg p-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${adj.type === 'CREDIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {adj.type === 'CREDIT' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {adj.reason || <span className="text-muted-foreground italic">Sem motivo</span>}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatDate(adj.createdAt)}
-                                {adj.createdByName ? ` · por ${adj.createdByName}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <p className={`font-semibold shrink-0 ml-2 ${adj.type === 'CREDIT' ? 'text-green-600' : 'text-destructive'}`}>
-                            {adj.type === 'CREDIT' ? '+' : '−'}{eur(adj.amount)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {/* Extrato completo.
+                    Era só a lista dos ajustes manuais, e os fechos — a maior
+                    parte do dinheiro — não apareciam aqui. Agora é o mesmo
+                    extrato que o motorista vê, com o saldo depois de cada
+                    movimento, que é o que permite verificar se bate certo. */}
+                <DriverLedgerCard userId={id} ajustes={adjustments} />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Não foi possível carregar o saldo.</p>

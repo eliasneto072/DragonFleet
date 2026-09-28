@@ -462,8 +462,37 @@ export function DriverDashboard() {
   const balance = summary?.available ?? 0;
   const isNegative = balance < 0;
   const lastWeek = weeks[0];
-  const totalReceived = weeks.reduce((s, w) => s + w.netToDriver, 0);
-  const average = weeks.length ? totalReceived / weeks.length : 0;
+  // ─── "TOTAL RECEBIDO" INCLUI OS AJUSTES MANUAIS ──────────────────────────
+  //
+  // Era só a soma dos fechos. Mas nem todo o dinheiro entra por um fecho: um
+  // pagamento à parte, um acerto, um prémio — tudo isso é lançado como ajuste
+  // manual, e o motorista via um total menor do que aquilo que de facto
+  // recebeu.
+  //
+  // Os débitos são subtraídos, e não ignorados: é dinheiro que saiu do que lhe
+  // foi entregue. Somar só os créditos dava um "recebido" maior do que a
+  // realidade.
+  //
+  // Vem do EXTRATO, que esta página já carrega, e não de uma consulta nova:
+  // é a mesma fonte do saldo, por isso este total nunca pode discordar dele.
+  // Enquanto o extrato não chega, mostra os fechos e completa-se sozinho.
+  // Ao cêntimo em cada passo. Somar 300 + 341,67 em vírgula flutuante dá
+  // 641,6700000000001, e este número deixou de ser só intermédio — aparece na
+  // legenda do cartão.
+  const cent = (n: number) => Math.round(n * 100) / 100;
+
+  const totalFechos = cent(weeks.reduce((s, w) => s + w.netToDriver, 0));
+  const ajustesManuais = cent(
+    (ledgerQuery.data?.entries ?? [])
+      .filter((e) => e.kind === 'CREDIT' || e.kind === 'DEBIT')
+      .reduce((s, e) => s + e.amount, 0),
+  );
+  const totalReceived = cent(totalFechos + ajustesManuais);
+
+  // A média continua a ser DOS FECHOS. Dividir um total que já inclui ajustes
+  // pelo número de semanas dava uma "média por semana" que não corresponde a
+  // semana nenhuma.
+  const average = weeks.length ? totalFechos / weeks.length : 0;
 
   const breakdownRows: { label: string; value: number; sign: '+' | '−' }[] = summary
     ? [
@@ -633,7 +662,21 @@ export function DriverDashboard() {
             <p className="text-xl font-bold tabular-nums sm:text-2xl">
               {formatCurrency(totalReceived)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Desde o início</p>
+            {/* Com ajustes à mistura, "Desde o início" deixava de explicar o
+                número: quem soma as semanas do gráfico não chega a ele. A
+                repartição evita a pergunta. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {ajustesManuais !== 0 ? (
+                <>
+                  Fechos {formatCurrency(totalFechos)}
+                  {' · '}
+                  {ajustesManuais > 0 ? 'ajustes +' : 'ajustes −'}
+                  {formatCurrency(Math.abs(ajustesManuais))}
+                </>
+              ) : (
+                'Desde o início'
+              )}
+            </p>
           </CardContent>
         </Card>
       </div>

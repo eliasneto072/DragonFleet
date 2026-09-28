@@ -543,6 +543,105 @@ linhas.
 
 ---
 
+## 2.9 A ficha do motorista mostrava metade do dinheiro
+
+A ficha individual tinha "Histórico de ajustes" — só os ajustes manuais. Os
+**fechos semanais**, que são a maior parte do que entra, não apareciam ali.
+
+Pior: os mosaicos não fechavam. Ganhos + Créditos − Débitos − Levantado −
+Reservado **não dava** o saldo disponível que estava por cima deles, e a
+diferença eram exatamente os fechos. (O mosaico "Ganhos" é
+`reported_earnings`, da tabela `earnings` — não é `settlements`.) Quem olhava
+para a ficha não tinha como saber que faltava lá coisa; só fazendo a conta à
+mão e reparando que não batia — que foi como o problema foi encontrado.
+
+### O que ficou
+
+`app/components/admin/driver-ledger.tsx`, a substituir a lista de ajustes.
+Consome o `GET /balance/:userId/ledger` que já existia e o motorista já lia:
+fechos, ajustes, retiradas e investimentos, com o saldo depois de cada linha.
+
+Três decisões:
+
+- **Abre no mais antigo**, ao contrário do extrato do motorista. A pergunta
+  aqui é "isto bate certo?", e responde-se seguindo a coluna do saldo de cima
+  para baixo. Há botão para trocar.
+- **O saldo de cada linha vem do servidor**, não é recalculado no ecrã: dois
+  sítios a somar o mesmo é um sítio a mais para discordarem.
+- **A caixa de reconciliação** no fim mostra os três números, porque a última
+  linha do extrato NÃO é o disponível — as retiradas por decidir ainda não
+  estão lá dentro.
+
+O autor do ajuste ("por Diogo Isaias") não vem no extrato; é reposto cruzando
+com a consulta de ajustes que a página já fazia.
+
+### Nota sobre datas de movimentos
+
+O saldo total **não usa datas** (a view `driver_balances` soma tudo sem filtro
+temporal). As datas decidem só a ORDEM no extrato, e portanto os saldos
+corridos de cada linha. Cada tipo ancora numa coluna diferente:
+
+| Movimento | Tabela | Coluna |
+|---|---|---|
+| Fecho | `weekly_settlements` | `week_start` |
+| Ajuste | `balance_adjustments` | `created_at` |
+| Retirada | `withdrawals` | `requested_at` |
+| Investimento | `investments` | `created_at` / `closed_at` |
+
+Corrigir a data de um ajuste ou de uma retirada é seguro — muda a ordem, não
+muda o total. Corrigir a de um **fecho** não é: há `@@unique(user_id,
+week_start)`, e os fechos alimentam as temporadas dos níveis e o lucro mensal
+dos projetos, que podem já ter sido distribuídos.
+
+### Corrigir a data de um ajuste pelo painel
+
+Feito a seguir, para deixar de ser preciso SQL à mão em produção.
+
+`PATCH /balance/adjustments/:id`, com `createdAt` e/ou `reason`. Carregar numa
+linha de ajuste no extrato da ficha abre o diálogo
+(`adjustment-edit-dialog.tsx`).
+
+**O valor e o tipo NÃO são editáveis**, e o teste de integração confirma que
+enviá-los no corpo não faz nada. Mudar um valor mudaria o saldo sem deixar
+rasto; um valor errado corrige-se com um ajuste contrário, que preserva as
+duas linhas. A data é outra coisa: a view não tem filtro temporal, por isso
+mudá-la não mexe um cêntimo — só a ordem.
+
+Migração `20260928090000_adjustment_edit_trace`: `edited_at` e `edited_by` em
+`balance_adjustments`, nulos em tudo o que já existe (nunca foi editado).
+Corrigir sem registar trocava um problema por outro pior — daqui a seis meses
+ninguém saberia se a data é a original.
+
+Guardas: `canManageBalance` (ADMIN/MANAGER), data no futuro recusada
+(`DATE_IN_FUTURE`, com um dia de margem para fusos), anterior a 2020 recusada
+(`DATE_TOO_OLD`, é um ano mal escrito), e um PATCH que não altera nada dá erro
+em vez de 200.
+
+No diálogo há uma **pré-visualização da posição** ("passa do 3.º para o 1.º de
+7") e um botão "Pôr antes de todos os outros", que é o caso de nove em dez.
+
+**Armadilha de datas, já apanhada:** o campo é `<input type="date">` e o
+movimento tem hora. Com `setFullYear` (local) e `toISOString` (UTC), um
+movimento gravado às 23:30 UTC abria como dia 13 e, gravado sem lhe tocar,
+voltava como dia 12 — recuava um dia sozinho em qualquer fuso a leste de
+Greenwich, Lisboa no verão incluída. Tudo em UTC (`setUTCFullYear`,
+`setUTCDate`); verificado a correr em UTC, Europe/Lisbon e Pacific/Auckland.
+
+Testes: `adjustment-edit.integration.test.ts`, 12 casos (**escrito, corre só
+na CI**) — sendo os dois que importam "muda a ordem e não muda o saldo" e
+"o valor enviado no corpo é ignorado".
+
+### Ainda por fazer
+
+- Só os AJUSTES são corrigíveis. Os fechos não (unique em `(user_id,
+  week_start)`, e alimentam temporadas e meses de projeto já distribuídos); as
+  retiradas não (a data é o registo de quando o motorista pediu); os
+  investimentos não (os juros estão gravados dia a dia).
+- O rasto guarda quem e quando, não o valor anterior. Para saber a data antiga
+  é preciso ir aos registos do servidor.
+
+---
+
 ## 3. O que vem a seguir
 
 Quatro pedidos do cliente, com as decisões dele já tomadas. **Nada disto está
