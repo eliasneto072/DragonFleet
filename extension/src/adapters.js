@@ -235,6 +235,9 @@ function extrairPrio() {
   return {
     rows,
     anunciadas: pag ? Number(pag[3]) : null,
+    // Que linhas são estas: "4 a 6 de 6" é a última página, e diz-se de outra
+    // forma do que "1 a 3 de 6".
+    pagina: pag ? { de: Number(pag[1]), ate: Number(pag[2]), total: Number(pag[3]) } : null,
     totalPortal: total ? parseMoney(total[2]) : null,
     periodoPortal: total ? total[1].trim() : null,
   };

@@ -42,3 +42,11 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 .links a { display: block; background: #fff; border: 1px solid #dfe3e0; border-radius: 8px; padding: 12px 14px; color: inherit; text-decoration: none; }
 .links a:hover { border-color: #2f4f43; }
 .links small { display: block; color: #5d6a63; }
+
+/* Paginação e casos de teste */
+.paginas { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin: 10px 0; font-size: 13px; }
+.paginas a, .paginas b, .paginas .off { padding: 4px 10px; border-radius: 6px; border: 1px solid #dfe3e0; background: #fff; color: inherit; text-decoration: none; }
+.paginas b { background: #2f4f43; border-color: #2f4f43; color: #fff; }
+.paginas .off { color: #a4aca8; }
+h1 .pag { font-size: 14px; font-weight: 500; color: #5d6a63; margin-left: 8px; }
+h2.casos { font-size: 18px; margin: 30px 0 4px; }

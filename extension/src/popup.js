@@ -215,6 +215,8 @@ async function rever() {
     if (dados.rows.length === 0) throw new Error('Nenhum motorista encontrado na tabela.');
 
     estado.dados = dados;
+    // Antes do pedido: se o servidor recusar, o erro aparece com o portal identificado.
+    $('portal').textContent = dados.platform + (dados.simulacao ? ' · simulação' : '');
 
     if (!dados.periodo) {
       desenhar(dados, null);
@@ -348,10 +350,24 @@ function desenharDespesas(dados, s) {
     `${s.total} movimento${s.total !== 1 ? 's' : ''} · ${eur(s.chargeableTotal)} a descontar`;
 
   // Só parte da lista está no ecrã?
-  if (dados.anunciadas && dados.anunciadas > dados.rows.length) {
+  const pag = dados.pagina;
+  const soParte = !!dados.anunciadas && dados.anunciadas > dados.rows.length;
+  if (soParte && pag && pag.ate >= pag.total && pag.de > 1) {
     aviso(
-      `O portal diz ${dados.anunciadas}, a página mostra ${dados.rows.length}. ` +
-      'Há mais páginas: envie esta, passe à seguinte e envie outra vez. ' +
+      `Última página: linhas ${pag.de} a ${pag.ate} de ${pag.total}. ` +
+      'As páginas anteriores também têm de ser enviadas — se já o foram, ' +
+      'o que se repetir não entra duas vezes.',
+    );
+  } else if (soParte && pag) {
+    aviso(
+      `Página com as linhas ${pag.de} a ${pag.ate} de ${pag.total}. ` +
+      'Envie esta, passe à seguinte no portal e envie outra vez. ' +
+      'O que se repetir não entra duas vezes.',
+    );
+  } else if (soParte) {
+    aviso(
+      `O portal diz ${dados.anunciadas}, esta página mostra ${dados.rows.length}. ` +
+      'Envie todas as páginas do portal, uma de cada vez. ' +
       'O que se repetir não entra duas vezes.',
     );
   }
@@ -359,7 +375,15 @@ function desenharDespesas(dados, s) {
   // Conferência com o TOTAL da Prio.
   if (dados.totalPortal != null) {
     const lido = Math.round(s.rows.reduce((a, r) => a + r.amount, 0) * 100) / 100;
-    if (Math.abs(lido - dados.totalPortal) > 0.01) {
+    if (soParte && Math.abs(lido - dados.totalPortal) > 0.01) {
+      // Com várias páginas, o TOTAL do portal é o da pesquisa inteira: não
+      // bater é o esperado, e não um sinal de linha perdida.
+      aviso(
+        `Esta página soma ${eur(lido)}. O TOTAL do portal (${eur(dados.totalPortal)}) ` +
+        'inclui as outras páginas.',
+        'certo',
+      );
+    } else if (Math.abs(lido - dados.totalPortal) > 0.01) {
       aviso(
         `A soma das linhas lidas (${eur(lido)}) não bate com o TOTAL do portal ` +
         `(${eur(dados.totalPortal)}). Alguma linha ficou de fora ou não se leu.`,

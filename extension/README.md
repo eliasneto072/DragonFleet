@@ -149,8 +149,8 @@ portais. Três coisas só se confirmam lá:
 ## Testar sem os portais: as páginas de simulação
 
 A Prio pede um código por SMS para o telemóvel do dono da conta. Para testar o
-caminho todo sem isso, `simulacao/` tem duas páginas com a mesma estrutura das
-tabelas reais e dados inventados.
+caminho todo sem isso, `simulacao/` tem uma página por portal, com a mesma
+estrutura das tabelas reais e dados inventados, e três casos de erro.
 
 ### 1. Preparar a base
 
@@ -190,6 +190,14 @@ Tem as quatro, por ordem. Em cada uma: clicar na extensão, conferir, **Enviar**
 | Bolt | o mesmo período · 3 motoristas · todos emparelham, "Cárla" com acento incluída |
 | Prio | 6 movimentos · 412,57 € · "Bate com o TOTAL do portal" · 1 sem motorista |
 | Via Verde | 9 movimentos · 10,70 € a descontar · mensalidade e cancelado riscados · 1 sem motorista |
+
+Depois dos quatro, os casos do fim do índice. Nenhum muda os totais:
+
+| Página | O que a pré-visualização deve mostrar |
+|---|---|
+| Prio em duas páginas | "Página com as linhas 1 a 3 de 6" e, na 2, "Última página"; a soma da página contra o TOTAL da pesquisa inteira. Depois de enviada a `prio.html`, cada uma dá "0 novos · 3 já lá estavam" |
+| Via Verde em duas páginas | "O portal diz 9, esta página mostra 5" (e 4 na segunda). Reenviar não duplica |
+| Uber com o período errado | Terça 22/09 a segunda 28/09: o DragonFleet recusa, diz para escolher 2026-09-21 a 2026-09-27, e não grava nada |
 
 A Uber e a Bolt vão para **Faturação › Por confirmar**; a Prio e a Via Verde,
 para o formulário do fecho e, o que não emparelhou, para **Faturação › Despesas
