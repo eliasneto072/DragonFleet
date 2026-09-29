@@ -138,6 +138,14 @@ model User {
   /// isto serve para ligar a alguém por causa de uma multa ou de um acidente.
   phone     String?
 
+  /// Este motorista É a empresa (o dono, que também conduz).
+  ///
+  /// Muda como as estatísticas o contam: o aluguer da viatura que lhe é
+  /// lançado é a empresa a cobrar a si própria e NÃO entra no lucro; o que ele
+  /// fecha na semana entra por inteiro. Marca e não um nome no código, para
+  /// poderem ser vários e para não se partir quando um nome muda.
+  isCompany Boolean @default(false) @map("is_company")
+
   role      UserRole   @default(DRIVER)
   status    UserStatus @default(ACTIVE)
   createdAt DateTime   @default(now()) @map("created_at")
@@ -202,6 +210,16 @@ model Earning {
   @@map("earnings")
 }
 
+/// Combustível, elétrico ou híbrido.
+///
+/// Três valores e não um `isElectric`: um booleano obrigava a decidir hoje o
+/// que fazer com um híbrido, e qualquer resposta escondia metade do gasto.
+enum VehicleEnergy {
+  FUEL
+  ELECTRIC
+  HYBRID
+}
+
 model Vehicle {
   id               String        @id @default(cuid())
   brand            String
@@ -210,6 +228,11 @@ model Vehicle {
   year             Int
   vin              String?       @unique
   status           VehicleStatus @default(PENDING)
+
+  /// Decide o RÓTULO do campo de despesa no fecho (Combustível ou
+  /// Carregamento) e separa os gastos nas estatísticas. A coluna do dinheiro
+  /// continua a ser uma só — ver a migração.
+  energyType       VehicleEnergy @default(FUEL) @map("energy_type")
   activationForced Boolean       @default(false) @map("activation_forced")
 
   /// Encargo semanal da viatura, usado como valor sugerido no fecho semanal.
@@ -595,6 +618,13 @@ model WeeklySettlement {
   netToDriver      Decimal @default(0) @map("net_to_driver")     @db.Decimal(12, 2)
 
   status SettlementStatus @default(DRAFT)
+
+  /// Conta-quilómetros no início e no fim da semana. OPCIONAIS, e nulos em
+  /// tudo o que é anterior a este campo: é a diferença entre "não foram
+  /// registados" e "andou zero quilómetros", e um zero a fingir estragava
+  /// qualquer média. A base garante que o fim não é menor que o início.
+  odometerStart Int? @map("odometer_start")
+  odometerEnd   Int? @map("odometer_end")
 
   /// Observações visíveis ao motorista, no detalhe da semana.
   notes String?

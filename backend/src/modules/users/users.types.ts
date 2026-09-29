@@ -11,6 +11,14 @@ export interface IUser {
   updatedAt: Date;
   role: UserRole;
   status: UserStatus;
+  /**
+   * Este utilizador É a empresa (o dono, que também conduz).
+   *
+   * Muda como as estatísticas contam os fechos dele: o aluguer da viatura não
+   * entra no lucro (é a empresa a cobrar a si própria) e o líquido da semana
+   * entra por inteiro.
+   */
+  isCompany: boolean;
   // relacionamentos removidos — cada módulo gere os seus próprios dados
 }
 

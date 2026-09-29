@@ -16,4 +16,6 @@ export type UpdateUserData = {
   password?: string; // já hasheada se vier
   role?: UserRole;
   status?: UserStatus;
+  /** "Este motorista é a empresa." Só o administrador. */
+  isCompany?: boolean;
 };

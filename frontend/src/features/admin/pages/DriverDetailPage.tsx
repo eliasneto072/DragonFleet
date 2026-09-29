@@ -180,6 +180,23 @@ export function DriverDetailPage() {
     onError: (err: any) => toast.error(err?.message ?? 'Erro ao atualizar motorista.'),
   });
 
+  // "Este motorista é a empresa." Mutação própria e não reaproveitada da do
+  // estado: são coisas diferentes, e partilhar o `isPending` desativava os
+  // botões de Ativar/Bloquear enquanto esta gravava.
+  const { mutate: setIsCompany, isPending: marcandoEmpresa } = useMutation({
+    mutationFn: (isCompany: boolean) => usersService.update(id, { isCompany }),
+    onSuccess: (_d, isCompany) => {
+      invalidateAfterUser(queryClient);
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(id) });
+      // As estatísticas mudam de número com isto — convém dizê-lo.
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      toast.success(isCompany
+        ? 'Marcado como empresa. As estatísticas passam a contar as semanas dele por inteiro.'
+        : 'Deixou de ser tratado como empresa.');
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Não foi possível guardar.'),
+  });
+
   const { mutate: createAdjustment, isPending: adjusting } = useMutation({
     mutationFn: () => balanceService.createAdjustment(id, {
       type: adjustType,
@@ -532,6 +549,36 @@ export function DriverDetailPage() {
             que carros esta pessoa conduziu, e quando. */}
 
         <DriverVehicleHistory userId={id} />
+
+        {/* ── É a empresa? ──────────────────────────────────────────────
+            Decide como as estatísticas contam os fechos desta pessoa. Fica
+            aqui, na ficha, e não numa tela de configurações: quem sabe que o
+            Diogo conduz é quem está a olhar para a ficha do Diogo. */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-medium">Este motorista é a empresa</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Para o dono da frota, que também conduz. Nas estatísticas, o
+                  aluguer da viatura lançado a esta pessoa <strong>deixa de contar
+                  como lucro</strong> — é a empresa a cobrar a si própria — e o
+                  líquido da semana dela passa a contar por inteiro.
+                </p>
+              </div>
+              <Button
+                variant={user.isCompany ? 'default' : 'outline'}
+                size="sm"
+                className="shrink-0"
+                disabled={marcandoEmpresa}
+                onClick={() => setIsCompany(!user.isCompany)}
+              >
+                {marcandoEmpresa && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {user.isCompany ? 'Sim' : 'Não'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
           {/* Ações de estado no fim, e não no topo: são destrutivas, e nenhuma
               delas é a razão comum para abrir a ficha. */}

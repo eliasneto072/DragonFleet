@@ -44,6 +44,15 @@ export interface ApiUser {
   phone:     string | null;
   role:      UserRole;
   status:    UserStatus;
+
+  /**
+   * Este utilizador É a empresa (o dono da frota, que também conduz).
+   *
+   * Muda como as estatísticas contam os fechos dele: o aluguer da viatura
+   * lançado a esta pessoa não entra no lucro — é a empresa a cobrar a si
+   * própria — e o líquido da semana entra por inteiro.
+   */
+  isCompany: boolean;
   createdAt: string;
   updatedAt: string;
 

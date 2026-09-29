@@ -15,6 +15,7 @@ export class UsersRepository  implements IUserRepository{
         name: true,
         email: true,
         phone: true,
+        isCompany: true,
         role: true,
         status: true,
         createdAt: true,
@@ -244,6 +245,11 @@ export class UsersRepository  implements IUserRepository{
           ...(data.phone !== undefined ? { phone: data.phone } : {}),
           ...(data.role !== undefined ? { role: data.role } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
+          // O mesmo quarto sítio de que fala o comentário acima. A marca de
+          // "é a empresa" decide o LUCRO nas estatísticas: ignorada aqui em
+          // silêncio, o painel dizia que tinha gravado e o número continuava
+          // errado — e ninguém ligaria uma coisa à outra.
+          ...(data.isCompany !== undefined ? { isCompany: data.isCompany } : {}),
         },
         select: this.publicSelect,
       });

@@ -232,6 +232,7 @@ export class UsersService {
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.isCompany !== undefined ? { isCompany: input.isCompany } : {}),
     };
 
     if (input.password) {

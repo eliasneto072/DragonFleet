@@ -32,6 +32,12 @@ interface UpdateUserInput {
   currentPassword?: string;
   role?:     UserRole;
   status?:   UserStatus;
+  /**
+   * "Este motorista é a empresa." Só o administrador — o backend recusa a
+   * quem tenta mudá-lo em si próprio, porque marcar-se a si mesmo mudava as
+   * contas do lucro.
+   */
+  isCompany?: boolean;
 }
 
 export const usersService = {

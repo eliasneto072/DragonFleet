@@ -28,6 +28,7 @@ import { FleetPage } from '@/features/admin/pages/FleetPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
 import { AssignmentLookupPage } from '@/features/admin/pages/AssignmentLookupPage';
 import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
+import { FleetStatsPage } from '@/features/admin/pages/FleetStatsPage';
 import { NotificationsAdminPage } from '@/features/admin/pages/NotificationsAdminPage';
 import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
@@ -95,6 +96,7 @@ export const router = createBrowserRouter([
           { path: 'financial',      element: <RequireArea area="FINANCIAL"><FinancialPage /></RequireArea> },
           { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
           { path: 'analytics',      element: <RequireArea area="ANALYTICS"><AnalyticsPage /></RequireArea> },
+          { path: 'estatisticas',   element: <RequireArea area="ANALYTICS"><FleetStatsPage /></RequireArea> },
 
           { path: 'investments',    element: <RequireArea area="INVESTMENTS"><InvestmentsAdminPage /></RequireArea> },
           { path: 'investors',      element: <RequireArea area="INVESTORS"><InvestorsPage /></RequireArea> },

@@ -54,6 +54,11 @@ export const updateUserSchema = z.object({
       currentPassword: z.string().min(1).optional(),
       role: z.nativeEnum(UserRole).optional(),
       status: z.nativeEnum(UserStatus).optional(),
+      // "Este motorista é a empresa." Só o administrador lhe mexe — a lista
+      // de campos que um utilizador pode mudar em si próprio não o inclui, e
+      // é essa lista que o trava. Marcar-se a si próprio como empresa mudava
+      // as contas do dono.
+      isCompany: z.boolean().optional(),
     })
     .refine((b) => Object.keys(b).some((key) => key !== 'currentPassword'), {
       message: 'Informe pelo menos um campo para atualizar',

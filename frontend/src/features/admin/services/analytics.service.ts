@@ -115,6 +115,74 @@ export interface StatsParams {
   to?: string;
 }
 
+/* ═══ ESTATÍSTICAS DA FROTA ═══════════════════════════════════════════════ */
+
+export type VehicleEnergy = 'FUEL' | 'ELECTRIC' | 'HYBRID';
+
+export interface FleetTotals {
+  faturacaoBruta: number;
+  pagoAosMotoristas: number;
+  viaVerde: number;
+  combustivel: number;
+  carregamento: number;
+  aluguerViaturas: number;
+  comissao: number;
+  imposto: number;
+  outrasDeducoes: number;
+  /**
+   * A regra do cliente: aluguer dos OUTROS + líquido das semanas DELE.
+   *
+   * A comissão dos outros motoristas NÃO entra — vem em `comissao`, à parte,
+   * para o ecrã a poder mostrar sem a somar.
+   */
+  lucroEmpresa: number;
+  semanas: number;
+  /** Nulo quando nenhuma semana do período trouxe quilómetros. */
+  kmPercorridos: number | null;
+}
+
+export interface CarroStats {
+  vehicleId: string;
+  plate: string;
+  brand: string;
+  model: string;
+  energyType: VehicleEnergy;
+  semanas: number;
+  faturacaoBruta: number;
+  viaVerde: number;
+  /** Combustível ou eletricidade, conforme o carro. */
+  energia: number;
+  aluguer: number;
+  pagoAoMotorista: number;
+  lucro: number;
+  km: number | null;
+}
+
+export interface MotoristaStats {
+  userId: string;
+  name: string;
+  isCompany: boolean;
+  semanas: number;
+  faturacaoBruta: number;
+  recebido: number;
+  lucroParaEmpresa: number;
+  mediaSemanal: number;
+}
+
+export interface FleetStats {
+  periodo: { from: string; to: string };
+  totais: FleetTotals;
+  porCarro: CarroStats[];
+  porMotorista: MotoristaStats[];
+  evolucao: { mes: string; faturacao: number; lucro: number; pago: number }[];
+  destaques: {
+    maisFatura: MotoristaStats | null;
+    menosFatura: MotoristaStats | null;
+    maisLucro: CarroStats | null;
+    maisKm: CarroStats | null;
+  };
+}
+
 export const analyticsService = {
   /** GET /analytics/stats — apenas admin/manager. Sem datas, últimos 30 dias. */
   getStats(params: StatsParams = {}): Promise<{ stats: ApiStats }> {
@@ -128,5 +196,14 @@ export const analyticsService = {
   /** GET /analytics/overview — fila de trabalho e posição financeira. */
   getOverview(): Promise<{ overview: ApiOverview }> {
     return apiClient.get('/analytics/overview');
+  },
+
+  /** GET /analytics/fleet — sem datas, o ano civil corrente. */
+  getFleet(params: StatsParams = {}): Promise<{ fleet: FleetStats }> {
+    const query = new URLSearchParams();
+    if (params.from) query.set('from', params.from);
+    if (params.to) query.set('to', params.to);
+    const qs = query.toString();
+    return apiClient.get(`/analytics/fleet${qs ? `?${qs}` : ''}`);
   },
 };

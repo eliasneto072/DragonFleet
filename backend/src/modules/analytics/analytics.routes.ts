@@ -12,5 +12,10 @@ export function analyticsRouter(): Router {
   router.get('/stats', analyticsController.getStats);
   router.get('/overview', analyticsController.getOverview);
 
+  // As estatísticas da frota: lucro por carro, gastos, quem fatura mais e
+  // menos. Debaixo de /analytics de propósito — partilha a área de permissões
+  // "Análises", em vez de inventar uma área nova para a mesma pergunta.
+  router.get('/fleet', analyticsController.getFleet);
+
   return router;
 }
