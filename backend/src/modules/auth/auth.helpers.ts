@@ -12,6 +12,10 @@ type AuthUser = {
   // contacto que e opcional por definicao.
   phone?: string | null;
   role: UserRole; status: UserStatus;
+  // Opcional pela mesma razão do telefone acima: nem todas as consultas que
+  // chegam aqui trazem o registo completo, e um login não pode falhar por
+  // causa de uma marca que só interessa às estatísticas.
+  isCompany?: boolean;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -50,6 +54,9 @@ export function toPublicUser(user: AuthUser): IUserPublic {
     id: user.id, name: user.name, email: user.email,
     phone: user.phone ?? null,
     role: user.role, status: user.status,
+    // `?? false` e não `user.isCompany`: quem não traz o campo não é a
+    // empresa, e é isso que o tipo público promete.
+    isCompany: user.isCompany ?? false,
     createdAt: user.createdAt, updatedAt: user.updatedAt,
   };
 }

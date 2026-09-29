@@ -9,6 +9,11 @@ export type CreateUserInput = {
 };
 
 export type UpdateUserInput = {
+  /**
+   * "Este motorista é a empresa." Só o administrador: não está na lista de
+   * campos que alguém pode mudar em si próprio, e é essa lista que o trava.
+   */
+  isCompany?: boolean;
   name?: string;
   email?: string;
   password?: string;
