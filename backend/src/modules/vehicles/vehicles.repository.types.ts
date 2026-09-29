@@ -8,6 +8,7 @@ export type CreateVehicleData = {
   vin?: string | null;
   status: VehicleStatus;
   weeklyFee?: number;
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID';
   userId?: string | null; // opcional — veículo pode nascer não atribuído
 };
 
@@ -20,6 +21,7 @@ export type UpdateVehicleData = {
   status?: VehicleStatus;
   activationForced?: boolean;
   weeklyFee?: number;
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID';
   userId?: string | null;
 };
 

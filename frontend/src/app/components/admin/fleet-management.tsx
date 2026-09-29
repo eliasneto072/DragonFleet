@@ -37,7 +37,16 @@ import {
 
 const EMPTY_FORM = {
   brand: '', model: '', plate: '', year: new Date().getFullYear(), vin: '', weeklyFee: '',
+  // Combustível por omissão: é o que a frota tem hoje, e um carro novo é mais
+  // provavelmente um deles. Quem tiver um elétrico muda num clique.
+  energyType: 'FUEL' as 'FUEL' | 'ELECTRIC' | 'HYBRID',
 };
+
+const ENERGIAS: { valor: 'FUEL' | 'ELECTRIC' | 'HYBRID'; nome: string }[] = [
+  { valor: 'FUEL', nome: 'Combustível' },
+  { valor: 'ELECTRIC', nome: 'Elétrico' },
+  { valor: 'HYBRID', nome: 'Híbrido' },
+];
 
 function StatusBadge({ status }: { status: VehicleStatus }) {
   const label = VEHICLE_STATUS_LABELS[status] ?? status;
@@ -167,6 +176,7 @@ export function FleetManagement() {
       year: v.year,
       vin: v.vin ?? '',
       weeklyFee: v.weeklyFee ? String(v.weeklyFee) : '',
+      energyType: v.energyType ?? 'FUEL',
     });
     setOpen(true);
   }
@@ -186,6 +196,7 @@ export function FleetManagement() {
         year: Number(form.year),
         vin: form.vin.trim() || undefined,
         weeklyFee: form.weeklyFee.trim() === '' ? 0 : Number(form.weeklyFee),
+        energyType: form.energyType,
       };
       return editingId
         ? vehiclesService.update(editingId, payload)
@@ -307,6 +318,32 @@ export function FleetManagement() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Preenche o campo &quot;Viatura&quot; no fecho semanal, onde continua editável.
+                    </p>
+                  </div>
+
+                  {/* ── Tipo de energia ───────────────────────────────────
+                      Três botões e não uma lista: são três opções e estão
+                      sempre à vista, o que poupa um clique em cada carro
+                      criado. */}
+                  <div className="space-y-2">
+                    <Label>Tipo de energia</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {ENERGIAS.map((e) => (
+                        <Button
+                          key={e.valor}
+                          type="button"
+                          size="sm"
+                          variant={form.energyType === e.valor ? 'default' : 'outline'}
+                          onClick={() => setForm({ ...form, energyType: e.valor })}
+                        >
+                          {e.nome}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      No fecho semanal, o campo da despesa passa a chamar-se
+                      {form.energyType === 'ELECTRIC' ? ' "Carregamento"' : ' "Combustível"'}.
+                      Separa também os gastos nas Estatísticas.
                     </p>
                   </div>
                 </div>

@@ -10,6 +10,7 @@ export type CreateVehicleInput = {
     status?: VehicleStatus
     /** Encargo semanal. Só a gestão o define — ver vehicles.service. */
     weeklyFee?: number
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID'
 }
 
 
@@ -21,4 +22,5 @@ export type UpdateVehicleInput = {
     vin?: string | null
     status?: VehicleStatus
     weeklyFee?: number
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID'
 }

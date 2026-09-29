@@ -41,6 +41,8 @@ export interface SettlementAmounts {
   notes?: string | null;
   /** Observações internas. Só a gestão as vê. */
   internalNotes?: string | null;
+  odometerStart?: number | null;
+  odometerEnd?: number | null;
 }
 
 /** Edição de rascunho: pode mover a semana e o veículo, não o motorista. */
@@ -109,6 +111,8 @@ export interface SettlementPublic extends SettlementTotals {
    * uma proteção que a próxima tela esqueceria.
    */
   internalNotes?: string | null;
+  odometerStart?: number | null;
+  odometerEnd?: number | null;
 
   createdById: string;
   createdByName: string | null;

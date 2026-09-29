@@ -107,6 +107,10 @@ export class VehiclesService {
       ...(canManageVehicles(actor.role) && input.weeklyFee !== undefined
         ? { weeklyFee: input.weeklyFee }
         : {}),
+      // O tipo de energia é uma CARACTERÍSTICA do carro, não uma condição
+      // comercial: quem o pode criar pode dizer se é a gasóleo ou elétrico.
+      // Sem a guarda do `weeklyFee`, portanto.
+      ...(input.energyType !== undefined ? { energyType: input.energyType } : {}),
       userId: userId,
     };
 
@@ -147,6 +151,7 @@ export class VehiclesService {
       ...(input.vin !== undefined ? { vin: input.vin } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.weeklyFee !== undefined ? { weeklyFee: input.weeklyFee } : {}),
+      ...(input.energyType !== undefined ? { energyType: input.energyType } : {}),
     };
 
     return vehiclesRepository.update(id, data);

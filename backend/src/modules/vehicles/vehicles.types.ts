@@ -18,6 +18,8 @@ export interface IVehicle {
    * isto não reescreva semanas já pagas.
    */
   weeklyFee: number;
+  /** Combustível, elétrico ou híbrido. */
+  energyType: 'FUEL' | 'ELECTRIC' | 'HYBRID';
 
   userId: string | null; // pode ser null (veículo não atribuído)
 

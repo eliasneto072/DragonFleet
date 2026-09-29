@@ -20,6 +20,14 @@ function getActor(req: AuthRequest) {
 }
 
 export class SettlementsController {
+  // GET /settlements/ultimo-km?vehicleId=...
+  lastOdometer = async (req: AuthRequest, res: Response) => {
+    const vehicleId = String((req.query as { vehicleId?: string }).vehicleId ?? '').trim();
+    if (!vehicleId) return ok(res, { last: null });
+    const last = await settlementsService.lastOdometer(getActor(req), vehicleId);
+    return ok(res, { last });
+  };
+
   // GET /settlements?userId=&status=&from=&to=
   list = async (req: AuthRequest, res: Response) => {
     const parsed = listSettlementsSchema.parse({ query: req.query });

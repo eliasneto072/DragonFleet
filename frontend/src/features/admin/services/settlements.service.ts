@@ -32,6 +32,10 @@ export interface SettlementAmounts {
   notes?: string | null;
   /** Observações internas. Só a gestão as recebe da API. */
   internalNotes?: string | null;
+  /** Conta-quilómetros no início e no fim da semana. Opcionais: `null`
+   *  quando não foram registados — que não é o mesmo que zero. */
+  odometerStart?: number | null;
+  odometerEnd?: number | null;
 }
 
 /** Resultado do cálculo. Devolvido pelo servidor, nunca calculado aqui. */
@@ -80,6 +84,10 @@ export interface ApiSettlement extends SettlementTotals {
   notes: string | null;
   /** Ausente quando quem consulta é o motorista — filtrado no servidor. */
   internalNotes?: string | null;
+  /** Conta-quilómetros no início e no fim da semana. Opcionais: `null`
+   *  quando não foram registados — que não é o mesmo que zero. */
+  odometerStart?: number | null;
+  odometerEnd?: number | null;
 
   createdById: string;
   createdByName: string | null;
@@ -105,6 +113,12 @@ export interface PageInfo {
   total: number;
   totalPages: number;
   hasMore: boolean;
+}
+
+export interface UltimoKm {
+  /** O conta-quilómetros no fim da última semana registada daquele carro. */
+  km: number;
+  weekEnd: string;
 }
 
 export interface ListSettlementsParams {
@@ -148,6 +162,15 @@ export const settlementsService = {
    * cartão do topo continua a dizer o total real, sem precisar dos 88 mil
    * objetos no browser para o somar.
    */
+  /**
+   * GET /settlements/ultimo-km — a última leitura daquele CARRO.
+   *
+   * Do carro e não do motorista: o quilómetro é do veículo, e ele muda de mãos.
+   */
+  lastOdometer(vehicleId: string): Promise<{ last: UltimoKm | null }> {
+    return apiClient.get(`/settlements/ultimo-km?vehicleId=${encodeURIComponent(vehicleId)}`);
+  },
+
   list(params: ListSettlementsParams = {}): Promise<{
     settlements: ApiSettlement[];
     page: PageInfo;

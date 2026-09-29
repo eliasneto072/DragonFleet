@@ -15,6 +15,7 @@ export class VehiclesRepository implements IVehicleRepository {
     status: true,
     activationForced: true,
     weeklyFee: true,
+    energyType: true,
     userId: true,
     createdAt: true,
     updatedAt: true,
@@ -144,6 +145,7 @@ export class VehiclesRepository implements IVehicleRepository {
             userId: data.userId ?? null,
             ...(data.vin !== undefined ? { vin: data.vin } : {}),
             ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
+            ...(data.energyType !== undefined ? { energyType: data.energyType } : {}),
           },
           select: this.publicSelect,
         });
@@ -180,6 +182,7 @@ export class VehiclesRepository implements IVehicleRepository {
           ...(data.status !== undefined ? { status: data.status } : {}),
           ...(data.activationForced !== undefined ? { activationForced: data.activationForced } : {}),
           ...(data.weeklyFee !== undefined ? { weeklyFee: data.weeklyFee } : {}),
+          ...(data.energyType !== undefined ? { energyType: data.energyType } : {}),
           ...(data.userId !== undefined ? { userId: data.userId } : {}),
         },
         select: this.publicSelect,

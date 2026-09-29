@@ -71,6 +71,8 @@ function toPublic(r: Row, includeInternal = false): SettlementPublic {
 
     status: r.status as SettlementStatus,
     notes: r.notes,
+    odometerStart: r.odometerStart ?? null,
+    odometerEnd: r.odometerEnd ?? null,
     ...(includeInternal ? { internalNotes: r.internalNotes } : {}),
 
     createdById: r.createdById,
@@ -267,6 +269,25 @@ export const settlementsRepository = {
       include,
     });
     return row ? toPublic(row as Row) : null;
+  },
+
+  /**
+   * O último conta-quilómetros registado de um carro.
+   *
+   * Do CARRO e não do motorista: o quilómetro é do veículo, e ele pode ter
+   * mudado de mãos entre semanas. Procurar pelo motorista dava o km de outro
+   * carro no dia em que alguém trocasse.
+   *
+   * Ordena por `week_start` e não por `created_at`: um fecho lançado com
+   * atraso pertence à semana dele, e é a semana mais recente que interessa.
+   */
+  async lastOdometer(vehicleId: string): Promise<{ km: number; weekEnd: Date } | null> {
+    const row = await prisma.weeklySettlement.findFirst({
+      where: { vehicleId, odometerEnd: { not: null } },
+      orderBy: { weekStart: 'desc' },
+      select: { odometerEnd: true, weekEnd: true },
+    });
+    return row?.odometerEnd == null ? null : { km: row.odometerEnd, weekEnd: row.weekEnd };
   },
 
   async create(data: Record<string, unknown>): Promise<SettlementPublic> {

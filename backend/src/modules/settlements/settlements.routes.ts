@@ -15,6 +15,9 @@ export function settlementsRouter(): Router {
   // gestão lista todos. Um requireAdmin na rota impediria o motorista de ver
   // os dele, que é metade do que o cliente pediu.
   router.get('/', settlementsController.list);
+  // Antes de '/:id': declarada depois, o Express leria 'ultimo-km' como o id
+  // de um fecho e devolvia 404.
+  router.get('/ultimo-km', settlementsController.lastOdometer);
   router.get('/:id', settlementsController.getById);
 
   // Escrita — apenas ADMIN ou MANAGER, garantido em settlementsService.

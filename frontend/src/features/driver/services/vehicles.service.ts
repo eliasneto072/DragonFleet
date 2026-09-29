@@ -14,6 +14,9 @@ interface CreateVehicleInput {
   status?: VehicleStatus;
   /** Encargo semanal. Só a gestão o define — o servidor recusa aos restantes. */
   weeklyFee?: number;
+  /** Combustível, elétrico ou híbrido. Uma característica do carro, por
+   *  isso não tem a guarda de papel do encargo semanal. */
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID';
 }
 
 interface UpdateVehicleInput {
@@ -24,6 +27,9 @@ interface UpdateVehicleInput {
   vin?:    string;
   status?: VehicleStatus;  // apenas admin/manager pode alterar
   weeklyFee?: number;      // idem — devolve CANNOT_CHANGE_VEHICLE_FEE ao motorista
+  /** Combustível, elétrico ou híbrido. Uma característica do carro, por
+   *  isso não tem a guarda de papel do encargo semanal. */
+  energyType?: 'FUEL' | 'ELECTRIC' | 'HYBRID';
 }
 
 export const vehiclesService = {

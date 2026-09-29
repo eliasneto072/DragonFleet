@@ -144,7 +144,34 @@ export class SettlementsService {
     }
   }
 
+  /**
+   * O último conta-quilómetros de um carro, para o formulário sugerir o
+   * "km no início" em vez de obrigar a ir procurá-lo ao fecho anterior.
+   *
+   * Só a gestão: é ela que fecha semanas. Devolve `null` quando aquele carro
+   * ainda não tem nenhuma leitura, e o formulário deixa o campo vazio.
+   */
+  async lastOdometer(actor: Actor, vehicleId: string) {
+    this.ensureManager(actor);
+    return settlementsRepository.lastOdometer(vehicleId);
+  }
+
   private buildData(input: SettlementAmounts, rate: number, taxRate: number) {
+    // Os quilómetros ao contrário são o engano mais provável do formulário:
+    // escrever o conta-quilómetros de hoje no campo "antes". A base tem a
+    // mesma guarda, mas de lá vem um erro de restrição em inglês que não
+    // explica nada a quem está a preencher um fecho.
+    if (
+      input.odometerStart != null && input.odometerEnd != null
+      && input.odometerEnd < input.odometerStart
+    ) {
+      throw new AppError(
+        'Os quilómetros do fim da semana não podem ser menores que os do início.',
+        400,
+        'ODOMETER_BACKWARDS',
+      );
+    }
+
     const totals = computeTotals({ ...input, commissionRate: rate, taxRate });
     return {
       uberAmount: input.uberAmount ?? 0,
@@ -165,6 +192,10 @@ export class SettlementsService {
       netToDriver: totals.netToDriver,
       notes: input.notes?.trim() || null,
       internalNotes: input.internalNotes?.trim() || null,
+      // `?? null` e não `|| null`: um zero é um quilómetro válido num carro
+      // acabado de comprar, e `|| null` deitava-o fora.
+      odometerStart: input.odometerStart ?? null,
+      odometerEnd: input.odometerEnd ?? null,
     };
   }
 

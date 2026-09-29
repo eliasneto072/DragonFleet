@@ -254,6 +254,14 @@ export interface ApiVehicle {
    * isto não reescreva semanas já pagas.
    */
   weeklyFee: number;
+  /**
+   * Combustível, elétrico ou híbrido.
+   *
+   * Decide o RÓTULO do campo de despesa no fecho semanal (Combustível ou
+   * Carregamento) e separa os gastos nas estatísticas. A coluna do dinheiro
+   * é uma só — o que muda é o nome que lhe damos.
+   */
+  energyType: 'FUEL' | 'ELECTRIC' | 'HYBRID';
   userId:    string | null;
   createdAt: string;
   updatedAt: string;

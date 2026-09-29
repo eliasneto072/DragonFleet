@@ -170,6 +170,10 @@ export function SettlementForm({
   const [rate, setRate] = useState('');
   const [notes, setNotes] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
+  // Quilómetros. Strings e não números: um campo vazio tem de continuar vazio
+  // enquanto se escreve, e um `number` transformava-o em 0 a cada tecla.
+  const [kmInicio, setKmInicio] = useState('');
+  const [kmFim, setKmFim] = useState('');
   // O encargo da viatura é sugerido a partir do veículo, mas só enquanto o
   // administrador não lhe tocar: sobrescrever um valor escrito à mão apagaria
   // trabalho dele.
@@ -206,6 +210,8 @@ export function SettlementForm({
     setRate(fromNumber(s.commissionRate));
     setNotes(s.notes ?? '');
     setInternalNotes(s.internalNotes ?? '');
+    setKmInicio(s.odometerStart != null ? String(s.odometerStart) : '');
+    setKmFim(s.odometerEnd != null ? String(s.odometerEnd) : '');
     // Um rascunho guardado já tem o valor decidido; não voltar a sugerir.
     setFeeTouched(true);
   }, [existingQuery.data]);
@@ -234,6 +240,23 @@ export function SettlementForm({
   // Sugere o encargo do veículo escolhido. Só enquanto o campo estiver por
   // tocar — trocar de carro depois de escrever um valor à mão não deve apagá-lo.
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+
+  // O último conta-quilómetros DAQUELE CARRO, para sugerir o "km no início".
+  // Sem isto era preciso ir abrir o fecho anterior para copiar o número — e
+  // quem o faz de memória engana-se num dígito mais cedo ou mais tarde.
+  const ultimoKmQuery = useQuery({
+    queryKey: ['settlements', 'ultimo-km', vehicleId],
+    queryFn: () => settlementsService.lastOdometer(vehicleId),
+    enabled: !!vehicleId,
+  });
+  const ultimoKm = ultimoKmQuery.data?.last ?? null;
+
+  // Preenche sozinho, mas NUNCA por cima do que já lá está: num fecho em
+  // edição os km são os que foram gravados, e numa semana em que já se
+  // escreveu não se apaga o que a pessoa pôs.
+  useEffect(() => {
+    if (ultimoKm && kmInicio.trim() === '') setKmInicio(String(ultimoKm.km));
+  }, [ultimoKm?.km]);
   useEffect(() => {
     if (feeTouched) return;
     setAmounts((prev) => ({
@@ -338,10 +361,16 @@ export function SettlementForm({
       ...payload,
       notes: notes.trim() || null,
       internalNotes: internalNotes.trim() || null,
+      // Vazio é `null` e não 0: zero é um quilómetro válido num carro acabado
+      // de comprar, e mandá-lo por omissão inventava uma leitura.
+      odometerStart: kmInicio.trim() === '' ? null : Number(kmInicio),
+      odometerEnd: kmFim.trim() === '' ? null : Number(kmFim),
     };
   }
 
   function reset() {
+    setKmInicio('');
+    setKmFim('');
     setAmounts(EMPTY_AMOUNTS);
     setRate('');
     setNotes('');
@@ -604,8 +633,17 @@ export function SettlementForm({
                 id="tolls" label="Via Verde"
                 value={amounts.tollsAmount} onChange={setAmount('tollsAmount')}
               />
+              {/* O rótulo segue o CARRO escolhido. A coluna na base de dados
+                  é a mesma — o que muda é o nome, porque pedir "combustível"
+                  de um Tesla faz quem preenche hesitar. O híbrido fica com os
+                  dois nomes, que é o que ele é. */}
               <MoneyField
-                id="fuel" label="Prio (combustível)"
+                id="fuel"
+                label={
+                  selectedVehicle?.energyType === 'ELECTRIC' ? 'Carregamento elétrico'
+                  : selectedVehicle?.energyType === 'HYBRID' ? 'Combustível / carregamento'
+                  : 'Prio (combustível)'
+                }
                 value={amounts.fuelAmount} onChange={setAmount('fuelAmount')}
               />
               <MoneyField
@@ -623,6 +661,60 @@ export function SettlementForm({
                 id="otherDeductions" label="Outros"
                 value={amounts.otherDeductions} onChange={setAmount('otherDeductions')}
               />
+
+              {/* ── Quilómetros ──────────────────────────────────────────────
+                  Opcionais, e ditos como opcionais: travar um fecho por causa
+                  de um número que ninguém anotou seria trocar dinheiro por
+                  estatística.
+
+                  Não entram em conta nenhuma — só nas Estatísticas. */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>
+                  Quilómetros{' '}
+                  <span className="text-xs font-normal text-muted-foreground">— opcional</span>
+                </Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="kmInicio"
+                    type="number" inputMode="numeric" min="0" step="1"
+                    placeholder="No início"
+                    className="w-[140px] tabular-nums"
+                    value={kmInicio}
+                    onChange={(e) => setKmInicio(e.target.value)}
+                  />
+                  <span className="text-muted-foreground" aria-hidden="true">→</span>
+                  <Input
+                    id="kmFim"
+                    type="number" inputMode="numeric" min="0" step="1"
+                    placeholder="No fim"
+                    className="w-[140px] tabular-nums"
+                    value={kmFim}
+                    onChange={(e) => setKmFim(e.target.value)}
+                  />
+                  {/* A conta feita à vista, enquanto se escreve: um dígito a
+                      mais salta logo aqui, antes de gravar. */}
+                  {kmInicio.trim() !== '' && kmFim.trim() !== '' && (
+                    <span
+                      className={`text-sm tabular-nums ${
+                        Number(kmFim) < Number(kmInicio)
+                          ? 'font-medium text-destructive'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {Number(kmFim) < Number(kmInicio)
+                        ? 'O fim é menor que o início'
+                        : `${(Number(kmFim) - Number(kmInicio)).toLocaleString('pt-PT')} km nesta semana`}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {!vehicleId
+                    ? 'Escolha a viatura para o sistema sugerir o valor anterior.'
+                    : ultimoKm
+                      ? `Última leitura de ${selectedVehicle?.plate ?? 'a viatura'}: ${ultimoKm.km.toLocaleString('pt-PT')} km.`
+                      : 'Ainda sem leituras anteriores desta viatura.'}
+                </p>
+              </div>
 
               {/* Imposto — calculado, não escrito.
                   

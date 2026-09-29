@@ -39,6 +39,15 @@ const amountsShape = {
   notes: z.string().max(2000).optional().nullable(),
   /** Só a gestão vê. Filtrado na origem, no repositório. */
   internalNotes: z.string().max(2000).optional().nullable(),
+  /**
+   * Conta-quilómetros no início e no fim da semana. OPCIONAIS.
+   *
+   * `null` apaga-os; `undefined` deixa-os como estão. A distinção existe
+   * porque um fecho pode ser corrigido para retirar um número mal escrito, e
+   * sem ela isso era impossível.
+   */
+  odometerStart: z.coerce.number().int().min(0).max(9_999_999).optional().nullable(),
+  odometerEnd: z.coerce.number().int().min(0).max(9_999_999).optional().nullable(),
 };
 
 export const settlementIdParamSchema = z.object({

@@ -23,6 +23,9 @@ export const createVehicleSchema = z.object({
     status: z.nativeEnum(VehicleStatus).optional(),
     /** Encargo semanal. Sugerido no fecho, e lá continua editável. */
     weeklyFee: z.coerce.number().min(0).optional(),
+    // Combustível, elétrico ou híbrido. Decide o rótulo do campo de
+    // despesa no fecho e separa os gastos nas estatísticas.
+    energyType: z.enum(['FUEL', 'ELECTRIC', 'HYBRID']).optional(),
   }),
 });
 
@@ -39,6 +42,9 @@ export const updateVehicleSchema = z.object({
       vin: z.string().min(5).max(20).optional(),
       status: z.nativeEnum(VehicleStatus).optional(),
       weeklyFee: z.coerce.number().min(0).optional(),
+    // Combustível, elétrico ou híbrido. Decide o rótulo do campo de
+    // despesa no fecho e separa os gastos nas estatísticas.
+    energyType: z.enum(['FUEL', 'ELECTRIC', 'HYBRID']).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, {
       message: 'At least one field is required',
