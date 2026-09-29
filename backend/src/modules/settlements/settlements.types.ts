@@ -22,6 +22,8 @@ export interface SettlementAmounts {
 
   tollsAmount?: number;
   fuelAmount?: number;
+  /** Carregamento elétrico. Despesa operacional, tal como o combustível. */
+  chargeAmount?: number;
   vehicleFee?: number;
   otherDeductions?: number;
 
@@ -94,6 +96,8 @@ export interface SettlementPublic extends SettlementTotals {
 
   tollsAmount: number;
   fuelAmount: number;
+  /** Carregamento elétrico. Zero nas semanas anteriores a este campo. */
+  chargeAmount: number;
   vehicleFee: number;
   otherDeductions: number;
 
@@ -183,6 +187,10 @@ export function computeTotals(
 
   const operatingCosts = cents(
     (input.tollsAmount ?? 0) + (input.fuelAmount ?? 0) +
+    // O carregamento é uma despesa operacional exatamente como o combustível:
+    // é o que custou mover o carro. Esquecê-lo aqui inflacionava o lucro e a
+    // comissão de toda a frota elétrica.
+    (input.chargeAmount ?? 0) +
     (input.vehicleFee ?? 0) + (input.otherDeductions ?? 0) +
     taxAmount,
   );

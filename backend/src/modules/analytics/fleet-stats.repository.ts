@@ -48,8 +48,12 @@ import { prisma } from '../../config/prisma';
  */
 const LUCRO = `CASE WHEN u.is_company THEN s.net_to_driver ELSE s.vehicle_fee END`;
 
-/** Combustível vs carregamento: a coluna é uma, o carro é que decide. */
-const ELETRICO = `v.energy_type = 'ELECTRIC'`;
+// Antes havia aqui uma constante `ELETRICO` que separava combustível de
+// carregamento pelo tipo do CARRO, porque os dois partilhavam uma coluna.
+// Já não: cada um tem a sua, e a soma lê o que foi escrito em vez de o
+// deduzir. A diferença aparece num híbrido — que tem os dois na mesma semana
+// — e no dia em que um carro for reclassificado, que com a versão antiga
+// mudava retroativamente as despesas de todas as semanas passadas.
 
 export interface FleetTotals {
   faturacaoBruta: number;
@@ -76,6 +80,9 @@ export interface CarroStats {
   semanas: number;
   faturacaoBruta: number;
   viaVerde: number;
+  /** Combustível e carregamento, separados — e a soma dos dois em `energia`. */
+  combustivel: number;
+  carregamento: number;
   energia: number;
   aluguer: number;
   pagoAoMotorista: number;
@@ -117,10 +124,8 @@ export const fleetStatsRepository = {
         CAST(COALESCE(SUM(s.gross_revenue), 0)     AS FLOAT) AS faturacao,
         CAST(COALESCE(SUM(s.net_to_driver), 0)     AS FLOAT) AS pago,
         CAST(COALESCE(SUM(s.tolls_amount), 0)      AS FLOAT) AS via_verde,
-        CAST(COALESCE(SUM(CASE WHEN v.id IS NULL OR NOT (${ELETRICO})
-                               THEN s.fuel_amount ELSE 0 END), 0) AS FLOAT) AS combustivel,
-        CAST(COALESCE(SUM(CASE WHEN ${ELETRICO}
-                               THEN s.fuel_amount ELSE 0 END), 0) AS FLOAT) AS carregamento,
+        CAST(COALESCE(SUM(s.fuel_amount), 0)       AS FLOAT) AS combustivel,
+        CAST(COALESCE(SUM(s.charge_amount), 0)     AS FLOAT) AS carregamento,
         CAST(COALESCE(SUM(s.vehicle_fee), 0)       AS FLOAT) AS aluguer,
         CAST(COALESCE(SUM(s.commission_amount), 0) AS FLOAT) AS comissao,
         CAST(COALESCE(SUM(s.tax_amount), 0)        AS FLOAT) AS imposto,
@@ -165,7 +170,9 @@ export const fleetStatsRepository = {
         CAST(COUNT(*) AS INTEGER)                            AS semanas,
         CAST(COALESCE(SUM(s.gross_revenue), 0)     AS FLOAT) AS faturacao,
         CAST(COALESCE(SUM(s.tolls_amount), 0)      AS FLOAT) AS via_verde,
-        CAST(COALESCE(SUM(s.fuel_amount), 0)       AS FLOAT) AS energia,
+        CAST(COALESCE(SUM(s.fuel_amount), 0)       AS FLOAT) AS combustivel,
+        CAST(COALESCE(SUM(s.charge_amount), 0)     AS FLOAT) AS carregamento,
+        CAST(COALESCE(SUM(s.fuel_amount + s.charge_amount), 0) AS FLOAT) AS energia,
         CAST(COALESCE(SUM(s.vehicle_fee), 0)       AS FLOAT) AS aluguer,
         CAST(COALESCE(SUM(s.net_to_driver), 0)     AS FLOAT) AS pago,
         CAST(COALESCE(SUM(${LUCRO}), 0)            AS FLOAT) AS lucro,
@@ -190,6 +197,8 @@ export const fleetStatsRepository = {
       semanas: l.semanas,
       faturacaoBruta: l.faturacao,
       viaVerde: l.via_verde,
+      combustivel: l.combustivel,
+      carregamento: l.carregamento,
       energia: l.energia,
       aluguer: l.aluguer,
       pagoAoMotorista: l.pago,

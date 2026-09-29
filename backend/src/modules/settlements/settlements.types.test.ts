@@ -45,6 +45,7 @@ function semana(overrides: Partial<Parameters<typeof computeTotals>[0]> = {}) {
     otherRevenue: 0,
     tollsAmount: 0,
     fuelAmount: 0,
+    chargeAmount: 0,
     vehicleFee: 0,
     otherDeductions: 0,
     commissionRate: 15,
@@ -66,6 +67,44 @@ describe('computeTotals — receitas e despesas', () => {
     });
     // 400 de despesas reais + 60 de imposto sobre os 1000 da Uber
     expect(r.operatingCosts).toBe(460);
+  });
+
+  it('o carregamento elétrico conta como despesa, tal como o combustível', () => {
+    // O teste que justifica a coluna nova: esquecer o carregamento na conta
+    // inflacionava o lucro, e com ele a comissão, de toda a frota elétrica.
+    const comCarga = semana({ uberAmount: 1000, chargeAmount: 150, taxRate: 0 });
+    const comGasoleo = semana({ uberAmount: 1000, fuelAmount: 150, taxRate: 0 });
+
+    expect(comCarga.operatingCosts).toBe(150);
+    expect(comCarga.profitBase).toBe(850);
+    // Cem euros de eletricidade pesam o mesmo que cem de gasóleo.
+    expect(comCarga.netToDriver).toBe(comGasoleo.netToDriver);
+  });
+
+  it('um híbrido soma os dois na mesma semana', () => {
+    // O caso que a coluna partilhada não conseguia representar.
+    const r = semana({
+      uberAmount: 1000, fuelAmount: 80, chargeAmount: 45, taxRate: 0,
+    });
+    expect(r.operatingCosts).toBe(125);
+    expect(r.profitBase).toBe(875);
+  });
+
+  it('sem carregamento, a conta é exatamente a de antes', () => {
+    // A garantia para as semanas já fechadas: o campo novo é zero nelas, e
+    // zero não pode mudar um total que já foi pago.
+    const semCampo = computeTotals({
+      uberAmount: 1000, boltAmount: 0, otherRevenue: 0,
+      tollsAmount: 40, fuelAmount: 100, vehicleFee: 200, otherDeductions: 60,
+      commissionRate: 15, taxRate: 6,
+    });
+    const comZero = semana({
+      uberAmount: 1000,
+      tollsAmount: 40, fuelAmount: 100, vehicleFee: 200, otherDeductions: 60,
+      chargeAmount: 0,
+    });
+    expect(comZero.operatingCosts).toBe(semCampo.operatingCosts);
+    expect(comZero.netToDriver).toBe(semCampo.netToDriver);
   });
 
   it('o lucro e o bruto menos as despesas', () => {

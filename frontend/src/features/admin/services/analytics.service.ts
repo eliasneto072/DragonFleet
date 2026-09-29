@@ -150,7 +150,9 @@ export interface CarroStats {
   semanas: number;
   faturacaoBruta: number;
   viaVerde: number;
-  /** Combustível ou eletricidade, conforme o carro. */
+  /** Separados, porque são despesas diferentes — `energia` é a soma dos dois. */
+  combustivel: number;
+  carregamento: number;
   energia: number;
   aluguer: number;
   pagoAoMotorista: number;

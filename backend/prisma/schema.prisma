@@ -577,6 +577,10 @@ model WeeklySettlement {
   // Deducoes operacionais.
   tollsAmount     Decimal @default(0) @map("tolls_amount")     @db.Decimal(12, 2) // Via Verde
   fuelAmount      Decimal @default(0) @map("fuel_amount")      @db.Decimal(12, 2) // Prio
+  /// Carregamento elétrico. Coluna PRÓPRIA e não partilhada com o
+  /// combustível: um híbrido tem os dois na mesma semana, e depois de
+  /// somados na mesma célula não há consulta que os separe.
+  chargeAmount    Decimal @default(0) @map("charge_amount")    @db.Decimal(12, 2)
   vehicleFee      Decimal @default(0) @map("vehicle_fee")      @db.Decimal(12, 2)
   otherDeductions Decimal @default(0) @map("other_deductions") @db.Decimal(12, 2)
 

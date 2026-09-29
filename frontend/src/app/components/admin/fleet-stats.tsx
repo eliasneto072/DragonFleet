@@ -388,7 +388,8 @@ export function FleetStats() {
                       <TableHead className="text-right">Semanas</TableHead>
                       <TableHead className="text-right">Faturou</TableHead>
                       <TableHead className="text-right">Via Verde</TableHead>
-                      <TableHead className="text-right">Energia</TableHead>
+                      <TableHead className="text-right">Combustível</TableHead>
+                      <TableHead className="text-right">Carregamento</TableHead>
                       <TableHead className="text-right">Km</TableHead>
                       <TableHead className="text-right">Lucro</TableHead>
                     </TableRow>
@@ -408,7 +409,17 @@ export function FleetStats() {
                           <TableCell className="text-right tabular-nums">{c.semanas}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatCurrency(c.faturacaoBruta)}</TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(c.viaVerde)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(c.energia)}</TableCell>
+                          {/* Um traço e não 0,00 € quando o carro não é desse
+                              tipo: um zero parece uma semana sem gastos, e não
+                              "não se aplica". */}
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {c.energyType === 'ELECTRIC' && c.combustivel === 0
+                              ? '—' : formatCurrency(c.combustivel)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {c.energyType === 'FUEL' && c.carregamento === 0
+                              ? '—' : formatCurrency(c.carregamento)}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
                             {/* Um traço e não um zero: "não foi registado" não é
                                 "não andou". */}

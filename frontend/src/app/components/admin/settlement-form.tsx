@@ -117,13 +117,13 @@ function MoneyField({
 
 type Amounts = Record<
   'uberAmount' | 'boltAmount' | 'otherRevenue' |
-  'tollsAmount' | 'fuelAmount' | 'vehicleFee' | 'otherDeductions',
+  'tollsAmount' | 'fuelAmount' | 'chargeAmount' | 'vehicleFee' | 'otherDeductions',
   string
 >;
 
 const EMPTY_AMOUNTS: Amounts = {
   uberAmount: '', boltAmount: '', otherRevenue: '',
-  tollsAmount: '', fuelAmount: '', vehicleFee: '', otherDeductions: '',
+  tollsAmount: '', fuelAmount: '', chargeAmount: '', vehicleFee: '', otherDeductions: '',
 };
 
 function toNumbers(a: Amounts): SettlementAmounts {
@@ -134,6 +134,7 @@ function toNumbers(a: Amounts): SettlementAmounts {
     otherRevenue: n(a.otherRevenue),
     tollsAmount: n(a.tollsAmount),
     fuelAmount: n(a.fuelAmount),
+    chargeAmount: n(a.chargeAmount),
     vehicleFee: n(a.vehicleFee),
     otherDeductions: n(a.otherDeductions),
   };
@@ -204,6 +205,7 @@ export function SettlementForm({
       otherRevenue: fromNumber(s.otherRevenue),
       tollsAmount: fromNumber(s.tollsAmount),
       fuelAmount: fromNumber(s.fuelAmount),
+      chargeAmount: fromNumber(s.chargeAmount ?? 0),
       vehicleFee: fromNumber(s.vehicleFee),
       otherDeductions: fromNumber(s.otherDeductions),
     });
@@ -633,19 +635,26 @@ export function SettlementForm({
                 id="tolls" label="Via Verde"
                 value={amounts.tollsAmount} onChange={setAmount('tollsAmount')}
               />
-              {/* O rótulo segue o CARRO escolhido. A coluna na base de dados
-                  é a mesma — o que muda é o nome, porque pedir "combustível"
-                  de um Tesla faz quem preenche hesitar. O híbrido fica com os
-                  dois nomes, que é o que ele é. */}
-              <MoneyField
-                id="fuel"
-                label={
-                  selectedVehicle?.energyType === 'ELECTRIC' ? 'Carregamento elétrico'
-                  : selectedVehicle?.energyType === 'HYBRID' ? 'Combustível / carregamento'
-                  : 'Prio (combustível)'
-                }
-                value={amounts.fuelAmount} onChange={setAmount('fuelAmount')}
-              />
+              {/* ── Combustível e carregamento: DOIS campos ─────────────────
+                  São despesas diferentes e têm colunas diferentes. O carro
+                  decide quais aparecem, mas um campo com valor NUNCA se
+                  esconde — senão trocar o tipo do carro fazia desaparecer do
+                  ecrã dinheiro que continua lançado. */}
+              {(selectedVehicle?.energyType !== 'ELECTRIC'
+                || amounts.fuelAmount.trim() !== '') && (
+                <MoneyField
+                  id="fuel" label="Combustível"
+                  value={amounts.fuelAmount} onChange={setAmount('fuelAmount')}
+                />
+              )}
+              {(selectedVehicle?.energyType === 'ELECTRIC'
+                || selectedVehicle?.energyType === 'HYBRID'
+                || amounts.chargeAmount.trim() !== '') && (
+                <MoneyField
+                  id="charge" label="Carregamento elétrico"
+                  value={amounts.chargeAmount} onChange={setAmount('chargeAmount')}
+                />
+              )}
               <MoneyField
                 id="vehicleFee" label="Viatura"
                 icon={<Car className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
