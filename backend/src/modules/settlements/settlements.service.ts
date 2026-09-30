@@ -179,6 +179,7 @@ export class SettlementsService {
       otherRevenue: input.otherRevenue ?? 0,
       tollsAmount: input.tollsAmount ?? 0,
       fuelAmount: input.fuelAmount ?? 0,
+      chargeAmount: input.chargeAmount ?? 0,
       vehicleFee: input.vehicleFee ?? 0,
       otherDeductions: input.otherDeductions ?? 0,
       commissionRate: rate,
