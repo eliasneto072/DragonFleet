@@ -17,8 +17,6 @@ export interface SettlementAmounts {
 
   tollsAmount?: number;
   fuelAmount?: number;
-  /** Carregamento elétrico. Campo à parte do combustível. */
-  chargeAmount?: number;
   vehicleFee?: number;
   otherDeductions?: number;
 
@@ -72,8 +70,6 @@ export interface ApiSettlement extends SettlementTotals {
 
   tollsAmount: number;
   fuelAmount: number;
-  /** Carregamento elétrico. Zero nas semanas anteriores a este campo. */
-  chargeAmount: number;
   vehicleFee: number;
   otherDeductions: number;
 

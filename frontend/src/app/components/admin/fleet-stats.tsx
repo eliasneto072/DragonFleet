@@ -29,6 +29,7 @@
 // conclusão sobre os carros.
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -268,6 +269,37 @@ export function FleetStats() {
               icon={Receipt}
             />
           </div>
+
+          {/* ── NINGUÉM MARCADO COMO EMPRESA ────────────────────────────
+              O caso em que o número está errado e nada o diria: sem a marca,
+              o lucro conta só os alugueres, e as semanas do dono — que são
+              dinheiro da empresa por inteiro — ficam de fora.
+
+              É um aviso e não uma nota de rodapé, porque a diferença entre um
+              ecrã e outro são milhares de euros, e quem olha para um total
+              assume que está completo. */}
+          {!f?.porMotorista.some((m) => m.isCompany) && (
+            <div className="flex gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+              <div className="space-y-1 text-sm">
+                <p className="font-medium">
+                  Nenhum motorista está marcado como empresa
+                </p>
+                <p className="text-muted-foreground">
+                  O lucro acima está a contar <strong>apenas os alugueres das
+                  viaturas</strong>. Se você também conduz, as suas semanas não
+                  estão a entrar — e deviam entrar por inteiro.
+                </p>
+                <p className="text-muted-foreground">
+                  Abra a ficha do seu motorista em{' '}
+                  <Link to="/app/admin/drivers" className="font-medium text-accent hover:underline">
+                    Motoristas
+                  </Link>
+                  {' '}e ligue <strong>&quot;Este motorista é a empresa&quot;</strong>.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* A ressalva fica ao lado dos números, e não no fim da página. */}
           <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">

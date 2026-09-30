@@ -48,7 +48,6 @@ function toPublic(r: Row, includeInternal = false): SettlementPublic {
 
     tollsAmount: Number(r.tollsAmount),
     fuelAmount: Number(r.fuelAmount),
-    chargeAmount: Number(r.chargeAmount ?? 0),
     vehicleFee: Number(r.vehicleFee),
     otherDeductions: Number(r.otherDeductions),
 

@@ -21,8 +21,6 @@ const amountsShape = {
 
   tollsAmount: money.optional(),
   fuelAmount: money.optional(),
-  /** Carregamento elétrico. Campo à parte do combustível. */
-  chargeAmount: money.optional(),
   vehicleFee: money.optional(),
   otherDeductions: money.optional(),
 
