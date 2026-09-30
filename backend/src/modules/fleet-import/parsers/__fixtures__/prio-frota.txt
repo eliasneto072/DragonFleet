@@ -1,0 +1,54 @@
+Transações
+Início: 01/07/2026; Fim: 30/09/2026
+Todos os Postos
+Todos os Estados de cartões
+Todos os cartões
+Posto Tipo de Rede Data Cartão Estado Litros Combustível Recibo Valor Liq. Km's Id Cond. Fatura Total(c/iva) val.unit (s/iva)
+PA A16 Sintra Cascais O 28/09/2026 7824731729670014 Val. Liq: 81,23
+Geral Ativo 45,85 L ECO DIESEL 082523 1 01 A aguardar fatura 99,9100 Val. Ref (c/iva): 2,289
+Portugal 19:16:58 BG-49-GP IVA: 18,68
+Val. Des (c/iva): 0,110
+PA Alenquer 23/09/2026 7824731729670014 Val. Liq: 71,18
+Geral Ativo 40,00 L TOP DIESEL 001110 1 01 7233487951 87,5500 Val. Ref (c/iva): 2,354
+Portugal 23:20:55 BG-49-GP IVA: 16,37
+Val. Des (c/iva): 0,165
+CD Cascais Torre 23/09/2026 7824731729670014 Val. Liq: 24,18
+Geral Ativo 13,43 L ECO DIESEL 45615 1 01 7233487951 29,7400 Val. Ref (c/iva): 2,325
+Portugal 14:02:30 BG-49-GP IVA: 5,56
+Val. Des (c/iva): 0,110
+PA Alenquer 10/08/2026 7824731729670009 Val. Liq: 32,35
+Geral Ativo 20,79 L TOP DIESEL 010068 0 5 7233432152 39,7900 Val. Ref (c/iva): 2,094
+Portugal 19:33:05 AX-89-SG IVA: 7,44
+Val. Des (c/iva): 0,180
+CD Veiga e Seabra - Cacém 08/08/2026 7824731729670014 Val. Liq: 12,25
+Geral Ativo 7,30 L GASOLEO RODOVIARIO 63335 0 00 7233422676 15,0700 Val. Ref (c/iva): 2,174
+Portugal 18:41:39 BG-49-GP IVA: 2,82
+Val. Des (c/iva): 0,110
+CD Veiga e Seabra - Cacém 07/08/2026 7824731729670014 Val. Liq: 24,87
+Geral Ativo 14,82 L GASOLEO RODOVIARIO 62269 0 00 7233422676 30,5900 Val. Ref (c/iva): 2,174
+Portugal 22:34:50 BG-49-GP IVA: 5,72
+Val. Des (c/iva): 0,110
+PA Alenquer 07/08/2026 7824731729670009 Val. Liq: 12,14
+Geral Ativo 7,36 L TOP DIESEL 014143 0 5 7233422676 14,9300 Val. Ref (c/iva): 2,174
+Portugal 20:29:30 AX-89-SG IVA: 2,79
+Val. Des (c/iva): 0,145
+PA Alenquer 30/07/2026 7824731729670009 Val. Liq: 32,37
+Geral Ativo 19,77 L TOP DIESEL 013941 0 5 7233409598 39,8200 Val. Ref (c/iva): 2,159
+Portugal 17:28:56 AX-89-SG IVA: 7,45
+Val. Des (c/iva): 0,145
+CD Veiga e Seabra - Cacém 28/07/2026 7824731729670014 Val. Liq: 41,56
+Geral Ativo 24,95 L GASOLEO RODOVIARIO 41803 0 00 7233409598 51,1100 Val. Ref (c/iva): 2,159
+Portugal 09:30:15 BG-49-GP IVA: 9,55
+Val. Des (c/iva): 0,110
+PA Alenquer 23/07/2026 7824731729670009 Val. Liq: 32,36
+Geral Ativo 20,37 L TOP DIESEL 000691 0 05 7233400196 39,8000 Val. Ref (c/iva): 2,094
+Portugal 00:56:46 AX-89-SG IVA: 7,44
+Val. Des (c/iva): 0,140
+PA Alenquer 07/07/2026 7824731729670009 Val. Liq: 32,34
+Geral Ativo 22,42 L TOP DIESEL 013324 0 5 7233380697 39,7800 Val. Ref (c/iva): 1,924
+Portugal 18:47:52 AX-89-SG IVA: 7,44
+Val. Des (c/iva): 0,150
+PA Alenquer 04/07/2026 7824731729670009 Val. Liq: 32,33
+Geral Ativo 22,87 L TOP DIESEL 013249 0 5 7233372630 39,7700 Val. Ref (c/iva): 1,899
+Portugal 12:50:41 AX-89-SG IVA: 7,44
+Val. Des (c/iva): 0,160
