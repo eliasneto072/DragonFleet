@@ -13,6 +13,7 @@ import { reportsRouter } from '../modules/reports/reports.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
 import { balanceRouter } from '../modules/balance/balance.routes';
 import { settlementsRouter } from '../modules/settlements/settlements.routes';
+import { fleetImportRouter } from '../modules/fleet-import/fleet-import.routes';
 import { bankRouter } from '../modules/bank/bank.routes';
 import { companiesRouter } from '../modules/companies/companies.routes';
 import { investmentsRouter } from '../modules/investments/investments.routes';
@@ -56,6 +57,9 @@ router.use('/reports', requireArea('FINANCIAL'), reportsRouter());
 router.use('/settings', requireArea('SETTINGS'), settingsRouter());
 router.use('/balance', requireArea('FINANCIAL'), balanceRouter());
 router.use('/settlements', requireArea('SETTLEMENTS'), settlementsRouter());
+// A importação de despesas cria fechos, por isso vive sob a mesma área. O
+// `requireArea` mais fino (MANAGE) está dentro do router: aqui basta a porta.
+router.use('/fleet-import', requireArea('SETTLEMENTS'), fleetImportRouter());
 router.use('/bank', requireArea('FINANCIAL'), bankRouter());
 router.use('/companies', requireArea('GREEN_RECEIPTS'), companiesRouter());
 router.use('/investments', requireArea('INVESTMENTS'), investmentsRouter());

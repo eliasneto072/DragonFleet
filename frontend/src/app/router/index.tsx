@@ -29,6 +29,7 @@ import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
 import { AssignmentLookupPage } from '@/features/admin/pages/AssignmentLookupPage';
 import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
 import { FleetStatsPage } from '@/features/admin/pages/FleetStatsPage';
+import { ExpenseImportPage } from '@/features/admin/pages/ExpenseImportPage';
 import { NotificationsAdminPage } from '@/features/admin/pages/NotificationsAdminPage';
 import { SettingsPage } from '@/features/admin/pages/SettingsPage';
 import { DocumentsAdminPage } from '@/features/admin/pages/DocumentsAdminPage';
@@ -93,6 +94,8 @@ export const router = createBrowserRouter([
           { path: 'ranks',          element: <RequireArea area="RANKS"><RanksPage /></RequireArea> },
 
           { path: 'settlements',    element: <RequireArea area="SETTLEMENTS"><SettlementsPage /></RequireArea> },
+          // Cria fechos, por isso vive na mesma área da faturação.
+          { path: 'importar',       element: <RequireArea area="SETTLEMENTS"><ExpenseImportPage /></RequireArea> },
           { path: 'financial',      element: <RequireArea area="FINANCIAL"><FinancialPage /></RequireArea> },
           { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
           { path: 'analytics',      element: <RequireArea area="ANALYTICS"><AnalyticsPage /></RequireArea> },

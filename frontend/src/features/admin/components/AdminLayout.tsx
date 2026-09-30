@@ -26,7 +26,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge,
+  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
@@ -58,6 +58,7 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       // "Registo semanal de faturação" quebraria em três linhas. O nome
       // completo é o título da página.
       { to: '/app/admin/settlements',    icon: ReceiptText,     label: 'Faturação',      area: 'SETTLEMENTS' },
+      { to: '/app/admin/importar',       icon: FileUp,          label: 'Importar',       area: 'SETTLEMENTS' },
       { to: '/app/admin/financial',      icon: DollarSign,      label: 'Financeiro',     area: 'FINANCIAL' },
       { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes', area: 'GREEN_RECEIPTS' },
       { to: '/app/admin/analytics',      icon: TrendingUp,      label: 'Análises',       area: 'ANALYTICS' },

@@ -1,0 +1,44 @@
+IMPORTAÇÃO DE DESPESAS — ficheiros desta entrega (20)
+
+Arrasta o conteúdo desta pasta para o GitHub, para a raiz do projeto. As
+pastas batem com as do repositório, por isso é só largar backend/ e frontend/.
+
+Nenhum destes ficheiros foi entregue antes. Não há repetidos.
+
+MODIFICADOS (substituem o que está lá)
+  backend/src/app.ts
+  backend/src/routes/routes.ts
+  frontend/src/app/router/index.tsx
+  frontend/src/features/admin/components/AdminLayout.tsx
+
+NOVOS — o leitor de PDF
+  backend/src/modules/fleet-import/pdf/extrair-texto.ts
+  backend/src/modules/fleet-import/pdf/extrair-texto.test.ts
+
+NOVOS — os três PDFs verdadeiros, para os testes
+  backend/src/modules/fleet-import/parsers/__fixtures__/via-verde.pdf
+  backend/src/modules/fleet-import/parsers/__fixtures__/prio-frota.pdf
+  backend/src/modules/fleet-import/parsers/__fixtures__/prio-electric.pdf
+
+NOVOS — o planeador (ficou de fora do _SUBIR_TUDO)
+  backend/src/modules/fleet-import/planear.ts
+  backend/src/modules/fleet-import/planear.test.ts
+
+NOVOS — a importação (API)
+  backend/src/modules/fleet-import/fleet-import.repository.ts
+  backend/src/modules/fleet-import/fleet-import.service.ts
+  backend/src/modules/fleet-import/fleet-import.controller.ts
+  backend/src/modules/fleet-import/fleet-import.schemas.ts
+  backend/src/modules/fleet-import/fleet-import.routes.ts
+  backend/src/test/fleet-import.integration.test.ts
+
+NOVOS — a tela
+  frontend/src/features/admin/services/fleet-import.service.ts
+  frontend/src/app/components/admin/expense-import.tsx
+  frontend/src/features/admin/pages/ExpenseImportPage.tsx
+
+SEM MIGRAÇÕES. Não há alterações à base de dados nesta entrega.
+
+DEPOIS DE SUBIR
+  Menu Dinheiro › Importar. Escolhe a semana, larga os PDFs, Analisar,
+  e só depois Criar rascunhos. Nada é creditado.

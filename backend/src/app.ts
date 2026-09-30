@@ -53,6 +53,18 @@ app.use(cors({
   credentials: true,
 }));
 
+/**
+ * Corpo maior SÓ na importação de despesas.
+ *
+ * Tem de vir antes do `express.json()` geral: o primeiro parser a correr é o
+ * que consome o corpo, e o geral aceita 100 KB — três PDFs em base64 dão uns
+ * 300 KB e levavam 413 antes de a rota existir para eles.
+ *
+ * Subir o limite global era mais curto e pior: dava a toda a API a capacidade
+ * de receber megabytes, quando só um caminho precisa.
+ */
+app.use('/fleet-import', express.json({ limit: '25mb' }));
+
 app.use(express.json());
 
 /**
