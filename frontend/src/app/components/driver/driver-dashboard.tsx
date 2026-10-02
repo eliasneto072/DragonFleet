@@ -94,6 +94,63 @@ const EARNING_STATUS: Record<
   },
 };
 
+/**
+ * Cabeçalho de um cartão que se pode dobrar, com a escolha guardada.
+ *
+ * ─── PORQUE É QUE A ESCOLHA É POR PESSOA ────────────────────────────────────
+ *
+ * A chave da preferência leva o id do motorista (ver quem chama). Há
+ * computadores partilhados, e sem isso um motorista dobrava um cartão e o
+ * seguinte encontrava-o dobrado sem perceber porquê.
+ *
+ * ─── E PORQUE É QUE FICA NO BROWSER E NÃO NO SERVIDOR ───────────────────────
+ *
+ * Porque é uma preferência de VISTA, não um dado. Quem abrir no telemóvel tem
+ * a sua: um cartão dobrado num ecrã grande não tem de estar dobrado num
+ * pequeno. Guardá-la na conta tornava a escolha de um aparelho na escolha de
+ * todos.
+ *
+ * ─── O CONTEÚDO É DESMONTADO, NÃO TAPADO ────────────────────────────────────
+ *
+ * Quem usa isto esconde o conteúdo com `{aberto && (...)}` e não com CSS. O
+ * gráfico mede-se a si próprio para saber a largura que tem, e dentro de um
+ * elemento escondido mede zero — ao reaparecer ficava com um pixel de largura.
+ * Vale a mesma regra para as listas, por coerência.
+ */
+function CabecalhoDobravel({ titulo, descricao, aberto, alternar, controla }: {
+  titulo: string;
+  descricao: string;
+  aberto: boolean;
+  alternar: () => void;
+  /** O id do bloco que este cabeçalho abre e fecha, para os leitores de ecrã. */
+  controla: string;
+}) {
+  return (
+    <CardHeader className="p-4 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle className="text-base sm:text-lg">{titulo}</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">{descricao}</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-mr-2 shrink-0 text-muted-foreground"
+          onClick={alternar}
+          aria-expanded={aberto}
+          aria-controls={controla}
+        >
+          {aberto ? 'Esconder' : 'Mostrar'}
+          <ChevronDown
+            className={`ml-1 h-4 w-4 transition-transform ${aberto ? '' : '-rotate-90'}`}
+            aria-hidden="true"
+          />
+        </Button>
+      </div>
+    </CardHeader>
+  );
+}
+
 function EarningBadge({ status }: { status: EarningStatus }) {
   const meta = EARNING_STATUS[status];
   if (!meta) return null;
@@ -376,10 +433,17 @@ export function DriverDashboard() {
   const [movementDetail, setMovementDetail] = useState<LedgerEntry | null>(null);
   const location = useLocation();
 
-  // Aberto por omissão: quem nunca tocou no botão continua a ver o que sempre
-  // viu. A chave leva o id da pessoa — ver a nota junto ao gráfico.
+  // Abertos por omissão: quem nunca tocar nos botões continua a ver o que
+  // sempre viu. As chaves levam o id da pessoa — ver a nota no CabecalhoDobravel.
+  //
+  // Duas preferências separadas e não uma só: esconder o gráfico e esconder a
+  // lista das semanas são escolhas independentes, e juntá-las numa obrigava a
+  // perder uma para mudar a outra.
   const [graficoAberto, setGraficoAberto] = usePreferenciaGuardada(
     `driver:grafico-semanal:${user?.id ?? 'anon'}`, true,
+  );
+  const [semanasAbertas, setSemanasAbertas] = usePreferenciaGuardada(
+    `driver:lista-semanas:${user?.id ?? 'anon'}`, true,
   );
 
   const settlementsQuery = useQuery({
@@ -688,43 +752,15 @@ export function DriverDashboard() {
         </Card>
       </div>
 
-      {/*
-        Evolução semanal — dobrável, e a escolha fica guardada.
-
-        A escolha é por PESSOA (a chave leva o id) porque há browsers
-        partilhados: dois motoristas no mesmo computador têm de ter escolhas
-        separadas, senão um dobra o gráfico e o outro encontra-o dobrado sem
-        perceber porquê.
-
-        Fica guardada neste browser e não no servidor — é uma preferência de
-        vista, e quem abrir no telemóvel deve ter a sua. Um gráfico dobrado num
-        ecrã grande não tem de estar dobrado num pequeno.
-      */}
+      {/* Evolução semanal — ver a nota do CabecalhoDobravel. */}
       <Card className="shadow-card">
-        <CardHeader className="p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base sm:text-lg">Quanto recebeu por semana</CardTitle>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Depois de descontadas as despesas e a comissão
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-mr-2 shrink-0 text-muted-foreground"
-              onClick={() => setGraficoAberto(!graficoAberto)}
-              aria-expanded={graficoAberto}
-              aria-controls="grafico-semanal"
-            >
-              {graficoAberto ? 'Esconder' : 'Mostrar'}
-              <ChevronDown
-                className={`ml-1 h-4 w-4 transition-transform ${graficoAberto ? '' : '-rotate-90'}`}
-                aria-hidden="true"
-              />
-            </Button>
-          </div>
-        </CardHeader>
+        <CabecalhoDobravel
+          titulo="Quanto recebeu por semana"
+          descricao="Depois de descontadas as despesas e a comissão"
+          aberto={graficoAberto}
+          alternar={() => setGraficoAberto(!graficoAberto)}
+          controla="grafico-semanal"
+        />
         {/*
           Desmontado e não escondido com CSS: o gráfico mede-se a si próprio
           para saber que largura tem, e dentro de um elemento escondido mede
@@ -784,13 +820,15 @@ export function DriverDashboard() {
 
       {/* Semanas */}
       <Card className="shadow-card">
-        <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">As suas semanas</CardTitle>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Toque para ver o detalhe de receitas e despesas
-          </p>
-        </CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        <CabecalhoDobravel
+          titulo="As suas semanas"
+          descricao="Toque para ver o detalhe de receitas e despesas"
+          aberto={semanasAbertas}
+          alternar={() => setSemanasAbertas(!semanasAbertas)}
+          controla="lista-semanas"
+        />
+        {semanasAbertas && (
+        <CardContent id="lista-semanas" className="p-4 pt-0 sm:p-6 sm:pt-0">
           {weeks.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma semana fechada ainda.
@@ -831,6 +869,7 @@ export function DriverDashboard() {
             </ul>
           )}
         </CardContent>
+        )}
       </Card>
 
       {/* Movimentos da conta */}
