@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { usePreferenciaGuardada } from '@/shared/hooks/use-preferencia';
 import { earningsService } from '@/features/driver/services/earnings.service';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
 import { balanceService } from '@/features/admin/services/balance.service';
@@ -375,6 +376,12 @@ export function DriverDashboard() {
   const [movementDetail, setMovementDetail] = useState<LedgerEntry | null>(null);
   const location = useLocation();
 
+  // Aberto por omissão: quem nunca tocou no botão continua a ver o que sempre
+  // viu. A chave leva o id da pessoa — ver a nota junto ao gráfico.
+  const [graficoAberto, setGraficoAberto] = usePreferenciaGuardada(
+    `driver:grafico-semanal:${user?.id ?? 'anon'}`, true,
+  );
+
   const settlementsQuery = useQuery({
     queryKey: queryKeys.settlements.list(user?.id, 'REGISTERED'),
     queryFn: () => settlementsService.list({ status: 'REGISTERED' }),
@@ -681,15 +688,50 @@ export function DriverDashboard() {
         </Card>
       </div>
 
-      {/* Evolução semanal */}
+      {/*
+        Evolução semanal — dobrável, e a escolha fica guardada.
+
+        A escolha é por PESSOA (a chave leva o id) porque há browsers
+        partilhados: dois motoristas no mesmo computador têm de ter escolhas
+        separadas, senão um dobra o gráfico e o outro encontra-o dobrado sem
+        perceber porquê.
+
+        Fica guardada neste browser e não no servidor — é uma preferência de
+        vista, e quem abrir no telemóvel deve ter a sua. Um gráfico dobrado num
+        ecrã grande não tem de estar dobrado num pequeno.
+      */}
       <Card className="shadow-card">
         <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">Quanto recebeu por semana</CardTitle>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Depois de descontadas as despesas e a comissão
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base sm:text-lg">Quanto recebeu por semana</CardTitle>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Depois de descontadas as despesas e a comissão
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-mr-2 shrink-0 text-muted-foreground"
+              onClick={() => setGraficoAberto(!graficoAberto)}
+              aria-expanded={graficoAberto}
+              aria-controls="grafico-semanal"
+            >
+              {graficoAberto ? 'Esconder' : 'Mostrar'}
+              <ChevronDown
+                className={`ml-1 h-4 w-4 transition-transform ${graficoAberto ? '' : '-rotate-90'}`}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+        {/*
+          Desmontado e não escondido com CSS: o gráfico mede-se a si próprio
+          para saber que largura tem, e dentro de um elemento escondido mede
+          zero. Ao reaparecer ficaria com um pixel de largura.
+        */}
+        {graficoAberto && (
+        <CardContent id="grafico-semanal" className="p-4 pt-0 sm:p-6 sm:pt-0">
           {series.length < 2 ? (
             <div className="flex flex-col items-center gap-2.5 px-2 py-8 text-center">
               <CalendarRange className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
@@ -737,6 +779,7 @@ export function DriverDashboard() {
             </>
           )}
         </CardContent>
+        )}
       </Card>
 
       {/* Semanas */}
