@@ -191,6 +191,54 @@ describe('a importação cria rascunhos', () => {
     expect(Number(fecho?.grossRevenue)).toBe(950.5);
   });
 
+  it('aceita os ganhos pelo NOME que o portal mostra', async () => {
+    // É o que a extensão tem: a Uber lista "João Gasóleo", não um id do
+    // DragonFleet. O emparelhamento é o mesmo da receção de lançamentos.
+    await request(app).post(ROTA)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({
+        ...SEMANA, ...TRES_FICHEIROS,
+        ganhosPorNome: [{ driverName: 'João Gasóleo', uberAmount: 400, boltAmount: 100 }],
+      });
+
+    const fecho = await testDb.weeklySettlement.findFirst({ where: { userId: joao.id } });
+    expect(Number(fecho?.uberAmount)).toBe(400);
+    expect(Number(fecho?.boltAmount)).toBe(100);
+  });
+
+  it('um nome que não emparelha vira AVISO, não um palpite', async () => {
+    // Lançar 500 € à pessoa errada é pior do que não os lançar: o valor em
+    // falta dá nas vistas, o valor no sítio errado não.
+    const res = await request(app).post(ROTA)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({
+        ...SEMANA, ...TRES_FICHEIROS,
+        ganhosPorNome: [{ driverName: 'Alguém Que Não Existe', uberAmount: 500 }],
+      });
+
+    expect(res.body.data.avisos.join(' ')).toContain('Alguém Que Não Existe');
+    expect(res.body.data.avisos.join(' ')).toContain('500.00');
+    const fechos = await testDb.weeklySettlement.findMany();
+    expect(fechos.every((f) => Number(f.uberAmount) === 0)).toBe(true);
+  });
+
+  it('o mesmo motorista em duas linhas soma, não substitui', async () => {
+    // O portal pode trazer a mesma pessoa duas vezes (dois carros, duas
+    // contas). A última a ganhar perdia a primeira sem dizer nada.
+    await request(app).post(ROTA)
+      .set(authHeader(admin.id, UserRole.ADMIN))
+      .send({
+        ...SEMANA, ...TRES_FICHEIROS,
+        ganhosPorNome: [
+          { driverName: 'João Gasóleo', uberAmount: 300 },
+          { driverName: 'João Gasóleo', uberAmount: 120 },
+        ],
+      });
+
+    const fecho = await testDb.weeklySettlement.findFirst({ where: { userId: joao.id } });
+    expect(Number(fecho?.uberAmount)).toBe(420);
+  });
+
   it('a comissão e o imposto são os das configurações, não zero', async () => {
     // O rascunho passa pelo settlementsService de propósito: é ele que resolve
     // a percentagem em vigor e o imposto. Um insert direto dava um fecho com

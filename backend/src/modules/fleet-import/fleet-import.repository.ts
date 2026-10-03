@@ -70,6 +70,19 @@ export const fleetImportRepository = {
     return new Set(linhas.map((l) => l.userId));
   },
 
+  /**
+   * Os motoristas ativos, para emparelhar com os nomes que os portais mostram.
+   *
+   * Só DRIVER e só ATIVOS: um administrador não conduz, e um motorista
+   * desligado não devia receber o valor de alguém com nome parecido.
+   */
+  async motoristasParaEmparelhar(): Promise<Array<{ id: string; name: string }>> {
+    return prisma.user.findMany({
+      where: { role: 'DRIVER', status: 'ACTIVE' },
+      select: { id: true, name: true },
+    });
+  },
+
   /** Nome de cada motorista, para os avisos falarem de pessoas e não de ids. */
   async nomes(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
