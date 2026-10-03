@@ -15,16 +15,17 @@ export interface VeiculoComTaxa extends Veiculo {
 }
 
 export const fleetImportRepository = {
-  /** Todos os veículos, com a taxa semanal. */
+  /** Todos os veículos, com a taxa semanal e o condutor que está na ficha. */
   async veiculos(): Promise<VeiculoComTaxa[]> {
     const linhas = await prisma.vehicle.findMany({
-      select: { id: true, plate: true, weeklyFee: true },
+      select: { id: true, plate: true, weeklyFee: true, userId: true },
       orderBy: { plate: 'asc' },
     });
     return linhas.map((v) => ({
       id: v.id,
       plate: v.plate,
       weeklyFee: Number(v.weeklyFee ?? 0),
+      condutorAtual: v.userId,
     }));
   },
 
@@ -73,12 +74,31 @@ export const fleetImportRepository = {
   /**
    * Os motoristas ativos, para emparelhar com os nomes que os portais mostram.
    *
-   * Só DRIVER e só ATIVOS: um administrador não conduz, e um motorista
-   * desligado não devia receber o valor de alguém com nome parecido.
+   * ─── O DONO TAMBÉM CONDUZ ─────────────────────────────────────────────────
+   *
+   * Isto filtrava só por `role: DRIVER`, com o argumento de que um
+   * administrador não conduz. Numa frota pequena isso é falso, e falso
+   * precisamente para a pessoa que usa esta ferramenta: o dono da empresa tem
+   * perfil de administrador E faz viagens.
+   *
+   * O efeito era invisível e caro. O nome dele vinha da Uber e da Bolt como o
+   * de qualquer outro, não encontrava ninguém nesta lista, e saía em "não
+   * corresponde a nenhum motorista da frota" — sem forma de perceber porquê,
+   * porque o nome estava escrito corretamente dos dois lados.
+   *
+   * A marca `isCompany` existe para isto, e o comentário dela no schema diz-o
+   * por palavras: "este motorista É a empresa (o dono, que também conduz)".
+   *
+   * Continua a não entrar quem é só administrativo, e continua a não entrar
+   * quem está desligado: um motorista que saiu não deve receber o valor de
+   * alguém com nome parecido.
    */
   async motoristasParaEmparelhar(): Promise<Array<{ id: string; name: string }>> {
     return prisma.user.findMany({
-      where: { role: 'DRIVER', status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        OR: [{ role: 'DRIVER' }, { isCompany: true }],
+      },
       select: { id: true, name: true },
     });
   },

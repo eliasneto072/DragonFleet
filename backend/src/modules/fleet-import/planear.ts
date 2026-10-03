@@ -33,6 +33,12 @@ import type { Leitura } from './parsers/tipos';
 export interface Veiculo {
   id: string;
   plate: string;
+  /**
+   * Quem está na ficha do carro AGORA. Não é o mesmo que quem o teve na semana.
+   *
+   * Só serve de último recurso, e só a forçar: ver a nota no `planear`.
+   */
+  condutorAtual?: string | null;
 }
 
 /** Um período em que um carro esteve com alguém. `fim` nulo = ainda está. */
@@ -156,6 +162,41 @@ export function planear(entrada: {
       .sort((a, b) => b.dias - a.dias);
 
     if (daSemana.length === 0) {
+      // ─── O ÚLTIMO RECURSO, E SÓ A FORÇAR ──────────────────────────────────
+      //
+      // O histórico de atribuições começa no dia em que alguém o registou. Uma
+      // semana anterior a esse dia não tem resposta nenhuma guardada — e o que
+      // saía daqui, "não esteve atribuída a ninguém", lia-se como uma
+      // afirmação sobre o carro quando era apenas a ausência do registo.
+      //
+      // Numa frota onde os carros estão com a mesma pessoa há meses, isso
+      // travava o fecho inteiro por causa de um buraco no histórico.
+      //
+      // Então a forçar — e SÓ a forçar — usa-se quem está na ficha do carro
+      // hoje. É um palpite, e é tratado como tal: vai com o nome e a data à
+      // vista no aviso, para quem revê o rascunho poder dizer que não.
+      //
+      // Fora do forçar continua a recusar. A diferença importa: se o carro
+      // mudou de mãos entretanto, este palpite põe a despesa de quem saiu na
+      // conta de quem está — e isso, creditado sem ninguém olhar, é dinheiro
+      // tirado à pessoa errada.
+      if (entrada.forcar && veiculo.condutorAtual) {
+        avisos.push(
+          `FORÇADO: ${matricula} gastou ${total.toFixed(2)} € mas o histórico não cobre esta semana. `
+          + 'Lancei em quem está na ficha do carro HOJE — se o carro mudou de mãos desde então, '
+          + 'este valor está na pessoa errada. Confirme antes de creditar.',
+        );
+        rascunhos.push({
+          userId: veiculo.condutorAtual,
+          vehicleId: veiculo.id,
+          plate: veiculo.plate,
+          tollsAmount: t,
+          fuelAmount: f,
+          chargeAmount: c,
+        });
+        continue;
+      }
+
       porAtribuir = cent(porAtribuir + total);
       avisos.push(
         `${matricula} gastou ${total.toFixed(2)} € mas não esteve atribuída a ninguém nesta semana. `

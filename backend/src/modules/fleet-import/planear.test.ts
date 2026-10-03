@@ -276,3 +276,82 @@ describe('os cêntimos', () => {
     expect(p.porAtribuir).toBe(0.3);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Fechar uma semana ANTERIOR ao histórico de atribuições.
+//
+// O histórico começa no dia em que alguém o registou. Uma semana mais antiga
+// do que esse dia não tem resposta guardada — e a ausência de registo não é a
+// mesma afirmação que "o carro não esteve com ninguém".
+//
+// Sem forçar continua a recusar, porque o palpite pode pôr a despesa de quem
+// saiu na conta de quem ficou. A forçar, usa-se a ficha do carro e diz-se.
+describe('semana anterior ao histórico', () => {
+  const SO_DESDE_SETEMBRO: Atribuicao[] = [
+    { vehicleId: 'v1', userId: 'm1', inicio: dia('2026-11-01'), fim: null },
+  ];
+  const CARROS_COM_FICHA: Veiculo[] = [
+    { id: 'v1', plate: 'BG-49-GP', condutorAtual: 'm1' },
+    { id: 'v2', plate: 'BT-63-NU', condutorAtual: null },
+  ];
+
+  it('sem forçar, não lança nada e diz porquê', () => {
+    const p = planear({
+      ...base,
+      veiculos: CARROS_COM_FICHA,
+      atribuicoes: SO_DESDE_SETEMBRO,
+      viaVerde: leitura({ 'BG-49-GP': 8.7 }),
+    });
+
+    expect(p.rascunhos).toHaveLength(0);
+    expect(p.porAtribuir).toBe(8.7);
+    expect(p.avisos.some((a) => a.includes('não esteve atribuída a ninguém'))).toBe(true);
+  });
+
+  it('a forçar, usa quem está na ficha do carro e avisa que foi assumido', () => {
+    const p = planear({
+      ...base,
+      forcar: true,
+      veiculos: CARROS_COM_FICHA,
+      atribuicoes: SO_DESDE_SETEMBRO,
+      viaVerde: leitura({ 'BG-49-GP': 8.7 }),
+    });
+
+    expect(p.rascunhos).toHaveLength(1);
+    expect(p.rascunhos[0].userId).toBe('m1');
+    expect(p.rascunhos[0].tollsAmount).toBe(8.7);
+    expect(p.porAtribuir).toBe(0);
+
+    const aviso = p.avisos.find((a) => a.startsWith('FORÇADO: BG-49-GP'));
+    expect(aviso).toBeDefined();
+    expect(aviso).toContain('histórico não cobre esta semana');
+    expect(aviso).toContain('Confirme antes de creditar');
+  });
+
+  it('a forçar, um carro sem ninguém na ficha continua por atribuir', () => {
+    const p = planear({
+      ...base,
+      forcar: true,
+      veiculos: CARROS_COM_FICHA,
+      atribuicoes: SO_DESDE_SETEMBRO,
+      viaVerde: leitura({ 'BT-63-NU': 26.09 }),
+    });
+
+    expect(p.rascunhos).toHaveLength(0);
+    expect(p.porAtribuir).toBe(26.09);
+  });
+
+  it('um carro que TEM atribuição na semana não usa a ficha', () => {
+    const p = planear({
+      ...base,
+      forcar: true,
+      veiculos: [{ id: 'v1', plate: 'BG-49-GP', condutorAtual: 'm9' }],
+      atribuicoes: [{ vehicleId: 'v1', userId: 'm1', inicio: dia('2026-01-01'), fim: null }],
+      viaVerde: leitura({ 'BG-49-GP': 8.7 }),
+    });
+
+    expect(p.rascunhos[0].userId).toBe('m1');
+    expect(p.avisos.some((a) => a.startsWith('FORÇADO: BG-49-GP'))).toBe(false);
+  });
+});
