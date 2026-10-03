@@ -39,6 +39,30 @@ export const importSchema = z.object({
     }))
     .max(200)
     .optional(),
+  /**
+   * Avançar mesmo com uma leitura que não confere.
+   *
+   * Quem o envia está a dizer que viu os avisos e aceita os números. O
+   * servidor deixa passar, mas deixa rasto: o aviso vai para o plano e a nota
+   * interna do fecho diz que foi forçado.
+   */
+  forcar: z.boolean().optional(),
+  /**
+   * O mesmo que `ganhos`, mas identificado pelo NOME que o portal mostra.
+   *
+   * Existe porque é o que a extensão tem: a Uber e a Bolt listam "João Silva",
+   * não um id do DragonFleet. O emparelhamento é feito no servidor, com a mesma
+   * função que a receção de lançamentos já usa — e um nome que não emparelhe
+   * sai num aviso, nunca num palpite.
+   */
+  ganhosPorNome: z
+    .array(z.object({
+      driverName: z.string().min(1).max(200),
+      uberAmount: z.coerce.number().min(0).optional(),
+      boltAmount: z.coerce.number().min(0).optional(),
+    }))
+    .max(200)
+    .optional(),
 });
 
 export type ImportBody = z.infer<typeof importSchema>;

@@ -110,6 +110,47 @@ describe('uma leitura que não confere trava TUDO', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('forçar: avançar apesar de uma leitura não conferir', () => {
+  const má: Leitura = { ...leitura({ 'BG-49-GP': 1 }), confere: false, avisos: ['o PDF mudou'] };
+
+  it('com forcar, importa o que as OUTRAS fontes trouxeram', () => {
+    const p = planear({
+      ...base, forcar: true,
+      prioFrota: má,
+      viaVerde: leitura({ 'BG-49-GP': 33.39 }),
+    });
+    expect(p.rascunhos).toHaveLength(1);
+    expect(p.rascunhos[0].tollsAmount).toBe(33.39);
+  });
+
+  it('e DEIXA RASTO, em maiúsculas, de que foi forçado', () => {
+    // Quem abrir este rascunho daqui a um mês tem de perceber que os números
+    // não passaram pela conferência. Sem isto, um fecho forçado é
+    // indistinguível de um normal.
+    const p = planear({ ...base, forcar: true, prioFrota: má, viaVerde: leitura({ 'BG-49-GP': 1 }) });
+    expect(p.avisos.join(' ')).toContain('FORÇADO');
+    expect(p.avisos.join(' ')).toContain('Prio Frota');
+  });
+
+  it('a fonte que não confere ENTRA, com os valores que deu', () => {
+    // Decisão do cliente: forçar é criar "com o que conseguiu ler", não
+    // continuar sem a fonte. Faz sentido para o caso que motivou isto — uma
+    // semana sem abastecimentos, em que o leitor diz "não encontrei nada" e o
+    // valor certo é mesmo zero.
+    //
+    // O que torna isto aceitável não é o valor ser de confiança: é o aviso em
+    // maiúsculas e a nota no fecho, que mandam conferir contra o portal.
+    const p = planear({ ...base, forcar: true, prioFrota: má, viaVerde: leitura({ 'BG-49-GP': 33.39 }) });
+    expect(p.rascunhos[0].fuelAmount).toBe(1);
+  });
+
+  it('sem forcar, continua a travar tudo', () => {
+    const p = planear({ ...base, prioFrota: má, viaVerde: leitura({ 'BG-49-GP': 33.39 }) });
+    expect(p.rascunhos).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('quando não se sabe de quem é', () => {
   it('matrícula que não existe na frota fica por atribuir, com o valor', () => {
     const p = planear({ ...base, prioFrota: leitura({ 'ZZ-99-ZZ': 40 }) });

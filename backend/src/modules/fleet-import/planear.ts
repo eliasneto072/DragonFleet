@@ -82,6 +82,17 @@ export function planear(entrada: {
   prioElectric: Leitura | null;
   veiculos: Veiculo[];
   atribuicoes: Atribuicao[];
+  /**
+   * Avançar mesmo com uma leitura que não confere.
+   *
+   * Existe porque a recusa, sozinha, é um beco: um relatório legitimamente
+   * vazio — uma semana sem abastecimentos — é indistinguível de um ficheiro
+   * mal lido, e travava o fecho inteiro sem saída possível.
+   *
+   * NÃO é o caminho normal, e o aviso que sai daqui diz isso em voz alta. Quem
+   * o liga está a afirmar que olhou para os números e os aceita.
+   */
+  forcar?: boolean;
 }): Plano {
   const { semana, veiculos, atribuicoes } = entrada;
   const avisos: string[] = [];
@@ -94,11 +105,19 @@ export function planear(entrada: {
     ['Prio Electric', entrada.prioElectric],
   ] as const) {
     if (l && !l.confere) {
-      return {
-        rascunhos: [],
-        porAtribuir: 0,
-        avisos: [`A leitura da ${nome} não confere — não foi importado nada.`, ...l.avisos],
-      };
+      if (!entrada.forcar) {
+        return {
+          rascunhos: [],
+          porAtribuir: 0,
+          avisos: [`A leitura da ${nome} não confere — não foi importado nada.`, ...l.avisos],
+        };
+      }
+      avisos.push(
+        `FORÇADO: a leitura da ${nome} NÃO confere e foi importada à mesma. `
+        + 'Confira estes valores contra o portal antes de creditar.',
+        ...l.avisos,
+      );
+      continue;
     }
     if (l) avisos.push(...l.avisos);
   }

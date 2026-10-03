@@ -34,12 +34,20 @@ import { lerPrioElectric } from './parsers/prio-electric';
 import { planear, type Plano, type RascunhoPlaneado } from './planear';
 import { fleetImportRepository } from './fleet-import.repository';
 import { settlementsService } from '../settlements/settlements.service';
+import { matchDriver } from '../earnings/import/name-matching';
 import type { Actor } from '../settlements/settlements.types';
 import type { Leitura } from './parsers/tipos';
 
 /** Ganhos que a extensão já leu da Uber e da Bolt, por motorista. */
 export interface GanhosDoMotorista {
   userId: string;
+  uberAmount?: number;
+  boltAmount?: number;
+}
+
+/** O mesmo, identificado pelo nome que o portal mostra. */
+export interface GanhosPorNome {
+  driverName: string;
   uberAmount?: number;
   boltAmount?: number;
 }
@@ -53,6 +61,9 @@ export interface EntradaImportacao {
   prioFrotaPdf?: string | null;
   prioElectricPdf?: string | null;
   ganhos?: GanhosDoMotorista[];
+  ganhosPorNome?: GanhosPorNome[];
+  /** Avançar apesar de uma leitura não conferir. Deixa rasto no fecho. */
+  forcar?: boolean;
 }
 
 export interface LinhaPrevista {
@@ -198,15 +209,19 @@ class FleetImportService {
       prioElectric,
       veiculos,
       atribuicoes,
+      forcar: entrada.forcar === true,
     });
 
-    const linhas = await this.montarLinhas(plano, veiculos, inicio, fim, entrada.ganhos ?? []);
+    const { ganhos, avisos: avisosDeNomes } =
+      await this.resolverGanhos(entrada.ganhos ?? [], entrada.ganhosPorNome ?? []);
+
+    const linhas = await this.montarLinhas(plano, veiculos, inicio, fim, ganhos);
 
     return {
       semanaInicio: entrada.semanaInicio,
       semanaFim: entrada.semanaFim,
       linhas,
-      avisos: plano.avisos,
+      avisos: [...plano.avisos, ...avisosDeNomes],
       porAtribuir: plano.porAtribuir,
       fontes: [
         { nome: 'Via Verde', ...resumo(viaVerde) },
@@ -247,7 +262,9 @@ class FleetImportService {
           boltAmount: linha.boltAmount,
           internalNotes:
             `Rascunho criado por importação automática (${analise.semanaInicio} a ${analise.semanaFim}). `
-            + 'Confirme os valores antes de creditar.',
+            + (entrada.forcar
+              ? 'FORÇADO: uma das leituras não conferia. CONFIRA contra os portais antes de creditar. '
+              : 'Confirme os valores antes de creditar.'),
         });
         criados += 1;
       } catch (erro) {
@@ -263,6 +280,57 @@ class FleetImportService {
     }
 
     return { ...analise, criados, ignorados, falhas };
+  }
+
+  /**
+   * Junta os ganhos vindos por id com os que vêm por nome.
+   *
+   * O emparelhamento usa a MESMA função da receção de lançamentos — nome
+   * completo, e depois primeiro e último. Dois "João Silva" na frota devolvem
+   * ambiguidade em vez de escolherem um: um valor lançado à pessoa errada é
+   * pior do que um valor em falta, porque o em falta dá nas vistas.
+   *
+   * Nada do que não emparelhe é adivinhado nem deitado fora: sai em aviso, com
+   * o nome e o valor, para quem revê saber onde escrever à mão.
+   */
+  private async resolverGanhos(
+    porId: GanhosDoMotorista[],
+    porNome: GanhosPorNome[],
+  ): Promise<{ ganhos: GanhosDoMotorista[]; avisos: string[] }> {
+    if (porNome.length === 0) return { ganhos: porId, avisos: [] };
+
+    const motoristas = await fleetImportRepository.motoristasParaEmparelhar();
+    const avisos: string[] = [];
+    const juntos = new Map<string, GanhosDoMotorista>();
+    for (const g of porId) juntos.set(g.userId, { ...g });
+
+    for (const linha of porNome) {
+      const total = (linha.uberAmount ?? 0) + (linha.boltAmount ?? 0);
+      const resultado = matchDriver(linha.driverName, motoristas);
+
+      if (resultado.status !== 'matched') {
+        avisos.push(
+          `"${linha.driverName}" (${total.toFixed(2)} € de Uber/Bolt) `
+          + (resultado.status === 'ambiguous'
+            ? `corresponde a mais do que um motorista: ${resultado.candidates.map((c) => c.name).join(', ')}. `
+            : 'não corresponde a nenhum motorista da frota. ')
+          + 'O valor não foi lançado — escreva-o à mão no rascunho.',
+        );
+        continue;
+      }
+
+      const existente = juntos.get(resultado.userId);
+      // Somar e não substituir: o portal pode trazer o mesmo motorista em duas
+      // linhas (dois carros, duas contas), e a última a ganhar perdia a
+      // primeira sem dizer nada.
+      juntos.set(resultado.userId, {
+        userId: resultado.userId,
+        uberAmount: (existente?.uberAmount ?? 0) + (linha.uberAmount ?? 0),
+        boltAmount: (existente?.boltAmount ?? 0) + (linha.boltAmount ?? 0),
+      });
+    }
+
+    return { ganhos: [...juntos.values()], avisos };
   }
 
   /** Junta ao plano o nome do motorista, a taxa da viatura e os ganhos. */
