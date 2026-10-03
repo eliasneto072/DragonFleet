@@ -89,14 +89,24 @@ export const fleetImportRepository = {
    * A marca `isCompany` existe para isto, e o comentário dela no schema diz-o
    * por palavras: "este motorista É a empresa (o dono, que também conduz)".
    *
-   * Continua a não entrar quem é só administrativo, e continua a não entrar
-   * quem está desligado: um motorista que saiu não deve receber o valor de
-   * alguém com nome parecido.
+   * Continua a não entrar quem é só administrativo.
+   *
+   * ─── E O ESTADO ───────────────────────────────────────────────────────────
+   *
+   * Isto exigia `status: ACTIVE`, e esse era o segundo filtro apertado de
+   * mais. Um motorista em AGUARDANDO_REGULARIZACAO não é um motorista que
+   * saiu: falta-lhe um documento, continua a conduzir, e a semana dele existe
+   * na mesma. Ficava invisível ao emparelhamento, e os ganhos dele saíam em
+   * "não corresponde a nenhum motorista da frota" — com o nome escrito
+   * corretamente dos dois lados, o que torna o aviso impossível de entender.
+   *
+   * Ficam de fora INACTIVE e BLOCKED, que é onde está quem saiu. Esses não
+   * devem receber o valor de alguém com nome parecido.
    */
   async motoristasParaEmparelhar(): Promise<Array<{ id: string; name: string }>> {
     return prisma.user.findMany({
       where: {
-        status: 'ACTIVE',
+        status: { in: ['ACTIVE', 'AGUARDANDO_REGULARIZACAO'] },
         OR: [{ role: 'DRIVER' }, { isCompany: true }],
       },
       select: { id: true, name: true },

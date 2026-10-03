@@ -31,7 +31,7 @@ import { extrairTextoPdf } from './pdf/extrair-texto';
 import { lerViaVerde } from './parsers/via-verde';
 import { lerPrioFrota } from './parsers/prio-frota';
 import { lerPrioElectric } from './parsers/prio-electric';
-import { planear, type Plano, type RascunhoPlaneado } from './planear';
+import { planear, type Plano, type RascunhoPlaneado, type Atribuicao } from './planear';
 import { fleetImportRepository } from './fleet-import.repository';
 import { settlementsService } from '../settlements/settlements.service';
 import { matchDriver } from '../earnings/import/name-matching';
@@ -69,7 +69,14 @@ export interface EntradaImportacao {
 export interface LinhaPrevista {
   userId: string;
   userName: string;
-  vehicleId: string;
+  /**
+   * Nulo quando o fecho nasce só dos ganhos e não se sabe que carro ela levou.
+   *
+   * O fecho semanal admite-o — a coluna da base de dados é opcional — e vale
+   * mais um rascunho sem carro, que alguém completa em dez segundos, do que
+   * uma motorista que desaparece da semana sem nada a explicá-lo.
+   */
+  vehicleId: string | null;
   plate: string;
   tollsAmount: number;
   fuelAmount: number;
@@ -81,11 +88,29 @@ export interface LinhaPrevista {
   bloqueio?: string;
 }
 
+/**
+ * Um nome do portal que não encontrou dono, com o valor que ficou pendurado.
+ *
+ * Vai na resposta para o ecrã poder pôr uma caixa de escolha ao lado — e é a
+ * diferença entre "o valor não foi lançado, escreva-o à mão" e resolver o caso
+ * ali mesmo, sem sair da extensão.
+ */
+export interface NomeSemMotorista {
+  driverName: string;
+  uberAmount: number;
+  boltAmount: number;
+  /** `not_found` ou `ambiguous` — a segunda já traz os candidatos. */
+  motivo: 'not_found' | 'ambiguous';
+  candidatos: Array<{ id: string; name: string }>;
+}
+
 export interface ResultadoAnalise {
   semanaInicio: string;
   semanaFim: string;
   linhas: LinhaPrevista[];
   avisos: string[];
+  /** Nomes da Uber/Bolt sem dono. Vazio quando correu tudo bem. */
+  naoEmparelhados: NomeSemMotorista[];
   porAtribuir: number;
   /** Por fonte: o que foi lido e se fechou a conta. */
   fontes: Array<{
@@ -212,16 +237,17 @@ class FleetImportService {
       forcar: entrada.forcar === true,
     });
 
-    const { ganhos, avisos: avisosDeNomes } =
+    const { ganhos, avisos: avisosDeNomes, naoEmparelhados } =
       await this.resolverGanhos(entrada.ganhos ?? [], entrada.ganhosPorNome ?? []);
 
-    const linhas = await this.montarLinhas(plano, veiculos, inicio, fim, ganhos);
+    const linhas = await this.montarLinhas(plano, veiculos, inicio, fim, ganhos, atribuicoes);
 
     return {
       semanaInicio: entrada.semanaInicio,
       semanaFim: entrada.semanaFim,
       linhas,
       avisos: [...plano.avisos, ...avisosDeNomes],
+      naoEmparelhados,
       porAtribuir: plano.porAtribuir,
       fontes: [
         { nome: 'Via Verde', ...resumo(viaVerde) },
@@ -296,11 +322,22 @@ class FleetImportService {
   private async resolverGanhos(
     porId: GanhosDoMotorista[],
     porNome: GanhosPorNome[],
-  ): Promise<{ ganhos: GanhosDoMotorista[]; avisos: string[] }> {
-    if (porNome.length === 0) return { ganhos: porId, avisos: [] };
+  ): Promise<{
+    ganhos: GanhosDoMotorista[];
+    avisos: string[];
+    naoEmparelhados: NomeSemMotorista[];
+  }> {
+    if (porNome.length === 0) return { ganhos: porId, avisos: [], naoEmparelhados: [] };
 
     const motoristas = await fleetImportRepository.motoristasParaEmparelhar();
     const avisos: string[] = [];
+    // Os mesmos nomes que saem em aviso, mas em dados em vez de prosa.
+    //
+    // O aviso serve para alguém LER. Isto serve para o ecrã poder oferecer uma
+    // caixa de escolha ao lado de cada nome, e é por isso que existe separado:
+    // ler de volta um nome e um valor a partir de uma frase escrita para
+    // humanos é o tipo de coisa que funciona até ao dia em que a frase muda.
+    const naoEmparelhados: NomeSemMotorista[] = [];
     const juntos = new Map<string, GanhosDoMotorista>();
     for (const g of porId) juntos.set(g.userId, { ...g });
 
@@ -314,8 +351,15 @@ class FleetImportService {
           + (resultado.status === 'ambiguous'
             ? `corresponde a mais do que um motorista: ${resultado.candidates.map((c) => c.name).join(', ')}. `
             : 'não corresponde a nenhum motorista da frota. ')
-          + 'O valor não foi lançado — escreva-o à mão no rascunho.',
+          + 'O valor não foi lançado — escolha o motorista na extensão ou escreva-o à mão no rascunho.',
         );
+        naoEmparelhados.push({
+          driverName: linha.driverName,
+          uberAmount: linha.uberAmount ?? 0,
+          boltAmount: linha.boltAmount ?? 0,
+          motivo: resultado.status,
+          candidatos: resultado.status === 'ambiguous' ? resultado.candidates : [],
+        });
         continue;
       }
 
@@ -330,18 +374,25 @@ class FleetImportService {
       });
     }
 
-    return { ganhos: [...juntos.values()], avisos };
+    return { ganhos: [...juntos.values()], avisos, naoEmparelhados };
   }
 
   /** Junta ao plano o nome do motorista, a taxa da viatura e os ganhos. */
   private async montarLinhas(
     plano: Plano,
-    veiculos: Array<{ id: string; weeklyFee: number }>,
+    veiculos: Array<{ id: string; plate: string; weeklyFee: number; condutorAtual?: string | null }>,
     inicio: Date,
     fim: Date,
     ganhos: GanhosDoMotorista[],
+    atribuicoes: Atribuicao[],
   ): Promise<LinhaPrevista[]> {
-    const ids = [...new Set(plano.rascunhos.map((r) => r.userId))];
+    // Os nomes de TODA a gente que vai aparecer: quem tem despesa e quem só
+    // tem ganhos. Sem os segundos, as linhas deles saíam identificadas por um
+    // id em vez de um nome.
+    const ids = [...new Set([
+      ...plano.rascunhos.map((r) => r.userId),
+      ...ganhos.map((g) => g.userId),
+    ])];
     const [nomes, jaComFecho] = await Promise.all([
       fleetImportRepository.nomes(ids),
       fleetImportRepository.jaComFecho(inicio, fim),
@@ -350,7 +401,7 @@ class FleetImportService {
     const taxaPorVeiculo = new Map(veiculos.map((v) => [v.id, v.weeklyFee]));
     const ganhosPorUser = new Map(ganhos.map((g) => [g.userId, g]));
 
-    return plano.rascunhos.map((r: RascunhoPlaneado) => {
+    const linhas: LinhaPrevista[] = plano.rascunhos.map((r: RascunhoPlaneado) => {
       const g = ganhosPorUser.get(r.userId);
       return {
         userId: r.userId,
@@ -371,6 +422,49 @@ class FleetImportService {
           : undefined,
       };
     });
+
+    // ─── QUEM GANHOU MAS NÃO GASTOU ─────────────────────────────────────────
+    //
+    // Os rascunhos acima nascem todos de uma MATRÍCULA com despesa, e os
+    // ganhos da Uber e da Bolt são colados por cima dos que já existem. Uma
+    // motorista que fez a semana inteira sem abastecer e sem passar numa
+    // portagem não tinha matrícula nenhuma na lista — e desaparecia do fecho,
+    // com os 206 € dela, sem um aviso que fosse.
+    //
+    // A semana dela existe na mesma. Só tem zero de despesa.
+    //
+    // O carro vem da atribuição da semana, para o aluguer entrar certo. Não
+    // havendo, fica sem carro: o fecho aceita-o, e completar isso à mão é dez
+    // segundos — perder a pessoa não é.
+    const jaTemLinha = new Set(linhas.map((l) => l.userId));
+    const porVeiculo = new Map(veiculos.map((v) => [v.id, v]));
+
+    for (const g of ganhos) {
+      if (jaTemLinha.has(g.userId)) continue;
+
+      const daSemana = atribuicoes.find((a) => a.userId === g.userId);
+      const veiculo = daSemana
+        ? porVeiculo.get(daSemana.vehicleId)
+        : veiculos.find((v) => v.condutorAtual === g.userId);
+
+      linhas.push({
+        userId: g.userId,
+        userName: nomes.get(g.userId) ?? g.userId,
+        vehicleId: veiculo?.id ?? null,
+        plate: veiculo?.plate ?? '—',
+        tollsAmount: 0,
+        fuelAmount: 0,
+        chargeAmount: 0,
+        vehicleFee: veiculo ? (taxaPorVeiculo.get(veiculo.id) ?? 0) : 0,
+        uberAmount: g.uberAmount ?? 0,
+        boltAmount: g.boltAmount ?? 0,
+        bloqueio: jaComFecho.has(g.userId)
+          ? 'Já tem um fecho nesta semana. Não foi criado outro para não duplicar o crédito.'
+          : undefined,
+      });
+    }
+
+    return linhas;
   }
 }
 
