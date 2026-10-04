@@ -34,7 +34,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
 import {
-  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileSpreadsheet, FileText, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
+  AlertCircle, ArrowLeft, Ban, Car, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, FileSpreadsheet, FileText, History, Loader2, Pencil, Plus, ReceiptText, Search, Trash2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { settlementsService, type ApiSettlement } from '@/features/admin/services/settlements.service';
@@ -47,6 +47,8 @@ import { formatCurrency } from '@/shared/lib/format';
 import type { SettlementStatus } from '@/shared/types/api';
 import { SettlementForm } from './settlement-form';
 import { useListState } from '@/shared/hooks/use-list-state';
+import { useAuth } from '@/features/auth/context/AuthContext';
+import { SettlementRevisions } from '@/app/components/shared/settlement-revisions';
 import { Pagination } from '@/app/components/ui/list-toolbar';
 
 const STATUS_META: Record<
@@ -321,6 +323,10 @@ interface Props {
 export function AdminSettlements({ hideHeader = false }: Props) {
   const queryClient = useQueryClient();
   const location = useLocation();
+  const { user } = useAuth();
+  // Corrigir um fecho já creditado é só do ADMIN. O servidor é que manda; isto
+  // serve para não mostrar um botão que vai dar 403.
+  const ehAdmin = user?.role === 'ADMIN';
 
   // O painel encaminha para cá com o motorista e a semana já escolhidos.
   const prefill = (location.state ?? {}) as {
@@ -336,6 +342,12 @@ export function AdminSettlements({ hideHeader = false }: Props) {
   // dá para mandar um link com a busca já feita.
   const lista = useListState({ defaults: {} });
   const [statusFilter, setStatusFilter] = useState<'all' | SettlementStatus>('all');
+  // Fechos corrigidos depois de creditados.
+  //
+  // Filtro SEPARADO do estado e não mais uma opção nele: um fecho corrigido
+  // continua REGISTADO, e metê-los na mesma lista obrigaria a escolher entre
+  // ver os registados e ver os corrigidos. São perguntas diferentes.
+  const [soCorrigidos, setSoCorrigidos] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -449,9 +461,10 @@ export function AdminSettlements({ hideHeader = false }: Props) {
     return {
       status: statusFilter === 'all' ? undefined : statusFilter,
       userId: driverId === 'all' ? undefined : driverId,
+      edited: soCorrigidos ? 'true' : undefined,
       ...range,
     };
-  }, [statusFilter, period, customFrom, customTo, driverId]);
+  }, [statusFilter, period, customFrom, customTo, driverId, soCorrigidos]);
 
   // A página vive no estado da tela e entra na chave da consulta, para o
   // React Query tratar cada página como um resultado próprio e conseguir
@@ -463,6 +476,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
     queryKey: [
       ...queryKeys.settlements.list(undefined, params.status),
       params.from ?? 'any', params.to ?? 'any', lista.search, lista.page,
+      params.edited ?? 'any',
     ] as const,
     queryFn: () => settlementsService.list({
       ...params,
@@ -548,8 +562,17 @@ export function AdminSettlements({ hideHeader = false }: Props) {
             Voltar
           </Button>
           <div className="min-w-0">
+            {/* "Editar rascunho" era mentira metade das vezes desde que os
+                fechos registados passaram a poder ser corrigidos — e é o
+                género de mentira que faz alguém pensar que está a mexer num
+                documento que ainda não conta. O estado vem da lista, que já o
+                tem carregado. */}
             <h2 className="text-xl font-bold text-foreground sm:text-2xl">
-              {mode.id ? 'Editar rascunho' : 'Novo fecho'}
+              {!mode.id
+                ? 'Novo fecho'
+                : (settlements.find((x) => x.id === mode.id)?.status === 'REGISTERED'
+                  ? 'Corrigir fecho'
+                  : 'Editar rascunho')}
             </h2>
             <p className="text-sm text-muted-foreground">Registo semanal de faturação</p>
           </div>
@@ -690,6 +713,29 @@ export function AdminSettlements({ hideHeader = false }: Props) {
               <SelectItem value="CANCELLED">Cancelado</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* ─── CORRIGIDOS ──────────────────────────────────────────────────
+            Um interruptor e não mais uma opção no "Estado": um fecho corrigido
+            continua REGISTADO, e pô-los na mesma lista obrigava a escolher
+            entre ver os registados e ver os corrigidos.
+
+            Existe para o suporte: quando um motorista liga a perguntar porque
+            é que o valor dele mudou, é por aqui que se chega ao caso sem saber
+            o nome nem a semana. */}
+        <div className="min-w-[150px] flex-1 space-y-1.5 sm:flex-none">
+          <Label htmlFor="filter-corrigidos">Correções</Label>
+          <Button
+            id="filter-corrigidos"
+            type="button"
+            variant={soCorrigidos ? 'default' : 'outline'}
+            className="w-full justify-start sm:w-[180px]"
+            onClick={() => { setSoCorrigidos((v) => !v); lista.setPage(1); }}
+            aria-pressed={soCorrigidos}
+          >
+            <History className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            {soCorrigidos ? 'Só corrigidos' : 'Mostrar corrigidos'}
+          </Button>
         </div>
       </div>
 
@@ -835,6 +881,18 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                           <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Continuar
                         </Button>
                       )}
+                      {/* Corrigir em vez de cancelar e recriar. Só ADMIN: isto
+                          mexe em dinheiro já creditado, e o servidor recusa a
+                          qualquer outro perfil — o botão escondido é
+                          conveniência, não a proteção. */}
+                      {s.status === 'REGISTERED' && ehAdmin && (
+                        <Button
+                          size="sm" variant="outline" className="h-8"
+                          onClick={() => setMode({ view: 'form', id: s.id })}
+                        >
+                          <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Corrigir
+                        </Button>
+                      )}
                       {s.status === 'REGISTERED' && (
                         <Button
                           size="sm" variant="outline" className="h-8"
@@ -918,6 +976,7 @@ export function AdminSettlements({ hideHeader = false }: Props) {
           </DialogHeader>
 
           {detail && <SettlementDetail s={detail} />}
+          {detail && <SettlementRevisions settlementId={detail.id} />}
 
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDetail(null)}>
@@ -929,6 +988,14 @@ export function AdminSettlements({ hideHeader = false }: Props) {
                 onClick={() => { setMode({ view: 'form', id: detail.id }); setDetail(null); }}
               >
                 <Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />Continuar edição
+              </Button>
+            )}
+            {detail?.status === 'REGISTERED' && ehAdmin && (
+              <Button
+                className="w-full sm:w-auto"
+                onClick={() => { setMode({ view: 'form', id: detail.id }); setDetail(null); }}
+              >
+                <Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />Corrigir
               </Button>
             )}
             {detail?.status === 'REGISTERED' && (

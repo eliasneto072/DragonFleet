@@ -50,6 +50,7 @@ import {
   AccountMovementsCard, BalanceBeforeAfter, MovementDetailDialog, findAdjustment,
   useMyLedger, type MovementLink,
 } from '@/app/components/driver/account-movements';
+import { SettlementRevisions } from '@/app/components/shared/settlement-revisions';
 import { RankCard } from '@/app/components/ranks/rank-card';
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
@@ -930,6 +931,13 @@ export function DriverDashboard() {
           {weekDetail && (
             <WeekDetail s={weekDetail} entry={weekEntry} reconciliation={reconciliation} />
           )}
+          {/* O histórico de correções, se esta semana tiver alguma.
+              O MESMO componente que o administrador vê — com uma diferença só,
+              feita no servidor: a ele não lhe chega o nome de quem corrigiu.
+              Duas versões deste ecrã acabariam por dizer coisas diferentes, e
+              divergir aqui é o motorista a ler uma explicação e o suporte a ter
+              outra à frente enquanto fala com ele. */}
+          {weekDetail && <SettlementRevisions settlementId={weekDetail.id} />}
           <DialogFooter>
             <Button
               variant="outline" className="w-full sm:w-auto"

@@ -10,6 +10,7 @@ import {
   listSettlementsSchema,
   createSettlementSchema,
   updateSettlementSchema,
+  settlementRevisionsSchema,
   previewSettlementSchema,
   cancelSettlementSchema,
 } from './settlements.schemas';
@@ -67,6 +68,13 @@ export class SettlementsController {
       getActor(req), parsed.params.id, parsed.body,
     );
     return ok(res, { settlement });
+  };
+
+  // GET /settlements/:id/revisions — o histórico de correções
+  revisions = async (req: AuthRequest, res: Response) => {
+    const parsed = settlementRevisionsSchema.parse({ params: req.params });
+    const revisions = await settlementsService.revisions(getActor(req), parsed.params.id);
+    return ok(res, { revisions });
   };
 
   // POST /settlements/:id/register — credita o motorista

@@ -19,6 +19,9 @@ export function settlementsRouter(): Router {
   // de um fecho e devolvia 404.
   router.get('/ultimo-km', settlementsController.lastOdometer);
   router.get('/:id', settlementsController.getById);
+  // O histórico de correções. Leitura e mais nada — para o staff e para o
+  // próprio motorista; quem pode ver o quê decide-se no serviço.
+  router.get('/:id/revisions', settlementsController.revisions);
 
   // Escrita — apenas ADMIN ou MANAGER, garantido em settlementsService.
   router.post('/preview', settlementsController.preview);

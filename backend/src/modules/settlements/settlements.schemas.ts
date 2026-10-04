@@ -73,6 +73,13 @@ export const settlementFiltersShape = {
   from: dayString.optional(),
   to: dayString.optional(),
   search: z.string().max(120).optional(),
+  /**
+   * Só os fechos corrigidos depois de creditados.
+   *
+   * Chega como texto na query string, por isso compara-se com 'true' em vez de
+   * se usar `z.boolean()`, que recusaria a string.
+   */
+  edited: z.enum(['true', 'false']).optional(),
 } as const;
 
 export const listSettlementsSchema = z.object({
@@ -107,7 +114,26 @@ export const updateSettlementSchema = z.object({
     weekStart: dayString,
     weekEnd: dayString,
     ...amountsShape,
+    /**
+     * O motivo da correção.
+     *
+     * Opcional AQUI e obrigatório no serviço quando o fecho já está registado:
+     * um rascunho ainda não foi creditado nem visto por ninguém, e exigir uma
+     * justificação para emendar um número que ainda não saiu daqui seria
+     * cerimónia a mais no caminho normal.
+     *
+     * Num fecho registado é outra coisa. O motivo é o que o motorista vai ler
+     * quando o dinheiro dele mudar, e a frase que fica escrita para sempre —
+     * por isso tem um mínimo, para não se aceitar um "ok" a servir de
+     * explicação.
+     */
+    reason: z.string().trim().min(10, 'Explique o motivo em pelo menos 10 caracteres').max(2000).optional(),
   }),
+});
+
+/** GET /settlements/:id/revisions */
+export const settlementRevisionsSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
 });
 
 /** Pré-visualização: não grava, por isso não exige motorista nem semana. */

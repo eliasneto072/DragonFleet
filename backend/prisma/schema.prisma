@@ -164,6 +164,7 @@ model User {
   adjustmentsEdited  BalanceAdjustment[] @relation("adjustmentsEdited")
   settlements        WeeklySettlement[]  @relation("settlementsReceived")
   settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
+  settlementRevisions SettlementRevision[] @relation("settlementRevisions")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
   bankAccounts       BankAccount[]
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
@@ -644,9 +645,21 @@ model WeeklySettlement {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt      @map("updated_at")
 
+  /// Quando este fecho foi corrigido DEPOIS de já ter sido creditado.
+  ///
+  /// Nulo é a maioria e quer dizer "nunca foi mexido depois de registado" —
+  /// não se confunde com `updatedAt`, que mexe por tudo e mais alguma coisa,
+  /// incluindo pelo próprio ato de registar.
+  ///
+  /// Existe como COLUNA e não como consulta às revisões porque é por aqui que
+  /// o filtro da lista pesquisa, e um filtro que tenha de visitar outra tabela
+  /// para cada linha é o género de coisa que fica lenta sem ninguém reparar.
+  editedAfterRegisterAt DateTime? @map("edited_after_register_at")
+
   user      User     @relation("settlementsReceived", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User     @relation("settlementsCreated", fields: [createdById], references: [id])
   vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  revisions SettlementRevision[]
 
   // Guarda estrutural contra creditar a mesma semana duas vezes. E a protecao
   // que nao depende de ninguem se lembrar de conferir.
@@ -654,7 +667,63 @@ model WeeklySettlement {
   @@index([userId])
   @@index([weekStart])
   @@index([status])
+  @@index([editedAfterRegisterAt])
   @@map("weekly_settlements")
+}
+
+/// Uma correção feita a um fecho, com o motivo e o que mudou.
+///
+/// ─── PORQUE É QUE ISTO EXISTE ───────────────────────────────────────────────
+///
+/// Um fecho registado é dinheiro já creditado. Até aqui era imutável, e a única
+/// forma de corrigir um engano era cancelar e criar outro — o que deixa o
+/// extrato do motorista com um estorno e um lançamento novo para explicar uma
+/// vírgula trocada.
+///
+/// Passa a poder ser editado, mas nunca em silêncio: cada correção escreve uma
+/// linha aqui, e é essa linha que torna a edição aceitável. Sem ela, um saldo
+/// que muda sozinho é indistinguível de uma avaria — ou de má-fé.
+///
+/// ─── PORQUE É QUE OS VALORES FICAM AQUI E NÃO SÓ NO FECHO ───────────────────
+///
+/// `changes` guarda o antes e o depois de cada campo tocado. Podia-se pensar
+/// que basta guardar o antes e ir ao fecho buscar o depois — e basta, para a
+/// última revisão. Para a penúltima não: o "depois" dela é o "antes" da
+/// seguinte, e reconstruir isso de trás para a frente é o tipo de conta que
+/// está certa até alguém apagar uma linha.
+model SettlementRevision {
+  id           String @id @default(cuid())
+  settlementId String @map("settlement_id")
+
+  /// Quem fez a correção. Só ADMIN, garantido no serviço.
+  ///
+  /// Opcional porque a conta pode ser apagada e o rasto não deve desaparecer
+  /// com ela: fica a revisão sem autor, que é muito melhor do que nenhuma.
+  editedById String? @map("edited_by_id")
+
+  /// Obrigatório, e é o coração disto. Vai inteiro para a notificação do
+  /// motorista: é a frase que ele vai ler quando o dinheiro dele mudar.
+  reason String
+
+  /// O estado em que o fecho estava quando foi corrigido (DRAFT/REGISTERED).
+  /// Guardado porque corrigir um rascunho e corrigir dinheiro já creditado são
+  /// duas coisas com peso muito diferente, e daqui a um ano ninguém saberá
+  /// dizer qual foi qual.
+  statusAtEdit SettlementStatus @map("status_at_edit")
+
+  /// `[{ campo, antes, depois }]`. JSON e não colunas: os campos do fecho são
+  /// muitos e mudam com o tempo, e uma tabela com uma coluna por campo teria de
+  /// ser migrada sempre que o fecho ganhasse outro.
+  changes Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  settlement WeeklySettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  editedBy   User?            @relation("settlementRevisions", fields: [editedById], references: [id], onDelete: SetNull)
+
+  @@index([settlementId])
+  @@index([createdAt])
+  @@map("settlement_revisions")
 }
 
 

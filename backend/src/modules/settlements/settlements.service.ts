@@ -16,6 +16,8 @@ import { AppError } from '../../shared/errors/AppError';
 import { UserRole, SettlementStatus } from '../../shared/types/enums';
 import { settingsService } from '../settings/settings.service';
 import { settlementsRepository } from './settlements.repository';
+import { notificationsService } from '../notifications/notifications.service';
+import { compararFecho, mensagemParaMotorista } from './revisao';
 import { computeTotals } from './settlements.types';
 import type {
   Actor,
@@ -207,6 +209,8 @@ export class SettlementsService {
     filter: {
       userId?: string; status?: SettlementStatus; from?: string; to?: string;
       search?: unknown; page?: unknown; pageSize?: unknown;
+      /** 'true' deixa passar só os fechos corrigidos depois de creditados. */
+      edited?: string;
     } = {},
   ) {
     // Motorista vê apenas os próprios; a gestão vê todos, ou filtra por pessoa.
@@ -225,6 +229,9 @@ export class SettlementsService {
       status: filter.status,
       from: filter.from ? parseDay(filter.from, 'from') : undefined,
       to: filter.to ? parseDay(filter.to, 'to') : undefined,
+      // Também para o motorista: ele pode querer ver quais das semanas dele
+      // foram corrigidas, e são os fechos dele de qualquer maneira.
+      edited: filter.edited === 'true',
     }, page, isManager);
   }
 
@@ -278,12 +285,42 @@ export class SettlementsService {
     const existing = await settlementsRepository.findById(id);
     if (!existing) throw new AppError('Fecho não encontrado', 404, 'SETTLEMENT_NOT_FOUND');
 
-    if (existing.status !== SettlementStatus.DRAFT) {
+    // ─── QUEM PODE MEXER EM QUÊ ────────────────────────────────────────────
+    //
+    // Um rascunho ainda não é dinheiro: a gestão edita-o como sempre.
+    //
+    // Um fecho REGISTADO já foi creditado, e o saldo do motorista é a soma dos
+    // fechos registados — editar um deles move-lhe o dinheiro no mesmo
+    // instante, sem lançamento nenhum a explicá-lo. Por isso fica só para o
+    // ADMIN, e nunca sem motivo.
+    //
+    // Um fecho CANCELADO não se edita: foi estornado, e emendá-lo seria
+    // ressuscitar um documento que alguém decidiu anular. Cria-se outro.
+    const registado = existing.status === SettlementStatus.REGISTERED;
+
+    if (existing.status === SettlementStatus.CANCELLED) {
       throw new AppError(
-        'Só rascunhos podem ser editados. Cancele o fecho e crie outro.',
+        'Um fecho cancelado não pode ser editado. Crie um novo para a mesma semana.',
         400,
         'SETTLEMENT_NOT_EDITABLE',
       );
+    }
+
+    if (registado) {
+      if (actor.role !== UserRole.ADMIN) {
+        throw new AppError(
+          'Só um administrador pode corrigir um fecho já registado.',
+          403,
+          'ADMIN_ONLY',
+        );
+      }
+      if (!input.reason || input.reason.trim().length < 10) {
+        throw new AppError(
+          'Explique o motivo da correção. O motorista vai recebê-lo na notificação.',
+          400,
+          'REASON_REQUIRED',
+        );
+      }
     }
 
     const weekStart = parseDay(input.weekStart, 'weekStart');
@@ -293,13 +330,110 @@ export class SettlementsService {
 
     const rate = await this.resolveRate(input);
     const taxRate = await this.resolveTaxRate(input);
+    const dados = this.buildData(input, rate, taxRate);
 
-    return settlementsRepository.update(id, {
+    // O que mudou, calculado ANTES de gravar: depois de gravar já não há com o
+    // que comparar, e guardar o antes em memória para o reconstruir a seguir é
+    // a mesma coisa feita de forma mais frágil.
+    const alteracoes = registado
+      ? compararFecho(
+        existing as unknown as Record<string, unknown>,
+        { ...dados, vehicleId: input.vehicleId ?? null, weekStart, weekEnd },
+      )
+      : [];
+
+    const liquidoAntes = Number(existing.netToDriver ?? 0);
+    const liquidoDepois = Number(dados.netToDriver ?? 0);
+    const mexeuNoDinheiro =
+      Math.round(liquidoAntes * 100) !== Math.round(liquidoDepois * 100);
+
+    // Gravar uma revisão vazia e notificar o motorista sobre coisa nenhuma é
+    // pior do que recusar: ensina-o a ignorar estas notificações.
+    if (registado && alteracoes.length === 0 && !mexeuNoDinheiro) {
+      throw new AppError(
+        'Não detetei nenhuma alteração neste fecho.',
+        400,
+        'NOTHING_CHANGED',
+      );
+    }
+
+    const atualizado = await settlementsRepository.update(id, {
       vehicleId: input.vehicleId ?? null,
       weekStart,
       weekEnd,
-      ...this.buildData(input, rate, taxRate),
+      ...dados,
+      // A marca que o filtro da lista procura. Só nos registados: corrigir um
+      // rascunho é o trabalho normal, não é um acontecimento.
+      ...(registado ? { editedAfterRegisterAt: new Date() } : {}),
     });
+
+    if (registado) {
+      await settlementsRepository.createRevision({
+        settlementId: id,
+        editedById: actor.id,
+        reason: input.reason!.trim(),
+        statusAtEdit: existing.status,
+        changes: alteracoes,
+      });
+
+      // ── A notificação não pode derrubar a correção ───────────────────────
+      //
+      // A alteração já está gravada e o saldo dele já mudou. Se o envio da
+      // notificação falhar — e falha, é uma escrita como outra qualquer —
+      // deixar o erro subir devolveria um 500 a quem corrigiu, que voltaria a
+      // tentar e gravaria a correção outra vez.
+      //
+      // Entre "corrigido sem aviso" e "corrigido duas vezes", a primeira é
+      // recuperável: a revisão fica escrita e o histórico mostra-a.
+      try {
+        const { titulo, mensagem } = mensagemParaMotorista({
+          semanaInicio: weekStart,
+          semanaFim: weekEnd,
+          motivo: input.reason!,
+          alteracoes,
+          liquidoAntes,
+          liquidoDepois,
+        });
+        // `actor` e não um envio anónimo: a notificação passa pelas mesmas
+        // permissões de sempre, e o ADMIN que corrigiu tem-nas por definição.
+        await notificationsService.create(actor, existing.userId, {
+          title: titulo,
+          message: mensagem,
+        });
+      } catch (erro) {
+        console.error('[settlements] falhou a notificação da correção', erro);
+      }
+    }
+
+    return atualizado;
+  }
+
+  /**
+   * O histórico de correções de um fecho.
+   *
+   * Quem vê: todo o staff, e o próprio motorista no fecho dele. É o dinheiro
+   * dele, e ter o histórico à vista evita metade das perguntas ao suporte.
+   *
+   * Só leitura, e para toda a gente: uma revisão que se pudesse apagar não
+   * serviria para nada do que foi feita.
+   */
+  async revisions(actor: Actor, id: string) {
+    const fecho = await settlementsRepository.findById(id);
+    if (!fecho) throw new AppError('Fecho não encontrado', 404, 'SETTLEMENT_NOT_FOUND');
+
+    if (!podeVer(actor.role) && fecho.userId !== actor.id) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const linhas = await settlementsRepository.listRevisions(id);
+
+    // O motorista vê o que mudou e porquê, mas não quem o fez. Foi a escolha
+    // do cliente: ele quer transparência sobre o dinheiro sem expor a equipa.
+    const souStaff = podeVer(actor.role);
+    return linhas.map((r) => ({
+      ...r,
+      editedByName: souStaff ? r.editedByName : null,
+    }));
   }
 
   /**

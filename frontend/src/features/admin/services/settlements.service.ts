@@ -3,8 +3,13 @@
 // Fecho semanal de faturação — a única porta pela qual entra dinheiro na conta
 // do motorista.
 //
-// Fluxo: cria-se um rascunho, revê-se, e só o `register` credita. Depois de
-// registado o fecho é imutável; para corrigir, cancela-se e cria-se outro.
+// Fluxo: cria-se um rascunho, revê-se, e só o `register` credita.
+//
+// Um fecho registado PODE ser corrigido, mas só por um administrador e nunca
+// em silêncio: exige um motivo, fica escrito no histórico, e o motorista é
+// notificado com o motivo e os valores antes → depois. Antes a única saída era
+// cancelar e criar outro, o que deixava o extrato dele com um estorno e um
+// lançamento novo para explicar uma vírgula trocada.
 
 import { apiClient } from '@/shared/lib/api-client';
 import type { EarningPlatform, SettlementStatus } from '@/shared/types/api';
@@ -98,6 +103,31 @@ export interface ApiSettlement extends SettlementTotals {
   registeredAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Quando foi corrigido DEPOIS de creditado. Nulo na maioria.
+   *
+   * É o que marca a linha na lista e o que destranca o histórico. Diferente do
+   * `updatedAt`, que mexe por tudo, incluindo pelo próprio registo.
+   */
+  editedAfterRegisterAt: string | null;
+}
+
+/** Uma correção, como o histórico a mostra. */
+export interface SettlementRevision {
+  id: string;
+  /** O motivo escrito por quem corrigiu. É o que o motorista também recebeu. */
+  reason: string;
+  statusAtEdit: SettlementStatus;
+  changes: Array<{
+    campo: string;
+    rotulo: string;
+    antes: number | string | null;
+    depois: number | string | null;
+    tipo: 'dinheiro' | 'data' | 'texto' | 'numero';
+  }>;
+  createdAt: string;
+  /** Nulo para o motorista: ele vê o que mudou e porquê, não quem. */
+  editedByName: string | null;
 }
 
 export interface CreateSettlementInput extends SettlementAmounts {
@@ -109,7 +139,15 @@ export interface CreateSettlementInput extends SettlementAmounts {
   weekEnd: string;
 }
 
-export type UpdateSettlementInput = Omit<CreateSettlementInput, 'userId'>;
+export type UpdateSettlementInput = Omit<CreateSettlementInput, 'userId'> & {
+  /**
+   * O motivo da correção. OBRIGATÓRIO quando o fecho já está registado.
+   *
+   * O servidor exige-o e recusa com `REASON_REQUIRED` se faltar — a validação
+   * do formulário é conveniência, não a proteção.
+   */
+  reason?: string;
+};
 
 export interface PageInfo {
   page: number;
@@ -136,6 +174,8 @@ export interface ListSettlementsParams {
   status?: SettlementStatus;
   from?: string;
   to?: string;
+  /** 'true' mostra só os fechos corrigidos depois de creditados. */
+  edited?: string;
 }
 
 /** Comunicado pelo motorista, para conferência cruzada. */
@@ -197,6 +237,17 @@ export const settlementsService = {
   },
 
   /**
+   * GET /settlements/:id/revisions — o histórico de correções.
+   *
+   * Aberto ao staff e ao próprio motorista. Só leitura: não há como apagar uma
+   * revisão, nem pela API nem pelo painel. Uma que se pudesse apagar não
+   * serviria para nada do que foi feita.
+   */
+  revisions(id: string): Promise<{ revisions: SettlementRevision[] }> {
+    return apiClient.get(`/settlements/${id}/revisions`);
+  },
+
+  /**
    * POST /settlements/preview — calcula sem gravar.
    *
    * O cálculo vive no servidor de propósito: replicá-lo no formulário faria a
@@ -214,7 +265,13 @@ export const settlementsService = {
     return apiClient.post('/settlements', input);
   },
 
-  /** PATCH /settlements/:id — só rascunhos. */
+  /**
+   * PATCH /settlements/:id
+   *
+   * Rascunho: a gestão edita à vontade.
+   * Registado: só ADMIN, e `reason` passa a ser obrigatório.
+   * Cancelado: recusado — cria-se outro.
+   */
   update(id: string, input: UpdateSettlementInput): Promise<{ settlement: ApiSettlement }> {
     return apiClient.patch(`/settlements/${id}`, input);
   },

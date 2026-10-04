@@ -81,6 +81,10 @@ function toPublic(r: Row, includeInternal = false): SettlementPublic {
     registeredAt: r.registeredAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    // Vai para TODA a gente, motorista incluído: é o que põe o selo
+    // "corrigido" na linha dele e abre o histórico. Esconder-lho seria mostrar
+    // valores diferentes dos de ontem sem nada a explicar a diferença.
+    editedAfterRegisterAt: r.editedAfterRegisterAt ?? null,
   };
 }
 
@@ -93,6 +97,8 @@ export interface SettlementFilter {
   to?: Date;
   /** Termos a casar contra o NOME do motorista do fecho. */
   terms?: string[];
+  /** Só os fechos corrigidos depois de já terem sido creditados. */
+  edited?: boolean;
 }
 
 /**
@@ -119,6 +125,13 @@ export function buildSettlementWhere(filter: SettlementFilter) {
   return {
     ...(filter.userId ? { userId: filter.userId } : {}),
     ...(filter.status ? { status: filter.status } : {}),
+    // Fechos que foram corrigidos DEPOIS de creditados.
+    //
+    // Não é um estado — um fecho corrigido continua REGISTADO — por isso não
+    // podia ser mais um valor no filtro de estado. É uma pergunta diferente,
+    // feita por quem está ao telefone com um motorista a perguntar porque é
+    // que o valor dele mudou.
+    ...(filter.edited ? { editedAfterRegisterAt: { not: null } } : {}),
     ...porNome,
     ...(filter.from || filter.to
       ? {
@@ -150,14 +163,10 @@ export const settlementsRepository = {
    * Sem isso, paginar teria partido o cartão do topo, que passaria a dizer o
    * total dos cinquenta visíveis em vez do total real.
    */
-  async findManyPaged(filter: {
-    userId?: string;
-    status?: SettlementStatus;
-    from?: Date;
-    to?: Date;
-    /** Termos a casar contra o NOME do motorista do fecho. */
-    terms?: string[];
-  }, page: PageParams, includeInternal = false): Promise<
+  // `SettlementFilter` e não uma cópia escrita à mão: eram dois tipos iguais
+  // lado a lado, e o campo novo do filtro teve de ser acrescentado aos dois
+  // para o compilador se calar. Da próxima, um deles ficaria para trás.
+  async findManyPaged(filter: SettlementFilter, page: PageParams, includeInternal = false): Promise<
     Paged<SettlementPublic> & { totals: { credited: number; registeredCount: number } }
   > {
     // A pesquisa atravessa a relação: o fecho não tem nome, o motorista tem.
@@ -317,6 +326,41 @@ export const settlementsRepository = {
 
   async delete(id: string): Promise<void> {
     await prisma.weeklySettlement.delete({ where: { id } });
+  },
+
+  /** Grava uma correção. Nunca é apagada nem alterada — ver o schema. */
+  async createRevision(dados: {
+    settlementId: string;
+    editedById: string;
+    reason: string;
+    statusAtEdit: SettlementStatus;
+    changes: unknown;
+  }): Promise<void> {
+    await prisma.settlementRevision.create({ data: dados as never });
+  },
+
+  /**
+   * O histórico de um fecho, do mais recente para o mais antigo.
+   *
+   * O nome de quem corrigiu vem junto porque o ecrã precisa dele e ir buscá-lo
+   * depois, revisão a revisão, seria uma consulta por linha. Quem pode VER esse
+   * nome decide-se no serviço, não aqui.
+   */
+  async listRevisions(settlementId: string) {
+    const linhas = await prisma.settlementRevision.findMany({
+      where: { settlementId },
+      orderBy: { createdAt: 'desc' },
+      include: { editedBy: { select: { name: true } } },
+    });
+
+    return linhas.map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      statusAtEdit: r.statusAtEdit,
+      changes: r.changes,
+      createdAt: r.createdAt,
+      editedByName: r.editedBy?.name ?? null,
+    }));
   },
 
   /** Soma dos fechos registados de um motorista — entra no cálculo do saldo. */

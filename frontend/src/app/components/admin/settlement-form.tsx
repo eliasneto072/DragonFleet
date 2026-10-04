@@ -161,6 +161,13 @@ export function SettlementForm({
 }: Props) {
   const queryClient = useQueryClient();
   const isEditing = !!settlementId;
+  /**
+   * O motivo da correção. Só existe quando se edita um fecho JÁ REGISTADO.
+   *
+   * Vive aqui e não dentro do `buildInput` porque é a única coisa deste
+   * formulário que não descreve o fecho: descreve a DECISÃO de o mudar.
+   */
+  const [reason, setReason] = useState('');
 
   const defaultWeek = initialWeek ?? weekRange(-1); // a que normalmente se fecha
   const [userId, setUserId] = useState(initialUserId ?? '');
@@ -387,10 +394,22 @@ export function SettlementForm({
     queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
   };
 
+  // O fecho que está a ser editado já foi creditado?
+  //
+  // Vem do servidor e não de quem clicou: o botão "Corrigir" da lista e o
+  // "Continuar" do rascunho abrem o MESMO formulário, e decidir pelo caminho de
+  // entrada deixaria o ecrã errado a quem chegasse aqui por um link.
+  const jaRegistado = existingQuery.data?.settlement.status === 'REGISTERED';
+
   /** Grava e devolve o id — o registo precisa de um fecho já existente. */
   async function persist(): Promise<string> {
     if (isEditing) {
-      await settlementsService.update(settlementId!, buildInput());
+      await settlementsService.update(settlementId!, {
+        ...buildInput(),
+        // Só vai quando é preciso. Mandá-lo sempre encheria o histórico dos
+        // rascunhos com motivos que ninguém escreveu.
+        ...(jaRegistado ? { reason: reason.trim() } : {}),
+      });
       return settlementId!;
     }
     const { settlement } = await settlementsService.create({ userId, ...buildInput() });
@@ -401,7 +420,9 @@ export function SettlementForm({
     mutationFn: persist,
     onSuccess: () => {
       invalidate();
-      toast.success('Rascunho guardado. Nada foi creditado ainda.');
+      toast.success(jaRegistado
+        ? 'Correção gravada. O motorista foi notificado.'
+        : 'Rascunho guardado. Nada foi creditado ainda.');
       if (!isEditing) reset();
       onDone?.();
     },
@@ -900,7 +921,53 @@ export function SettlementForm({
             </CardContent>
           </Card>
 
-          <div className="flex flex-col gap-2">
+          {/* ─── CORREÇÃO DE UM FECHO JÁ CREDITADO ───────────────────────
+              Este bloco substitui os botões normais. Não é um campo a mais num
+              formulário: é outro ato.
+
+              O dinheiro já está na conta dele. Gravar daqui move-o, escreve
+              uma linha no histórico que ninguém pode apagar, e manda-lhe uma
+              notificação com este texto lá dentro. O aviso diz isso por
+              palavras, porque quem chega aqui vindo da lista pode não ter
+              percebido que carregou em "Corrigir" e não em "Continuar". */}
+          {jaRegistado && (
+            <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">A corrigir um fecho já creditado</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  O saldo de {existingQuery.data?.settlement.userName} vai mudar assim que gravar.
+                  A alteração fica no histórico e ele recebe uma notificação com este motivo e com
+                  os valores antes e depois.
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="settlement-reason">Motivo da correção</Label>
+                  <Textarea
+                    id="settlement-reason"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Ex.: A Prio tinha um abastecimento de outro carro lançado nesta semana."
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O motorista vai ler isto tal e qual. Mínimo de 10 caracteres.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleDraftClick}
+                  disabled={busy || blocked || reason.trim().length < 10}
+                  className="w-full"
+                >
+                  {savingDraft
+                    ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A corrigir…</>)
+                    : (<><Save className="mr-2 h-4 w-4" />Gravar a correção e notificar</>)}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className={`flex flex-col gap-2 ${jaRegistado ? 'hidden' : ''}`}>
             <Button onClick={handleRegisterClick} disabled={busy || blocked} className="w-full">
               {registering
                 ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />A registar…</>)
@@ -931,8 +998,8 @@ export function SettlementForm({
                   {br(weekStart)} a {br(weekEnd)}.
                 </p>
                 <p className="text-muted-foreground">
-                  Depois de registado o fecho não pode ser editado. Para corrigir, será preciso
-                  cancelá-lo e criar outro.
+                  Depois de registado, só um administrador o pode corrigir — e a correção fica no
+                  histórico e é notificada ao motorista.
                 </p>
               </div>
             </AlertDialogDescription>

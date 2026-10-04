@@ -52,6 +52,15 @@ export interface SettlementUpdateInput extends SettlementAmounts {
   vehicleId?: string | null;
   weekStart: string;  // "YYYY-MM-DD"
   weekEnd: string;    // "YYYY-MM-DD"
+  /**
+   * O motivo da correção. Obrigatório quando o fecho JÁ ESTÁ REGISTADO.
+   *
+   * Opcional no tipo porque editar um rascunho não o exige: ainda não foi
+   * creditado nem visto por ninguém. A exigência vive no serviço, onde se sabe
+   * o estado do fecho — pô-la aqui obrigaria o formulário do rascunho a
+   * inventar uma justificação para nada.
+   */
+  reason?: string;
 }
 
 /** Criação: acrescenta o motorista. */
@@ -117,6 +126,14 @@ export interface SettlementPublic extends SettlementTotals {
   internalNotes?: string | null;
   odometerStart?: number | null;
   odometerEnd?: number | null;
+
+  /**
+   * Quando este fecho foi corrigido depois de já ter sido creditado.
+   *
+   * Nulo na esmagadora maioria. Não se confunde com `updatedAt`, que mexe por
+   * tudo — incluindo pelo próprio ato de registar o fecho.
+   */
+  editedAfterRegisterAt: Date | null;
 
   createdById: string;
   createdByName: string | null;
