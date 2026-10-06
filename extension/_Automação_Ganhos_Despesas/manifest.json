@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "DragonFleet — fecho da semana",
+  "version": "0.8.2",
+  "description": "Recolhe os ganhos da Uber e da Bolt e as despesas da Via Verde e da Prio, e cria os rascunhos do fecho semanal no DragonFleet.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://fleethub.uber.com/*",
+    "https://supplier.uber.com/*",
+    "https://fleets.bolt.eu/*",
+    "https://www.viaverde.pt/*",
+    "https://www.myprio.com/*",
+    "http://localhost/*",
+    "http://localhost:3000/*",
+    "file:///*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Fechar a semana"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  }
+}

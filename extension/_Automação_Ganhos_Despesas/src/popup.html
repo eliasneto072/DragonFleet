@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <strong>DragonFleet</strong>
+    <span id="versao" class="etiqueta"></span>
+    <span id="portal" class="etiqueta"></span>
+  </header>
+
+  <!-- Sessão -->
+  <section id="login" hidden>
+    <p class="ajuda">Entre com a conta de administrador do DragonFleet.</p>
+    <label>Endereço do servidor
+      <input id="api" type="url" placeholder="http://localhost:3000" />
+    </label>
+    <label>Email <input id="email" type="email" autocomplete="username" /></label>
+    <label>Palavra-passe <input id="password" type="password" autocomplete="current-password" /></label>
+    <button id="entrar" class="principal">Entrar</button>
+  </section>
+
+  <!-- Fecho da semana -->
+  <section id="semana" hidden>
+    <div class="periodo">
+      <label>Semana de <input id="semana-de" type="date" /></label>
+      <label>a <input id="semana-ate" type="date" /></label>
+    </div>
+    <p id="semana-atraso" class="ajuda"></p>
+
+    <table id="semana-lista"></table>
+
+    <div class="botoes">
+      <button id="semana-recolher" class="secundario">Recolher desta página</button>
+      <button id="semana-analisar" class="secundario" disabled>Analisar</button>
+      <button id="semana-criar" class="principal" disabled>Criar rascunhos</button>
+    </div>
+    <button id="semana-forcar" class="forcar" hidden>Criar mesmo assim, apesar dos avisos</button>
+    <div id="semana-emparelhar" class="emparelhar" hidden></div>
+    <div id="semana-plano" class="plano" hidden></div>
+    <p id="semana-erro" class="aviso" hidden></p>
+    <button id="semana-limpar-pagina" class="ligacao" hidden></button>
+    <button id="semana-limpar" class="ligacao">Esquecer tudo o que foi recolhido</button>
+    <button id="semana-diagnostico" class="ligacao">Copiar diagnóstico desta página</button>
+  </section>
+
+  <!-- Recolha (lançamentos comunicados — Uber e Bolt) -->
+  <section id="recolha" hidden>
+    <div id="periodo" class="periodo"></div>
+    <div id="resumo" class="resumo"></div>
+    <table id="linhas"></table>
+
+    <div id="porEmparelhar" class="aviso" hidden></div>
+
+    <div class="botoes">
+      <button id="rever" class="secundario">Rever</button>
+      <button id="enviar" class="principal" disabled>Enviar</button>
+    </div>
+  </section>
+
+  <p id="erro" class="erro" hidden></p>
+  <footer><button id="sair" class="ligacao" hidden>Terminar sessão</button></footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

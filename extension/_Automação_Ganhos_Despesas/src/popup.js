@@ -1,0 +1,374 @@
+// extension/src/popup.js
+//
+// O fluxo da extensão: ler a página, PRÉ-VISUALIZAR, e só depois enviar.
+//
+// ─── A PRÉ-VISUALIZAÇÃO NÃO É OPCIONAL ───────────────────────────────────────
+//
+// O botão "Enviar" nasce desativado e só destranca depois de o servidor
+// devolver a simulação. Não é cerimónia: a leitura da página pode falhar de
+// maneiras silenciosas — um portal que mudou de aspeto, um nome que não
+// emparelha, um período mal lido — e todas elas produzem um envio que parece
+// ter corrido bem.
+//
+// Ver antes o que vai entrar, e quem ficou de fora, custa um segundo e evita
+// descobrir o engano depois de os lançamentos estarem criados.
+
+import { iniciarSemana, configurarApi } from './popup-semana.js';
+
+const $ = (id) => document.getElementById(id);
+const guardar = (o) => chrome.storage.local.set(o);
+const ler = (chaves) => chrome.storage.local.get(chaves);
+
+let estado = { api: '', token: '', dados: null, previsto: null };
+
+function erro(msg) {
+  $('erro').textContent = msg;
+  $('erro').hidden = !msg;
+}
+
+function eur(n) {
+  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(n);
+}
+
+// ─── Falar com o servidor ─────────────────────────────────────────────────────
+
+/**
+ * Pede ao Chrome autorização para falar com o endereço que a pessoa escreveu.
+ *
+ * O manifesto declara `optional_host_permissions` em vez de fixar o endereço da
+ * API. É de propósito: em desenvolvimento a API está em localhost, na
+ * demonstração num túnel do ngrok, depois no Render, e um dia num domínio .pt.
+ * Cada um desses endereços escrito no manifesto obrigaria a editar o ficheiro e
+ * a reinstalar a extensão em todas as máquinas.
+ *
+ * Assim, escreve-se o endereço no campo, o Chrome pergunta uma vez, e acabou.
+ *
+ * O pedido tem de partir de um clique — é a regra do Chrome para não haver
+ * janelas de autorização a aparecer sozinhas. Por isso vive dentro do `entrar`
+ * e não no arranque.
+ */
+async function pedirPermissao(api) {
+  let origem;
+  try {
+    origem = `${new URL(api).origin}/*`;
+  } catch {
+    throw new Error('Endereço da API inválido. Inclua o https:// ou http://.');
+  }
+
+  if (await chrome.permissions.contains({ origins: [origem] })) return;
+
+  const concedida = await chrome.permissions.request({ origins: [origem] });
+  if (!concedida) {
+    throw new Error(
+      `Sem autorização para falar com ${origem}.\n\n` +
+      'Sem ela o Chrome bloqueia os pedidos antes de saírem.',
+    );
+  }
+}
+
+/** Cabeçalhos comuns a todos os pedidos. */
+function cabecalhos(comToken = true) {
+  const h = {
+    'Content-Type': 'application/json',
+    // Um túnel gratuito do ngrok devolve uma página de aviso em HTML em vez da
+    // resposta, na primeira visita de cada cliente. Este cabeçalho salta-a.
+    // Fora do ngrok é ignorado, portanto não faz mal nenhum ficar sempre.
+    'ngrok-skip-browser-warning': 'true',
+  };
+  if (comToken && estado.token) h.Authorization = `Bearer ${estado.token}`;
+  return h;
+}
+
+/**
+ * Lê a resposta, e diz algo útil quando ela não é JSON.
+ *
+ * `res.json()` cru rebenta com "Unexpected token <" quando o que volta é uma
+ * página de HTML — o aviso do ngrok, um proxy pelo meio, ou o endereço apontado
+ * ao frontend em vez da API. Essa mensagem não ajuda ninguém a perceber o que
+ * fazer a seguir.
+ */
+async function respostaJson(res, api) {
+  const texto = await res.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    if (texto.trimStart().startsWith('<')) {
+      throw new Error(
+        'O servidor devolveu uma página de HTML em vez de dados.\n\n' +
+        `Confirme que ${api} aponta para a API. Atrás de um nginx, o endereço ` +
+        'termina em /api.',
+      );
+    }
+    throw new Error(`Resposta ilegível do servidor (HTTP ${res.status}).`);
+  }
+}
+
+// ─── Sessão ───────────────────────────────────────────────────────────────────
+
+async function entrar() {
+  erro('');
+  const api = $('api').value.trim().replace(/\/$/, '');
+  const email = $('email').value.trim();
+  const password = $('password').value;
+
+  if (!api || !email || !password) return erro('Preencha os três campos.');
+
+  try {
+    await pedirPermissao(api);
+
+    const res = await fetch(`${api}/auth/login`, {
+      method: 'POST',
+      headers: cabecalhos(false),
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await respostaJson(res, api);
+    if (!res.ok) throw new Error(json?.message ?? 'Não foi possível entrar.');
+
+    const token = json.data?.token ?? json.token;
+    const refreshToken = json.data?.refreshToken ?? json.refreshToken;
+    const papel = json.data?.user?.role ?? json.user?.role;
+
+    // A recolha é de gestão. Um motorista autenticado aqui receberia 403 do
+    // servidor, mas dizer-lho já evita a viagem e a mensagem críptica.
+    if (papel !== 'ADMIN' && papel !== 'MANAGER') {
+      throw new Error('Esta conta não tem permissão para enviar rendimentos.');
+    }
+
+    estado = { ...estado, api, token, refreshToken };
+    // A palavra-passe NÃO é guardada. O token de acesso dura 15 MINUTOS, e por
+    // isso guarda-se também o de renovação — ver `renovarToken` mais abaixo.
+    await guardar({ api, token, refreshToken });
+    mostrarRecolha();
+  } catch (e) {
+    erro(e.message);
+  }
+}
+
+/**
+ * Renova o token de acesso, que dura 15 minutos.
+ *
+ * ─── PORQUE É QUE ISTO FALTAVA E SÓ AGORA DOEU ──────────────────────────────
+ *
+ * A extensão guardava só o token de acesso. Enquanto servia para ler uma
+ * tabela e enviar — meio minuto — ninguém reparava que ele expirava.
+ *
+ * Fechar a semana é outra coisa: são cinco portais, cada um com o seu
+ * carregamento, os seus PDFs, a sua espera. Passam-se bem mais de quinze
+ * minutos entre entrar e carregar em Analisar, e o token morria pelo caminho.
+ *
+ * O sintoma era enganador: "token inválido" no Analisar, e o botão de criar
+ * rascunhos eternamente bloqueado — porque sem análise não há plano, e sem
+ * plano o botão não destranca. Parecia avaria do botão.
+ */
+async function renovarToken() {
+  if (!estado.refreshToken) return false;
+  try {
+    const res = await fetch(`${estado.api}/auth/refresh`, {
+      method: 'POST',
+      headers: cabecalhos(false),
+      body: JSON.stringify({ refreshToken: estado.refreshToken }),
+    });
+    if (!res.ok) return false;
+    const json = await respostaJson(res, estado.api);
+    const novo = json.data?.token ?? json.token;
+    if (!novo) return false;
+    estado.token = novo;
+    await guardar({ token: novo });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function sair() {
+  await chrome.storage.local.remove(['token', 'refreshToken']);
+  estado.token = '';
+  estado.refreshToken = '';
+  $('login').hidden = false;
+  $('recolha').hidden = true;
+  $('semana').hidden = true;
+  $('sair').hidden = true;
+}
+
+// ─── Leitura da página ────────────────────────────────────────────────────────
+
+async function lerPagina() {
+  const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  // O código corre NA PÁGINA, não aqui: o popup não tem acesso ao DOM do
+  // separador. `func` é serializada e executada lá dentro.
+  const [resultado] = await chrome.scripting.executeScript({
+    target: { tabId: aba.id },
+    files: ['src/extract.js', 'src/adapters.js'],
+  }).then(() => chrome.scripting.executeScript({
+    target: { tabId: aba.id },
+    func: () => window.__dragonfleetExtrair?.(),
+  }));
+
+  return resultado?.result ?? null;
+}
+
+// ─── Pré-visualização e envio ─────────────────────────────────────────────────
+
+function desenhar(dados, previsto) {
+  $('portal').textContent = dados.platform;
+
+  $('periodo').textContent = dados.periodo
+    ? `${dados.periodo.periodStart} a ${dados.periodo.periodEnd}`
+    : 'Período não identificado nesta página';
+
+  const total = dados.rows.reduce((s, r) => s + (r.amount || 0), 0);
+  $('resumo').textContent =
+    `${dados.rows.length} motorista${dados.rows.length !== 1 ? 's' : ''} · ${eur(total)}`;
+
+  $('linhas').innerHTML = dados.rows.slice(0, 12).map((r) => `
+    <tr><td>${r.driverName}</td><td>${eur(r.amount || 0)}</td></tr>
+  `).join('') + (dados.rows.length > 12
+    ? `<tr><td colspan="2" style="color:#6b7280">…e mais ${dados.rows.length - 12}</td></tr>` : '');
+
+  // Quem não emparelhou aparece SEMPRE, e é o que impede um envio cego.
+  const soltos = previsto?.unmatched ?? [];
+  if (soltos.length > 0) {
+    $('porEmparelhar').hidden = false;
+    $('porEmparelhar').innerHTML =
+      `<strong>${soltos.length} sem correspondência</strong><br>` +
+      soltos.slice(0, 5).map((u) =>
+        `${u.driverName} — ${u.reason === 'ambiguous' ? 'nome repetido na frota' : 'não existe no DragonFleet'}`
+      ).join('<br>') +
+      (soltos.length > 5 ? `<br>…e mais ${soltos.length - 5}` : '') +
+      '<br><br>Estes NÃO serão importados.';
+  } else {
+    $('porEmparelhar').hidden = true;
+  }
+
+  $('enviar').disabled = !previsto || !dados.periodo;
+}
+
+async function rever() {
+  erro('');
+  $('enviar').disabled = true;
+
+  try {
+    const dados = await lerPagina();
+    if (!dados) throw new Error('Não consegui ler esta página.');
+    if (dados.erro) throw new Error(dados.erro);
+    if (dados.rows.length === 0) throw new Error('Nenhum motorista encontrado na tabela.');
+
+    estado.dados = dados;
+
+    if (!dados.periodo) {
+      desenhar(dados, null);
+      return erro(
+        'Não identifiquei o período nesta página.\n\n' +
+        'Escolha um intervalo de datas no portal — de segunda a domingo — e reveja outra vez.',
+      );
+    }
+
+    const res = await fetch(`${estado.api}/earnings/ingest/preview`, {
+      method: 'POST',
+      headers: cabecalhos(),
+      body: JSON.stringify({
+        platform: dados.platform,
+        periodStart: dados.periodo.periodStart,
+        periodEnd: dados.periodo.periodEnd,
+        rows: dados.rows.map((r) => ({ driverName: r.driverName, amount: r.amount })),
+      }),
+    });
+    const json = await respostaJson(res, estado.api);
+    if (!res.ok) throw new Error(json?.message ?? 'A simulação falhou.');
+
+    estado.previsto = json.data?.result ?? json.result;
+    desenhar(dados, estado.previsto);
+  } catch (e) {
+    erro(e.message);
+  }
+}
+
+async function enviar() {
+  erro('');
+  $('enviar').disabled = true;
+
+  try {
+    const { dados } = estado;
+    const res = await fetch(`${estado.api}/earnings/ingest`, {
+      method: 'POST',
+      headers: cabecalhos(),
+      body: JSON.stringify({
+        platform: dados.platform,
+        periodStart: dados.periodo.periodStart,
+        periodEnd: dados.periodo.periodEnd,
+        rows: dados.rows.map((r) => ({ driverName: r.driverName, amount: r.amount })),
+      }),
+    });
+    const json = await respostaJson(res, estado.api);
+    if (!res.ok) throw new Error(json?.message ?? 'O envio falhou.');
+
+    const r = json.data?.result ?? json.result;
+    $('resumo').textContent =
+      `${r.inserted} criados · ${r.skippedDuplicates} repetidos · ${r.unmatched.length} por emparelhar`;
+    $('linhas').innerHTML =
+      '<tr><td colspan="2">Enviado. Confira em Faturação › Por confirmar.</td></tr>';
+  } catch (e) {
+    erro(e.message);
+    $('enviar').disabled = false;
+  }
+}
+
+// ─── Arranque ─────────────────────────────────────────────────────────────────
+
+/**
+ * Depois de entrar, mostra o que faz sentido para a página onde a pessoa está.
+ *
+ * O fecho da semana aparece sempre: é o fluxo principal e acumula entre
+ * portais. A recolha de lançamentos comunicados só na Uber e na Bolt, que são
+ * as únicas páginas onde ela sabe ler alguma coisa — mostrá-la na Via Verde
+ * seria oferecer um botão que só podia falhar.
+ */
+async function mostrarRecolha() {
+  $('login').hidden = true;
+  $('sair').hidden = false;
+  $('semana').hidden = false;
+
+  configurarApi({
+    base: estado.api,
+    get token() { return estado.token; },
+    cabecalhos: () => cabecalhos(true),
+    respostaJson,
+    renovarToken,
+  });
+  await iniciarSemana();
+
+  // ── As duas secções, lado a lado, porque fazem coisas DIFERENTES ─────────
+  //
+  // Em cima: o fecho da semana, que cria RASCUNHOS DE FECHO — os que se
+  // creditam. Em baixo: a recolha de LANÇAMENTOS COMUNICADOS, que vão para
+  // Faturação › Por confirmar e não creditam nada.
+  //
+  // Escondi a de baixo durante um tempo porque corria sozinha ao abrir e
+  // mostrava os seus erros por cima de uma recolha que tinha corrido bem.
+  // Errado: ela funciona, e tirar do ecrã uma ferramenta em que alguém confia
+  // não é uma decisão que me caiba a mim tomar em silêncio.
+  //
+  // Fica, só na Uber e na Bolt — que são as únicas páginas onde sabe ler — e
+  // SEM correr sozinha: espera que se carregue em "Rever".
+  const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const h = aba?.url ?? '';
+  const naPlataforma = h.includes('uber.com') || h.includes('bolt.eu');
+  $('recolha').hidden = !naPlataforma;
+}
+
+(async function inicio() {
+  const guardado = await ler(['api', 'token', 'refreshToken']);
+  $('api').value = guardado.api ?? 'http://localhost:3000';
+  estado.api = guardado.api ?? '';
+  estado.token = guardado.token ?? '';
+  estado.refreshToken = guardado.refreshToken ?? '';
+
+  if (estado.token && estado.api) mostrarRecolha();
+  else $('login').hidden = false;
+
+  $('entrar').addEventListener('click', entrar);
+  $('rever').addEventListener('click', rever);
+  $('enviar').addEventListener('click', enviar);
+  $('sair').addEventListener('click', sair);
+})();
