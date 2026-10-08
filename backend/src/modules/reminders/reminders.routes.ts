@@ -11,6 +11,16 @@ import { remindersService } from './reminders.service';
 
 const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato AAAA-MM-DD');
 
+/**
+ * O `:id` do caminho, validado.
+ *
+ * Passar `req.params.id` directamente não compila: no Express 5 o tipo dele é
+ * `string | string[]`, porque um caminho pode repetir o mesmo nome de
+ * parâmetro. O resto do projeto resolve isto a passar os parâmetros pelo zod,
+ * que devolve a `string` e de caminho recusa o que não seja.
+ */
+const idParam = z.object({ id: z.string().min(1) });
+
 function actor(req: AuthRequest) {
   if (!req.user?.id) throw new AppError('Unauthenticated', 401, 'UNAUTHENTICATED');
   return { id: req.user.id, role: req.user.role };
@@ -37,11 +47,11 @@ export function remindersRouter(): Router {
 
   router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const { done } = z.object({ done: z.boolean() }).parse(req.body);
-    return ok(res, { reminder: await remindersService.setDone(actor(req), req.params.id, done) });
+    return ok(res, { reminder: await remindersService.setDone(actor(req), idParam.parse(req.params).id, done) });
   });
 
   router.delete('/:id', async (req: AuthRequest, res: Response) => {
-    await remindersService.remove(actor(req), req.params.id);
+    await remindersService.remove(actor(req), idParam.parse(req.params).id);
     return ok(res, { deleted: true });
   });
 

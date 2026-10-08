@@ -32,6 +32,16 @@ const criarSchema = z.object({
   remaining: z.coerce.number().int().min(1).max(600).optional().nullable(),
 });
 
+/**
+ * O `:id` do caminho, validado.
+ *
+ * Passar `req.params.id` directamente não compila: no Express 5 o tipo dele é
+ * `string | string[]`, porque um caminho pode repetir o mesmo nome de
+ * parâmetro. O resto do projeto resolve isto a passar os parâmetros pelo zod,
+ * que devolve a `string` e de caminho recusa o que não seja.
+ */
+const idParam = z.object({ id: z.string().min(1) });
+
 function actor(req: AuthRequest) {
   if (!req.user?.id) throw new AppError('Unauthenticated', 401, 'UNAUTHENTICATED');
   return { id: req.user.id, role: req.user.role };
@@ -55,7 +65,7 @@ export function scheduledPaymentsRouter(): Router {
   router.patch('/categories/:id', async (req: AuthRequest, res: Response) => {
     const { active } = z.object({ active: z.boolean() }).parse(req.body);
     return ok(res, {
-      category: await scheduledPaymentsService.setCategoryActive(actor(req), req.params.id, active),
+      category: await scheduledPaymentsService.setCategoryActive(actor(req), idParam.parse(req.params).id, active),
     });
   });
 
@@ -75,12 +85,12 @@ export function scheduledPaymentsRouter(): Router {
   router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const { active } = z.object({ active: z.boolean() }).parse(req.body);
     return ok(res, {
-      payment: await scheduledPaymentsService.setActive(actor(req), req.params.id, active),
+      payment: await scheduledPaymentsService.setActive(actor(req), idParam.parse(req.params).id, active),
     });
   });
 
   router.delete('/:id', async (req: AuthRequest, res: Response) => {
-    await scheduledPaymentsService.remove(actor(req), req.params.id);
+    await scheduledPaymentsService.remove(actor(req), idParam.parse(req.params).id);
     return ok(res, { deleted: true });
   });
 
