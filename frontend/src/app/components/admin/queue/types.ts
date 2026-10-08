@@ -4,85 +4,63 @@
 //
 // ─── TRÊS NÍVEIS, E A DIFERENÇA IMPORTA ──────────────────────────────────────
 //
-// A versão anterior era uma lista única onde um botão "Ver" ficava ao lado de
-// um "Responder", como se fossem a mesma coisa. Não são: "Ver" queria dizer
-// *não há nada aqui para fazeres*, e obrigava a abrir outra tela para descobrir
-// isso.
+//   'resolve' — alguém tem de decidir. Entra nos números do menu.
+//   'open'    — precisa de abrir um ecrã e tratar. Entra nos números do menu.
+//   'inform'  — não há decisão nenhuma. Só precisa de ser sabido, e NÃO entra
+//               nos números: um saldo negativo regulariza-se no próximo fecho,
+//               e até lá acendia o menu todos os dias. Um contador que nunca
+//               chega a zero deixa de ser aviso e passa a decoração.
 //
-//   'resolve' — a decisão cabe num botão ou num campo. Resolve-se sem sair.
-//   'open'    — precisa de um formulário ou de abrir um ficheiro. Expande para
-//               mostrar QUEM espera, e cada linha abre já no item certo.
-//   'inform'  — não há decisão nenhuma. Só precisa de ser sabido.
+// ─── CADA LINHA NAVEGA ───────────────────────────────────────────────────────
 //
-// ─── POR QUE UM REGISTO E NÃO OITO BLOCOS if ─────────────────────────────────
+// A versão anterior expandia painéis dentro do próprio painel: cada item tinha
+// um `panel` e havia um ficheiro (`panels.tsx`) a desenhar oito listas, cada
+// uma com o seu pedido ao servidor. Isso fazia do painel uma segunda versão
+// pior de cada tela — com menos filtros, menos ordenação, e a mesma lógica
+// escrita em dois sítios.
 //
-// A versão anterior tinha oito blocos `if` a empurrar objetos para um array,
-// dentro do componente do painel. Acrescentar um item obrigava a mexer nesse
-// ficheiro e a lembrar-se da ordenação, da pluralização e do estado de
-// navegação. Aqui, um item novo é uma entrada no registo e um caso no painel —
-// e nada mais precisa de mudar.
+// Agora cada linha leva um `to` e abre a tela a sério. O painel passa a ser o
+// que devia ser: o mapa do que falta, e não o sítio onde se faz tudo.
+//
+// ─── POR QUE UM REGISTO E NÃO DEZENOVE BLOCOS if ─────────────────────────────
+//
+// Porque são dezenove fontes. Com elas escritas dentro do componente,
+// acrescentar uma obrigava a mexer na renderização e a lembrar-se da
+// pluralização, da ordenação e do caminho do menu. Aqui é uma entrada no
+// registo, e nada mais muda.
 
 import type { LucideIcon } from 'lucide-react';
+import type { PendingKey, PendingLevel } from '@/shared/services/pending.service';
 
-export type QueueTier = 'resolve' | 'open' | 'inform';
-
-/**
- * Que conteúdo aparece ao expandir.
- *
- * É um identificador e não uma função de renderização: mantém o registo como
- * dados puros, testável e sem JSX, e concentra o desenho num sítio só.
- */
-export type QueuePanel =
-  | 'earnings'      // aprovar/rejeitar lançamentos comunicados
-  | 'support'       // responder a tickets
-  | 'expiring'      // avisar motoristas de documentos a expirar
-  | 'settlements'   // listar quem falta fechar, abrir o fecho de cada um
-  | 'withdrawals'   // listar retiradas pendentes, abrir no Financeiro
-  | 'documents'     // listar documentos por rever
-  | 'bank'          // listar IBAN por aprovar
-  | 'drivers';      // lista simples de motoristas (saldo negativo, bloqueados)
+export type QueueTier = PendingLevel;
 
 export interface QueueItem {
-  key: string;
+  key: PendingKey;
   tier: QueueTier;
   icon: LucideIcon;
+  /** A linha de cima: "3 marcações com hora nova proposta". */
   title: string;
+  /** A linha de baixo: a idade, os nomes, o que está em causa. */
   detail: string;
-  /** Dias de espera. Define a ordenação e o destaque de atraso. */
+  /** Dias de espera. Define a ordenação. */
   waiting: number | null;
-  /** Quantos itens estão por trás deste resumo. */
   count: number;
-  panel: QueuePanel;
-  /**
-   * Motoristas já conhecidos a partir do resumo, quando o servidor os manda.
-   * Poupa uma consulta ao expandir nos casos em que já temos os nomes.
-   */
-  drivers?: { id: string; name: string; balance?: number }[];
-  /** Passado ao navegar: pré-preenche o formulário de destino. */
+  /** Já arde: passou do prazo, ou espera há demasiado tempo. */
+  late: boolean;
+  /** O ecrã que resolve isto. É para aqui que a linha leva. */
+  to: string;
+  /** Passado ao navegar: pré-preenche ou filtra o ecrã de destino. */
   navState?: Record<string, unknown>;
 }
-
-/** Acima disto, o item passa a ser destacado como atrasado. */
-export const OVERDUE_DAYS = 3;
-
-/**
- * Quantos itens uma expansão mostra antes de remeter para a tela dedicada.
- *
- * O painel resolve a cauda; as telas resolvem o volume. Sem este limite,
- * expandir "23 documentos por rever" transformava o painel numa versão pior da
- * tela de Documentos — com menos filtros, menos ordenação e mais código para
- * manter em dois sítios.
- */
-export const PANEL_LIMIT = 5;
 
 export const TIER_TITLES: Record<QueueTier, { title: string; subtitle: string }> = {
   resolve: {
     title: 'Resolver agora',
-    subtitle: 'Decide aqui, sem sair do painel',
+    subtitle: 'Alguém tem de decidir isto',
   },
   open: {
-    title: 'Precisa de abrir',
-    subtitle: 'Expanda para ver quem espera e ir direto ao item',
+    title: 'Precisa de tratar',
+    subtitle: 'Carregue na linha para abrir o ecrã que resolve',
   },
   inform: {
     title: 'Para saber',

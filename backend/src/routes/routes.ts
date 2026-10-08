@@ -26,6 +26,7 @@ import { materialsRouter } from '../modules/materials/materials.routes';
 import { permissionsRouter } from '../modules/permissions/permissions.routes';
 import { scheduledPaymentsRouter } from '../modules/scheduled-payments/scheduled-payments.routes';
 import { remindersRouter } from '../modules/reminders/reminders.routes';
+import { pendingRouter } from '../modules/pending/pending.routes';
 import { requireArea } from '../middlewares/area.middleware';
 
 const router = Router();
@@ -93,5 +94,10 @@ router.use('/scheduled-payments', requireArea('FINANCIAL'), scheduledPaymentsRou
 // sob o painel e não sob uma área de negócio. Quem vê o painel pode ter notas
 // no painel.
 router.use('/reminders', requireArea('DASHBOARD'), remindersRouter());
+// O que falta fazer, em toda a aplicação. Sob o painel e não sob cada área:
+// é UMA pergunta sobre todas elas, e o que cada pessoa vê é filtrado lá
+// dentro pelas permissões dela. É também o que alimenta os números do menu,
+// por isso tem de abrir a quem só tem o painel.
+router.use('/pending', requireArea('DASHBOARD'), pendingRouter());
 
 export { router };

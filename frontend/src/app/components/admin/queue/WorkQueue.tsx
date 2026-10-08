@@ -1,85 +1,73 @@
 // src/app/components/admin/queue/WorkQueue.tsx
 //
-// A fila de trabalho: três níveis, linhas que abrem no sítio.
+// A fila de trabalho: três blocos, e cada linha abre o ecrã que resolve.
 //
-// ─── UMA EXPANDIDA DE CADA VEZ ───────────────────────────────────────────────
+// ─── O QUE MUDOU, E PORQUE ───────────────────────────────────────────────────
 //
-// Deliberado. Várias abertas ao mesmo tempo empurram o resto da fila para fora
-// do ecrã e desfazem a razão de ser desta tela, que é ver tudo o que espera de
-// uma vez. Uma de cada vez mantém a lista curta e obriga a acabar o que se
-// começou antes de abrir o seguinte.
+// Antes cada linha expandia um painel aqui dentro, com a sua própria lista e o
+// seu próprio pedido ao servidor. Isso fazia do painel uma segunda versão de
+// cada tela — com menos filtros, menos ordenação, e a mesma lógica a manter em
+// dois sítios. Agora a linha navega.
 //
-// ─── SEM CAMINHOS DIFERENTES POR TAMANHO DE ECRÃ ─────────────────────────────
+// O painel passa a responder a uma pergunta só, que é a que vale a pena:
+// "o que falta fazer, e onde". O trabalho faz-se onde já se fazia.
 //
-// Foi considerado abrir a tela dedicada no telemóvel em vez de expandir. Não:
-// seriam dois comportamentos a manter, e um deles quase nunca testado. Os
-// painéis são desenhados para caber a 380px — as ações ficam sob o texto em vez
-// de ao lado, e é a mesma marcação nos dois casos.
+// ─── O NÚMERO E A COR ────────────────────────────────────────────────────────
+//
+// Cada linha leva o número de itens por trás dela e, quando está atrasada, o
+// tom vermelho — o mesmo que aparece no menu lateral. É de propósito que seja
+// o mesmo: quem vê um 3 vermelho no menu tem de reconhecer a linha vermelha do
+// painel como sendo a mesma coisa.
 
-import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { CheckCircle2, ChevronDown } from 'lucide-react';
-import { QueuePanel } from './panels';
-import { OVERDUE_DAYS, TIER_TITLES, type QueueItem, type QueueTier } from './types';
+import { CheckCircle2, ChevronRight } from 'lucide-react';
+import { TIER_TITLES, type QueueItem, type QueueTier } from './types';
 
-function QueueRow({
-  item, expanded, onToggle, expiringDays,
-}: {
-  item: QueueItem;
-  expanded: boolean;
-  onToggle: () => void;
-  expiringDays: number;
-}) {
+function QueueRow({ item }: { item: QueueItem }) {
+  const navigate = useNavigate();
   const Icon = item.icon;
-  const atrasado = item.waiting !== null && item.waiting >= OVERDUE_DAYS;
+  const arde = item.late;
 
   return (
     <li className="border-b border-border last:border-0">
       <button
         type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
+        onClick={() => navigate(item.to, item.navState ? { state: item.navState } : undefined)}
         className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/40"
       >
         <Icon
-          className={`h-[18px] w-[18px] shrink-0 ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}
+          className={`h-[18px] w-[18px] shrink-0 ${arde ? 'text-destructive' : 'text-muted-foreground'}`}
           aria-hidden="true"
         />
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{item.title}</p>
-          <p className={`truncate text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>
+          <p className={`truncate text-xs ${arde ? 'text-destructive' : 'text-muted-foreground'}`}>
             {item.detail}
           </p>
         </div>
 
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
-      </button>
+        {/* O número repetido ao lado da linha não é decoração: o título diz
+            "3 documentos" e o número confirma-o no mesmo sítio onde o menu o
+            mostra, que é o que liga as duas coisas aos olhos de quem lê. */}
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+            arde
+              ? 'bg-destructive/10 text-destructive'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
+          }`}
+        >
+          {item.count > 99 ? '99+' : item.count}
+        </span>
 
-      {/* Montado só quando aberto, e não escondido com CSS: cada painel faz o
-          seu próprio pedido ao servidor, e mantê-los montados carregava as oito
-          listas de uma vez sempre que o painel abrisse. */}
-      {expanded && (
-        <div className="pb-3 pl-[30px] pr-1">
-          <QueuePanel item={item} expiringDays={expiringDays} />
-        </div>
-      )}
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
     </li>
   );
 }
 
-function TierBlock({
-  tier, items, expanded, onToggle, expiringDays,
-}: {
-  tier: QueueTier;
-  items: QueueItem[];
-  expanded: string | null;
-  onToggle: (key: string) => void;
-  expiringDays: number;
-}) {
+function TierBlock({ tier, items }: { tier: QueueTier; items: QueueItem[] }) {
   if (items.length === 0) return null;
   const { title, subtitle } = TIER_TITLES[tier];
 
@@ -96,33 +84,22 @@ function TierBlock({
       </CardHeader>
       <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
         <ul>
-          {items.map((item) => (
-            <QueueRow
-              key={item.key}
-              item={item}
-              expanded={expanded === item.key}
-              onToggle={() => onToggle(item.key)}
-              expiringDays={expiringDays}
-            />
-          ))}
+          {items.map((item) => <QueueRow key={item.key} item={item} />)}
         </ul>
       </CardContent>
     </Card>
   );
 }
 
-export function WorkQueue({ items, expiringDays }: { items: QueueItem[]; expiringDays: number }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const toggle = (key: string) => setExpanded((atual) => (atual === key ? null : key));
-
+export function WorkQueue({ items }: { items: QueueItem[] }) {
   const resolver = items.filter((i) => i.tier === 'resolve');
-  const abrir = items.filter((i) => i.tier === 'open');
+  const tratar = items.filter((i) => i.tier === 'open');
   const saber = items.filter((i) => i.tier === 'inform');
 
-  // Nada a decidir nem a abrir. O estado bom merece uma resposta explícita:
-  // metade do valor deste painel é saber que está tudo em dia sem verificar
-  // cinco telas.
-  if (resolver.length === 0 && abrir.length === 0) {
+  // Nada a decidir nem a tratar. O estado bom merece uma resposta explícita:
+  // metade do valor deste painel é saber que está tudo em dia sem ter de abrir
+  // dez telas para confirmar.
+  if (resolver.length === 0 && tratar.length === 0) {
     return (
       <>
         <Card className="shadow-card">
@@ -130,23 +107,20 @@ export function WorkQueue({ items, expiringDays }: { items: QueueItem[]; expirin
             <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
             <p className="text-sm font-medium">Nada à espera</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Fechos, documentos, retiradas e suporte estão em dia.
+              Oficina, fechos, documentos, retiradas e suporte estão em dia.
             </p>
           </CardContent>
         </Card>
-        <TierBlock
-          tier="inform" items={saber} expanded={expanded}
-          onToggle={toggle} expiringDays={expiringDays}
-        />
+        <TierBlock tier="inform" items={saber} />
       </>
     );
   }
 
   return (
     <>
-      <TierBlock tier="resolve" items={resolver} expanded={expanded} onToggle={toggle} expiringDays={expiringDays} />
-      <TierBlock tier="open" items={abrir} expanded={expanded} onToggle={toggle} expiringDays={expiringDays} />
-      <TierBlock tier="inform" items={saber} expanded={expanded} onToggle={toggle} expiringDays={expiringDays} />
+      <TierBlock tier="resolve" items={resolver} />
+      <TierBlock tier="open" items={tratar} />
+      <TierBlock tier="inform" items={saber} />
     </>
   );
 }

@@ -206,4 +206,16 @@ export const queryKeys = {
     all: ['settings'] as const,
     detail: ['settings', 'detail'] as const,
   },
+
+  // O que está por fazer, em toda a aplicação.
+  //
+  // Uma chave só, sem parâmetros: é sempre o estado de agora. É lida pelo
+  // painel E pelo menu lateral, e é por ser a MESMA chave que os dois nunca
+  // mostram números diferentes — o React Query serve as duas da mesma cache.
+  //
+  // Invalidar por aqui depois de resolver qualquer pendência: aprovar um IBAN,
+  // responder a um ticket, fechar uma marcação.
+  pending: {
+    all: ['pending'] as const,
+  },
 };

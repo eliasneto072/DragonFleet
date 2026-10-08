@@ -27,11 +27,12 @@ import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { AlertCircle, ChevronRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
+import { pendingService } from '@/shared/services/pending.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
 import { RemindersCard } from '@/app/components/admin/reminders-card';
 import { WorkQueue } from '@/app/components/admin/queue/WorkQueue';
-import { buildQueue, sortQueue } from '@/app/components/admin/queue/registry';
+import { buildQueue } from '@/app/components/admin/queue/registry';
 import type { QueueItem } from '@/app/components/admin/queue/types';
 
 /** Dias inteiros decorridos desde uma data ISO. */
@@ -125,10 +126,27 @@ export function AdminDashboard() {
 
   const overview: ApiOverview | undefined = data?.overview;
 
+  // ── A fila vem de /pending e não do overview ──────────────────────────────
+  //
+  // São duas perguntas diferentes e passaram a ter duas fontes: o overview dá
+  // os números do dinheiro e dos motoristas, o /pending dá o que falta fazer —
+  // em TODA a aplicação, e já filtrado pelo que esta pessoa pode ver.
+  //
+  // É de propósito que seja a mesma consulta que alimenta os números do menu
+  // lateral: a mesma chave do React Query serve as duas, e é por isso que o
+  // menu nunca diz três enquanto o painel diz dois.
+  const pendingQ = useQuery({
+    queryKey: queryKeys.pending.all,
+    queryFn: () => pendingService.get(),
+    // Um minuto: navegar entre telas não repete a consulta, e o painel aberto
+    // atualiza-se sozinho pouco depois de alguém resolver alguma coisa.
+    staleTime: 60_000,
+  });
+
   const queue = useMemo<QueueItem[]>(() => {
-    if (!overview) return [];
-    return sortQueue(buildQueue(overview));
-  }, [overview]);
+    const pending = pendingQ.data?.pending;
+    return pending ? buildQueue(pending) : [];
+  }, [pendingQ.data]);
 
   if (isLoading) return <DashboardSkeleton />;
 
@@ -161,7 +179,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Fila de trabalho — três níveis, ver queue/types.ts */}
-      <WorkQueue items={queue} expiringDays={overview.queue.documentsExpiringSoon.days} />
+      <WorkQueue items={queue} />
 
       {/* ── Lembretes ────────────────────────────────────────────────────
           Logo a seguir à fila de trabalho e antes dos números, de propósito:

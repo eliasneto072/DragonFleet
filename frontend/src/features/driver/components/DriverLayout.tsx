@@ -107,21 +107,26 @@ export function DriverLayout() {
           icon: FileText,
           label: 'Documentos',
           badge: docsNeedingAction,
-          badgeUrgent: true,
+          // Vermelho: um documento rejeitado ou expirado é o que o impede de
+          // ser ativado, e isso não é novidade — é bloqueio.
+          badgeTone: 'late',
         },
         {
           to: '/app/driver/vehicles',
           icon: Car,
           label: 'Veículos',
           badge: vehicleDocsNeedingAction + pendingVehicles,
-          badgeUrgent: vehicleDocsNeedingAction > 0,
+          // Um documento do carro rejeitado é bloqueio; um carro à espera de
+          // ativação é só espera.
+          badgeTone: vehicleDocsNeedingAction > 0 ? 'late' : 'waiting',
         },
         {
           to: '/app/driver/oficina',
           icon: Wrench,
           label: 'Oficina',
           badge: marcacoesPorResponder,
-          badgeUrgent: true,
+          // A oficina propôs outra hora e está à espera de resposta dele.
+          badgeTone: 'late',
         },
         { to: '/app/driver/profile', icon: User, label: 'Perfil' },
       ],

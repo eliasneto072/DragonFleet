@@ -42,8 +42,18 @@ export interface NavItem {
   label: string;
   /** Número a assinalar no item; 0 ou ausente não mostra nada. */
   badge?: number;
-  /** Vermelho em vez de neutro — algo que exige ação, não só novidade. */
-  badgeUrgent?: boolean;
+  /**
+   * A cor do número, e cada uma quer dizer uma coisa:
+   *
+   *   'late'    — vermelho. Já passou do prazo, ou espera há demasiado tempo.
+   *   'waiting' — laranja. Está à espera, e isso é normal.
+   *   'new'     — neutro. É novidade e não pendência (notificações por ler).
+   *
+   * Três tons e não um só porque um ticket que chegou há uma hora e um parado
+   * há uma semana não são a mesma urgência — e pintar os dois de vermelho
+   * ensina a ignorar o vermelho.
+   */
+  badgeTone?: 'late' | 'waiting' | 'new';
 }
 
 export interface NavGroup {
@@ -161,13 +171,17 @@ export function AppShell({
     ? user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
     : '–';
 
-  function Badge({ value, urgent }: { value: number; urgent?: boolean }) {
+  const CLASSE_DO_TOM: Record<NonNullable<NavItem['badgeTone']>, string> = {
+    late: 'bg-destructive text-destructive-foreground',
+    waiting: 'bg-amber-500 text-white dark:bg-amber-600',
+    new: 'bg-secondary text-muted-foreground',
+  };
+
+  function Badge({ value, tone = 'new' }: { value: number; tone?: NavItem['badgeTone'] }) {
     return (
       <span
         className={`ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
-          urgent
-            ? 'bg-destructive text-destructive-foreground'
-            : 'bg-secondary text-muted-foreground'
+          CLASSE_DO_TOM[tone ?? 'new']
         }`}
       >
         {value > 99 ? '99+' : value}
@@ -184,7 +198,7 @@ export function AppShell({
               {group.title}
             </p>
           )}
-          {group.items.map(({ to, icon: Icon, label, badge, badgeUrgent }) => (
+          {group.items.map(({ to, icon: Icon, label, badge, badgeTone }) => (
             <NavLink
               key={to}
               to={to}
@@ -199,7 +213,7 @@ export function AppShell({
             >
               <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
               <span className="truncate">{label}</span>
-              {!!badge && badge > 0 && <Badge value={badge} urgent={badgeUrgent} />}
+              {!!badge && badge > 0 && <Badge value={badge} tone={badgeTone} />}
             </NavLink>
           ))}
         </div>
@@ -258,7 +272,9 @@ export function AppShell({
 
   /** Total de pendências, para assinalar o botão do menu no telemóvel. */
   const totalBadge = allItems.reduce((sum, i) => sum + (i.badge ?? 0), 0);
-  const anyUrgent = allItems.some((i) => i.badgeUrgent && (i.badge ?? 0) > 0);
+  // Só o vermelho pinta o ponto do menu no telemóvel: se o laranja também o
+  // fizesse, o ponto estaria vermelho quase sempre e deixaria de dizer nada.
+  const anyUrgent = allItems.some((i) => i.badgeTone === 'late' && (i.badge ?? 0) > 0);
 
   return (
     <div className="min-h-screen bg-background">
