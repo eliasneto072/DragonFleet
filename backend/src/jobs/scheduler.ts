@@ -9,6 +9,7 @@ import { runInvestorsAccrual } from './investors-accrual.job';
 import { runRanksRecalculation } from './ranks.job';
 import { runScheduledPayments } from './scheduled-payments.job';
 import { runReminders } from './reminders.job';
+import { runInspectionsCheck } from './inspections.job';
 
 // Corre todos os dias às 03:00 (hora do servidor). Horário de baixa utilização.
 const DOCUMENTS_EXPIRY_SCHEDULE = '0 3 * * *';
@@ -47,6 +48,13 @@ const SCHEDULED_PAYMENTS_SCHEDULE = '0 1 * * *';
 // Lembretes: 08:00 em Lisboa. De manhã e não de madrugada, de propósito — uma
 // notificação às três da manhã está lida e esquecida quando a pessoa acorda.
 const REMINDERS_SCHEDULE = '0 8 * * *';
+
+// Inspeções: 08:10 em Lisboa, logo a seguir aos lembretes.
+//
+// De manhã e junto dos lembretes de propósito: são a mesma espécie de coisa —
+// o que falta fazer — e chegam no mesmo momento do dia em que alguém está a
+// organizar o trabalho, em vez de pingarem a horas aleatórias.
+const INSPECTIONS_SCHEDULE = '10 8 * * *';
 
 export function startScheduler(): void {
   // Validação de documentos (regra dos 90 dias)
@@ -106,6 +114,16 @@ export function startScheduler(): void {
     { timezone: 'Europe/Lisbon' },
   );
 
+  cron.schedule(
+    INSPECTIONS_SCHEDULE,
+    () => {
+      runInspectionsCheck().catch((err) =>
+        console.error('[scheduler] Erro no aviso de inspeções:', err),
+      );
+    },
+    { timezone: 'Europe/Lisbon' },
+  );
+
   // Ao arrancar, os dois pagamentos diários. Um deploy à meia-noite não pode
   // deixar ninguém sem o dia.
   runInvestmentsAccrual().catch((err) =>
@@ -126,6 +144,6 @@ export function startScheduler(): void {
   console.log(
     '[scheduler] Jobs agendados. Documentos: 03:00. Investimentos: 00:15. '
     + 'Investidores: 00:20. Níveis: 00:45. Pagamentos agendados: 01:00. '
-    + 'Lembretes: 08:00 (Lisboa).',
+    + 'Lembretes: 08:00. Inspeções: 08:10 (Lisboa).',
   );
 }

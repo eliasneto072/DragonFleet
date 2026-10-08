@@ -20,6 +20,9 @@ import { investmentsRouter } from '../modules/investments/investments.routes';
 import { ranksRouter } from '../modules/ranks/ranks.routes';
 import { investorsRouter } from '../modules/investors/investors.routes';
 import { denyInvestor } from '../middlewares/deny-investor.middleware';
+import { denyMechanic } from '../middlewares/deny-mechanic.middleware';
+import { bookingsRouter } from '../modules/bookings/bookings.routes';
+import { materialsRouter } from '../modules/materials/materials.routes';
 import { permissionsRouter } from '../modules/permissions/permissions.routes';
 import { scheduledPaymentsRouter } from '../modules/scheduled-payments/scheduled-payments.routes';
 import { remindersRouter } from '../modules/reminders/reminders.routes';
@@ -33,6 +36,17 @@ const router = Router();
 router.use('/auth', authRouter())
 router.use('/investors', investorsRouter())
 
+// ─── O portal da oficina ───────────────────────────────────────────────────
+//
+// As marcações vivem ACIMA do muro porque são a ÚNICA coisa que uma conta de
+// mecânico pode abrir. O investidor continua fechado também a esta, e lá
+// dentro o serviço filtra por oficina — um mecânico não vê as marcações da
+// oficina do lado.
+//
+// `requireArea` constrange só quem é da equipa, por isso o mecânico atravessa-a
+// como um motorista atravessa, e o staff continua a precisar da área da frota.
+router.use('/bookings', denyInvestor, requireArea('FLEET'), bookingsRouter())
+
 // ─── A partir daqui é a frota ──────────────────────────────────────────────
 //
 // Lista BRANCA: tudo o que estiver abaixo desta linha fica fechado a contas de
@@ -40,6 +54,8 @@ router.use('/investors', investorsRouter())
 // protegida sem ninguém se lembrar de a proteger — que é a única forma de isto
 // se manter verdadeiro daqui a um ano.
 router.use(denyInvestor)
+// E o mesmo para as contas de oficina: daqui para baixo, nada.
+router.use(denyMechanic)
 
 // As permissões vivem à parte das áreas que protegem: quem perdeu o acesso a
 // tudo tem de continuar a poder perguntar o que pode, senão o painel não sabe
@@ -48,6 +64,10 @@ router.use('/permissions', permissionsRouter())
 
 router.use('/users', requireArea('DRIVERS'), usersRouter())
 router.use('/vehicles', requireArea('FLEET'), vehiclesRouter())
+// O material é material dos carros, por isso vive sob a área da frota. Os
+// preços de compra não são para os motoristas — a recusa está no serviço,
+// porque o `requireArea` deixa passar quem não é da equipa.
+router.use('/materials', requireArea('FLEET'), materialsRouter())
 router.use('/earnings', requireArea('SETTLEMENTS'), earningsRouter())
 router.use('/withdrawals', requireArea('FINANCIAL'), withdrawalsRouter())
 router.use('/documents', requireArea('DOCUMENTS'), documentsRouter())

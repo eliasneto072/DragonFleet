@@ -27,6 +27,7 @@ import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
   ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
+  Wrench, Boxes,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
@@ -48,6 +49,8 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       { to: '/app/admin/drivers',    icon: Users,           label: 'Motoristas',  area: 'DRIVERS' },
       { to: '/app/admin/documents',  icon: FileText,        label: 'Documentos',  area: 'DOCUMENTS' },
       { to: '/app/admin/fleet',      icon: Car,             label: 'Frotas',      area: 'FLEET' },
+      { to: '/app/admin/oficina',    icon: Wrench,          label: 'Oficina',     area: 'FLEET' },
+      { to: '/app/admin/material',   icon: Boxes,           label: 'Material',    area: 'FLEET' },
       { to: '/app/admin/ranks',      icon: Trophy,          label: 'Níveis',      area: 'RANKS' },
     ],
   },

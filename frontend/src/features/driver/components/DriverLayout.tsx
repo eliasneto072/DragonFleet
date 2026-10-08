@@ -15,12 +15,14 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Wallet, FileText, User, Bell, MessageCircle, Car, PiggyBank,
+  Wrench,
 } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { documentsService } from '@/features/driver/services/documents.service';
 import { notificationsService } from '@/features/driver/services/notifications.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
+import { bookingsService } from '@/features/admin/services/bookings.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 
 export function DriverLayout() {
@@ -51,6 +53,15 @@ export function DriverLayout() {
     enabled: !!user?.id,
   });
 
+  // As marcações abertas dele. A chave é a MESMA que a lista da tela da
+  // Oficina usa, por isso isto não acrescenta um pedido: quem abre a tela
+  // reaproveita o que o menu já trouxe.
+  const marcacoesQ = useQuery({
+    queryKey: ['bookings', false],
+    queryFn: () => bookingsService.list({ abertas: true }),
+    enabled: !!user?.id,
+  });
+
   const documents = docsQ.data?.documents ?? [];
   const myDocs = documents.filter((d) => d.userId === user?.id);
 
@@ -71,6 +82,13 @@ export function DriverLayout() {
 
   const unreadNotifs = (notifsQ.data?.notifications ?? []).filter(
     (n) => n.userId === user?.id && !n.read,
+  ).length;
+
+  // Só o que ESPERA por ele: a oficina propôs outra hora e alguém tem de a
+  // aceitar. Uma marcação já confirmada não é pendência — é um compromisso, e
+  // assinalá-la seria um número que ele não consegue baixar.
+  const marcacoesPorResponder = (marcacoesQ.data?.bookings ?? []).filter(
+    (m) => m.status === 'NOVA_DATA_PROPOSTA',
   ).length;
 
   const NAV_GROUPS: readonly NavGroup[] = [
@@ -97,6 +115,13 @@ export function DriverLayout() {
           label: 'Veículos',
           badge: vehicleDocsNeedingAction + pendingVehicles,
           badgeUrgent: vehicleDocsNeedingAction > 0,
+        },
+        {
+          to: '/app/driver/oficina',
+          icon: Wrench,
+          label: 'Oficina',
+          badge: marcacoesPorResponder,
+          badgeUrgent: true,
         },
         { to: '/app/driver/profile', icon: User, label: 'Perfil' },
       ],

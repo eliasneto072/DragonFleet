@@ -9,6 +9,8 @@ import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { DriverLayout } from '@/features/driver/components/DriverLayout';
 import { AdminLayout } from '@/features/admin/components/AdminLayout';
 
+import { WorkshopLayout } from '@/features/workshop/components/WorkshopLayout';
+
 import DriverDashboardPage from '@/features/driver/pages/DriverDashboardPage';
 import WithdrawalsPage from '@/features/driver/pages/WithdrawalsPage';
 import DocumentsPage from '@/features/driver/pages/DocumentsPage';
@@ -17,6 +19,8 @@ import ProfilePage from '@/features/driver/pages/ProfilePage';
 import NotificationsPage from '@/features/driver/pages/NotificationsPage';
 import SupportPage from '@/features/driver/pages/SupportPage';
 import InvestmentsPage from '@/features/driver/pages/InvestmentsPage';
+import DriverBookingsPage from '@/features/driver/pages/BookingsPage';
+import WorkshopBookingsPage from '@/features/workshop/pages/WorkshopBookingsPage';
 
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { DriversPage } from '@/features/admin/pages/DriversPage';
@@ -26,6 +30,8 @@ import { FinancialPage } from '@/features/admin/pages/FinancialPage';
 import { ScheduledPaymentsPage } from '@/features/admin/pages/ScheduledPaymentsPage';
 import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
+import { BookingsPage } from '@/features/admin/pages/BookingsPage';
+import { MaterialsPage } from '@/features/admin/pages/MaterialsPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
 import { AssignmentLookupPage } from '@/features/admin/pages/AssignmentLookupPage';
 import { AnalyticsPage } from '@/features/admin/pages/AnalyticsPage';
@@ -56,6 +62,20 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/app/driver" replace /> },
 
+      // ── O portal da oficina ───────────────────────────────────────────
+      //
+      // Fica sob /app porque partilha a sessão e a guarda de autenticação. O
+      // RootLayout manda para cá qualquer conta de mecânico que tente outra
+      // rota: as outras telas pedem dados que o servidor lhe recusa, e o que
+      // ela veria era uma aplicação cheia de erros.
+      {
+        path: 'oficina',
+        element: <WorkshopLayout />,
+        children: [
+          { index: true, element: <WorkshopBookingsPage /> },
+        ],
+      },
+
       {
         path: 'driver',
         element: <DriverLayout />,
@@ -66,6 +86,7 @@ export const router = createBrowserRouter([
           { path: 'investments', element: <InvestmentsPage /> },
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'vehicles', element: <VehiclesPage /> },
+          { path: 'oficina', element: <DriverBookingsPage /> },
           { path: 'profile', element: <ProfilePage /> },
           { path: 'notifications', element: <NotificationsPage /> },
           { path: 'support', element: <SupportPage /> },
@@ -92,6 +113,11 @@ export const router = createBrowserRouter([
           // de saber isso para perceber que 'lookup' não é um id.
           { path: 'fleet/lookup',   element: <RequireArea area="FLEET"><AssignmentLookupPage /></RequireArea> },
           { path: 'fleet/:id',      element: <RequireArea area="FLEET"><VehicleDetailPage /></RequireArea> },
+          // A oficina é sobre os carros, por isso vive na área da Frota — a
+          // mesma que o servidor exige em `/bookings`.
+          { path: 'oficina',        element: <RequireArea area="FLEET"><BookingsPage /></RequireArea> },
+          // O material é dos carros, por isso também na área da Frota.
+          { path: 'material',       element: <RequireArea area="FLEET"><MaterialsPage /></RequireArea> },
           { path: 'ranks',          element: <RequireArea area="RANKS"><RanksPage /></RequireArea> },
 
           { path: 'settlements',    element: <RequireArea area="SETTLEMENTS"><SettlementsPage /></RequireArea> },

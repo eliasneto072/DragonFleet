@@ -32,6 +32,54 @@ enum UserRole {
   /// que não seja o portal dele (ver `deny-investor.middleware.ts`). Uma conta
   /// destas não é um motorista com menos botões: é alguém de fora da empresa.
   INVESTOR
+
+  /// Mecânico: entra para ver e confirmar as marcações da oficina DELE.
+  ///
+  /// Como o investidor, é alguém de fora da empresa — e o bloqueio é o mesmo:
+  /// o servidor recusa tudo o que não seja o portal da oficina (ver
+  /// `deny-mechanic.middleware.ts`). Não vê fechos, saldos, motoristas nem
+  /// documentos; vê os carros que lhe mandam e as datas.
+  MECHANIC
+}
+
+/// Em que ponto está uma marcação de oficina.
+///
+/// ─── PORQUE É QUE HÁ UM ESTADO SÓ PARA A CONTRAPROPOSTA ────────────────────
+///
+/// `NOVA_DATA_PROPOSTA` existe porque a alternativa é a oficina mudar a data e
+/// pronto — e aí quem pediu descobre que o carro é para entregar noutro dia
+/// quando abrir o ecrã, ou pior, quando lá chegar. Com um estado próprio, a
+/// marcação fica parada à espera de alguém aceitar, e ninguém assume uma hora
+/// que não combinou.
+enum BookingStatus {
+  PENDENTE
+  NOVA_DATA_PROPOSTA
+  CONFIRMADA
+  CONCLUIDA
+  CANCELADA
+  RECUSADA
+}
+
+/// Quem leva o carro à oficina.
+///
+/// O motorista que marca por iniciativa própria leva sempre o carro — foi o
+/// que o cliente pediu, e é o que faz sentido: o carro está com ele. As outras
+/// duas só a gestão pode escolher.
+enum BookingLogistics {
+  MOTORISTA_LEVA
+  OFICINA_RECOLHE
+  EMPRESA_LEVA
+}
+
+/// O que é cada ficheiro anexado a uma marcação.
+///
+/// Separados e não um monte de ficheiros soltos porque a pergunta que se faz
+/// meses depois é "onde está o comprovativo daquele pagamento", e não "quantos
+/// ficheiros tinha aquela reparação".
+enum BookingFileKind {
+  FATURA
+  COMPROVATIVO
+  OUTRO
 }
 
 enum UserStatus {
@@ -184,6 +232,21 @@ model User {
   scheduledPaymentsReceived ScheduledPayment[] @relation("scheduledPaymentsReceived")
   scheduledPaymentsCreated  ScheduledPayment[] @relation("scheduledPaymentsCreated")
   remindersOwned            Reminder[]         @relation("remindersOwned")
+
+  /// A oficina de um MECHANIC. Nulo em todos os outros perfis.
+  ///
+  /// É isto que faz o mecânico ver só as marcações da oficina dele. Um
+  /// MECHANIC sem oficina não vê nada — e isso é de propósito: vale mais uma
+  /// conta que não mostra nada do que uma que mostra a frota toda.
+  workshopId String?   @map("workshop_id")
+  workshop   Workshop? @relation("workshopStaff", fields: [workshopId], references: [id], onDelete: SetNull)
+
+  bookingsRequested Booking[] @relation("bookingsRequested")
+  bookingsForDriver Booking[] @relation("bookingsForDriver")
+  bookingsEscorted  Booking[] @relation("bookingsEscorted")
+  bookingFiles      BookingFile[] @relation("bookingFilesUploaded")
+  stockMovesCreated    StockMove[] @relation("stockMovesCreated")
+  stockMovesForDriver  StockMove[] @relation("stockMovesForDriver")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
   bankAccounts       BankAccount[]
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
@@ -264,8 +327,18 @@ model Vehicle {
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt
 
+  /// Quando caduca a inspeção periódica deste carro.
+  ///
+  /// Guardada aqui e não deduzida da última inspeção feita: um carro pode
+  /// entrar na frota já inspecionado, e a data vem do papel. Nula enquanto
+  /// ninguém a escrever — e nula NÃO é "está em dia", é "não se sabe", que é
+  /// o que o aviso diz.
+  nextInspectionOn DateTime? @map("next_inspection_on") @db.Date
+
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   documents   Document[]
+  bookings    Booking[]
+  stockMoves  StockMove[]         @relation("stockMovesForVehicle")
   assignments VehicleAssignment[]
   settlements WeeklySettlement[]
   projects    InvestmentProject[]
@@ -1614,4 +1687,293 @@ model StaffPermission {
 
   @@unique([userId, area], map: "staff_permissions_user_area_key")
   @@map("staff_permissions")
+}
+
+/// Uma oficina, um centro de inspeção, um sítio de pneus.
+///
+/// Tudo o mesmo modelo porque, do ponto de vista de uma marcação, são a mesma
+/// coisa: um sítio com morada e telefone, para onde se leva um carro a uma
+/// hora combinada. O `kind` serve para o ecrã agrupar e para o formulário
+/// sugerir — não muda regra nenhuma.
+model Workshop {
+  id      String  @id @default(cuid())
+  name    String
+  kind    String  @default("OFICINA")   // OFICINA | INSPECAO | PNEUS | OUTRO
+  address String?
+  phone   String?
+  notes   String?
+
+  /// Desligada em vez de apagada: as marcações antigas continuam a apontar
+  /// para ela, e apagá-la deixaria o histórico a falar de uma oficina que já
+  /// não existe.
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  staff    User[]    @relation("workshopStaff")
+  bookings Booking[]
+
+  @@index([active])
+  @@map("workshops")
+}
+
+/// Um tipo de serviço: troca de óleo, pneus, inspeção periódica, furo.
+///
+/// Tabela e não `enum` pela mesma razão dos tipos de pagamento: quem usa isto
+/// tem de poder acrescentar os seus sem esperar por um deploy.
+model ServiceType {
+  id    String  @id @default(cuid())
+  label String  @unique
+
+  /// Marca os que são inspeção periódica, para o sistema poder actualizar a
+  /// data da próxima inspeção do carro quando uma destas for concluída. É a
+  /// única razão por que o sistema precisa de distinguir um tipo dos outros.
+  isInspection Boolean @default(false) @map("is_inspection")
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bookings Booking[]
+
+  @@map("service_types")
+}
+
+/// Uma ida do carro à oficina: o que é, onde, quando, e com quem.
+///
+/// ─── PORQUE É QUE O MOTORISTA FICA GRAVADO ─────────────────────────────────
+///
+/// `driverId` é escrito quando a marcação nasce, a partir de quem tem o carro
+/// nessa altura — e não lido da atribuição na hora de mostrar. Se o carro
+/// mudar de mãos entretanto, a marcação continua a dizer quem a tinha de
+/// cumprir, que é a pergunta que se faz quando alguém não apareceu.
+///
+/// ─── E PORQUE É QUE O CUSTO É NULO ATÉ AO FIM ──────────────────────────────
+///
+/// Nulo não é zero. Zero quer dizer "não custou nada", e há reparações em
+/// garantia que não custam mesmo. Nulo quer dizer "ainda não se sabe", que é o
+/// estado de tudo o que ainda não foi feito.
+model Booking {
+  id        String @id @default(cuid())
+  vehicleId String @map("vehicle_id")
+
+  /// Quem tinha o carro quando isto foi marcado. Nulo se o carro não estava
+  /// com ninguém.
+  driverId String? @map("driver_id")
+
+  workshopId    String @map("workshop_id")
+  serviceTypeId String @map("service_type_id")
+
+  /// O que é preciso fazer, por palavras. É isto que a oficina lê.
+  description String?
+
+  /// O dia e a hora combinados. Quem pede propõe; a oficina confirma ou
+  /// contrapõe em `proposedAt`.
+  scheduledAt DateTime @map("scheduled_at")
+
+  /// A hora que a oficina propôs em alternativa, e porquê. Nulos fora desse
+  /// estado.
+  proposedAt     DateTime? @map("proposed_at")
+  proposalReason String?   @map("proposal_reason")
+
+  status    BookingStatus    @default(PENDENTE)
+  logistics BookingLogistics @default(MOTORISTA_LEVA)
+
+  /// O motorista pediu que fosse alguém da empresa com ele.
+  ///
+  /// Existe por uma razão concreta: há carros em nome da empresa que são dos
+  /// motoristas, e certas coisas exigem lá um responsável da empresa por eles
+  /// não serem os donos no papel.
+  needsEscort Boolean @default(false) @map("needs_escort")
+  escortId    String? @map("escort_id")
+
+  /// O que custou, escrito ao concluir. Nulo até lá — ver a nota acima.
+  cost Decimal? @db.Decimal(12, 2)
+
+  /// Notas de quem concluiu: o que foi feito, o que ficou por fazer.
+  completionNotes String?   @map("completion_notes")
+  completedAt     DateTime? @map("completed_at")
+
+  /// Quem cancelou ou recusou, e porquê. Uma recusa sem motivo obriga a um
+  /// telefonema, que é precisamente o que isto existe para evitar.
+  cancelReason String? @map("cancel_reason")
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  vehicle     Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver      User?       @relation("bookingsForDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  escort      User?       @relation("bookingsEscorted", fields: [escortId], references: [id], onDelete: SetNull)
+  workshop    Workshop    @relation(fields: [workshopId], references: [id])
+  serviceType ServiceType @relation(fields: [serviceTypeId], references: [id])
+  createdBy   User        @relation("bookingsRequested", fields: [createdById], references: [id])
+  files       BookingFile[]
+  /// O material gasto nesta ida à oficina. É o que permite somar o custo real
+  /// da reparação: a factura da oficina mais o que saiu do nosso stock.
+  stockMoves  StockMove[] @relation("stockMovesForBooking")
+
+  @@index([vehicleId])
+  @@index([driverId])
+  // A pergunta do portal da oficina: o que tenho por confirmar, e para quando.
+  @@index([workshopId, status])
+  @@index([scheduledAt])
+  @@map("bookings")
+}
+
+/// A factura da reparação, o comprovativo do pagamento.
+///
+/// Guardados como os outros ficheiros do projeto: o Cloudinary fica com o
+/// ficheiro e aqui fica o endereço e a chave. A chave é o que permite apagá-lo
+/// de lá um dia — sem ela, apagar o registo deixava o ficheiro a ocupar espaço
+/// para sempre.
+model BookingFile {
+  id        String          @id @default(cuid())
+  bookingId String          @map("booking_id")
+  kind      BookingFileKind
+  fileUrl   String          @map("file_url")
+  fileKey   String          @map("file_key")
+  /// O nome que o ficheiro tinha, para a lista não mostrar só endereços.
+  fileName  String?         @map("file_name")
+
+  uploadedById String   @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation("bookingFilesUploaded", fields: [uploadedById], references: [id])
+
+  @@index([bookingId])
+  @@map("booking_files")
+}
+
+/* =========================
+   INVENTÁRIO DE MATERIAL
+   ========================= */
+
+/// Em que sentido o stock se mexeu.
+///
+/// ─── PORQUE É QUE O AJUSTE É UM TIPO À PARTE ────────────────────────────────
+///
+/// Porque não é compra nem consumo: é a contagem a dizer que a conta estava
+/// errada. Registado como entrada, inflacionava o que se gastou em compras;
+/// registado como saída, aparecia como material consumido num carro que nunca
+/// o viu. Com um tipo próprio, os relatórios de custo podem ignorá-lo — e a
+/// diferença continua escrita, com data e com autor, que é o que permite
+/// descobrir para onde é que o material está a desaparecer.
+enum StockMoveKind {
+  ENTRADA
+  SAIDA
+  AJUSTE
+}
+
+/// Uma coisa que se tem em stock: óleo, filtros, pastilhas, um pneu.
+///
+/// ─── O SALDO É UMA COLUNA E TAMBÉM UM HISTÓRICO ─────────────────────────────
+///
+/// `qty` é o stock de agora e `StockMove` é como se chegou lá. Guardar as duas
+/// coisas parece redundante até à primeira listagem: somar os movimentos de
+/// trezentos materiais para desenhar uma tabela é uma consulta por linha, e a
+/// tela passa a demorar segundos. O saldo é escrito na MESMA transação do
+/// movimento, portanto não há como um existir sem o outro.
+///
+/// ─── E O CUSTO É MÉDIO PONDERADO ────────────────────────────────────────────
+///
+/// A pergunta a que isto serve é "quanto é que me custou o material que gastei
+/// neste carro". Com o mesmo óleo comprado a 4,10 € e depois a 4,60 €, o preço
+/// da última compra responde mal — e o da primeira responde pior. A média
+/// ponderada pelas quantidades é a conta que a contabilidade portuguesa aceita
+/// (custo médio ponderado) e a única que não depende da ordem em que se gasta.
+model Material {
+  id   String  @id @default(cuid())
+  name String  @unique
+  /// A referência do fornecedor, se houver. Serve para procurar.
+  sku  String?
+
+  /// A unidade em que se conta: un, L, kg, par. Texto e não enum pela mesma
+  /// razão dos tipos de serviço — quem usa isto tem de poder escrever a dele.
+  unit String @default("un")
+
+  /// Para agrupar na tela: Óleos, Filtros, Travões, Pneus.
+  category String?
+
+  /// Abaixo disto a tela assinala. Nulo não assinala nunca.
+  minQty Decimal? @map("min_qty") @db.Decimal(12, 3)
+
+  /// Quantidade em stock AGORA. Escrita na mesma transação do movimento.
+  qty Decimal @default(0) @db.Decimal(12, 3)
+
+  /// Custo médio ponderado por unidade. É este que valoriza as saídas.
+  avgCost Decimal @default(0) @map("avg_cost") @db.Decimal(12, 4)
+
+  notes  String?
+  /// Desligado em vez de apagado: os movimentos antigos continuam a apontar
+  /// para ele, e um consumo de um material que já não existe não diz nada.
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  moves StockMove[]
+
+  @@index([active])
+  @@index([category])
+  @@map("materials")
+}
+
+/// Um movimento de stock: comprei, gastei, ou corrigi a conta.
+///
+/// ─── OS CUSTOS FICAM GRAVADOS, NÃO SE RECALCULAM ────────────────────────────
+///
+/// `unitCost` e `totalCost` são escritos no momento e nunca mais mudam. Numa
+/// saída, `unitCost` é o custo médio que o material tinha NAQUELE dia — não o
+/// de hoje. Sem isso, uma compra caríssima feita amanhã reescrevia o custo de
+/// todas as reparações do ano passado, e um relatório impresso em janeiro
+/// deixava de bater com o mesmo relatório em março.
+model StockMove {
+  id         String        @id @default(cuid())
+  materialId String        @map("material_id")
+  kind       StockMoveKind
+
+  /// Sempre positiva. O sinal vem do `kind` — o mesmo padrão dos ajustes de
+  /// saldo, que já existe neste projeto.
+  qty Decimal @db.Decimal(12, 3)
+
+  /// Numa ENTRADA é o preço pago por unidade. Numa SAIDA é o custo médio do
+  /// material naquele momento. Num AJUSTE é o mesmo, para a diferença ficar
+  /// valorizada.
+  unitCost  Decimal? @map("unit_cost")  @db.Decimal(12, 4)
+  totalCost Decimal? @map("total_cost") @db.Decimal(12, 2)
+
+  /// Só nas entradas: a quem se comprou e com que factura. É o que permite
+  /// ir do consumo de um carro até ao papel.
+  supplier   String?
+  invoiceRef String? @map("invoice_ref")
+
+  /// Onde foi gasto. Os três são opcionais: compra-se material sem ser para um
+  /// carro em particular, e gasta-se material sem haver marcação.
+  vehicleId String? @map("vehicle_id")
+  bookingId String? @map("booking_id")
+  driverId  String? @map("driver_id")
+
+  notes String?
+
+  /// O dia a que o movimento pertence, que pode não ser o dia em que foi
+  /// escrito — uma factura de há duas semanas lança-se com a data dela.
+  occurredAt DateTime @map("occurred_at")
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  material  Material @relation(fields: [materialId], references: [id])
+  vehicle   Vehicle? @relation("stockMovesForVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  booking   Booking? @relation("stockMovesForBooking", fields: [bookingId], references: [id], onDelete: SetNull)
+  driver    User?    @relation("stockMovesForDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  createdBy User     @relation("stockMovesCreated", fields: [createdById], references: [id])
+
+  @@index([materialId, occurredAt])
+  // A pergunta do custo por carro: o que é que foi gasto neste, e quando.
+  @@index([vehicleId, occurredAt])
+  @@index([bookingId])
+  @@index([occurredAt])
+  @@map("stock_moves")
 }

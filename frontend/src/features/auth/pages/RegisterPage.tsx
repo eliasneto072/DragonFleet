@@ -37,7 +37,10 @@ export function RegisterPage() {
   if (loading && !bootedRef.current) return null;
 
   if (isAuthenticated && user) {
-    return <Navigate to={user.role === 'DRIVER' ? '/app/driver' : '/app/admin'} replace />;
+    const dest = user.role === 'MECHANIC' ? '/app/oficina'
+      : user.role === 'DRIVER' ? '/app/driver'
+      : '/app/admin';
+    return <Navigate to={dest} replace />;
   }
 
   function showError(message: string) {

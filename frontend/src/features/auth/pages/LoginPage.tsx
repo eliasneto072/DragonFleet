@@ -49,7 +49,11 @@ export function LoginPage() {
       window.location.href = 'https://invest.dragonfleet.pt';
       return null;
     }
-    const dest = user.role === 'DRIVER' ? '/app/driver' : '/app/admin';
+    // Pelo mesmo raciocínio, uma conta de oficina vai para o portal dela: a
+    // única coisa que a API lhe abre são as marcações da oficina dela.
+    const dest = user.role === 'MECHANIC' ? '/app/oficina'
+      : user.role === 'DRIVER' ? '/app/driver'
+      : '/app/admin';
     return <Navigate to={dest} replace />;
   }
 

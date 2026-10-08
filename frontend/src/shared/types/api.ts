@@ -5,7 +5,11 @@
 
 // INVESTOR entra por invest.dragonfleet.pt e não tem acesso a nada da frota —
 // o bloqueio é do servidor, não desta linha (ver deny-investor.middleware.ts).
-export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER' | 'SUPPORT' | 'INVESTOR';
+//
+// MECHANIC é a conta de oficina: entra pelo mesmo endereço mas só abre as
+// marcações da oficina a que está ligada. Também aqui o bloqueio é do servidor
+// (ver deny-mechanic.middleware.ts) — esta linha só deixa o ecrã saber.
+export type UserRole   = 'ADMIN' | 'DRIVER' | 'MANAGER' | 'SUPPORT' | 'INVESTOR' | 'MECHANIC';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'AGUARDANDO_REGULARIZACAO';
 
 export type EarningPlatform  = 'UBER' | 'BOLT' | 'FREE_NOW' | 'OTHER';

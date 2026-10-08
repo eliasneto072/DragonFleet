@@ -28,5 +28,13 @@ export function RootLayout() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (isAdmin && user?.role === 'DRIVER') return <Navigate to="/app/driver" replace />;
 
+  // Uma conta de oficina só tem uma tela — as marcações da oficina dela. Todo
+  // o resto da API lhe é recusado (ver deny-mechanic.middleware.ts), por isso
+  // qualquer outra rota lhe mostraria uma aplicação a dar erros em todos os
+  // painéis. Em vez disso vai para onde tem o que fazer.
+  if (user?.role === 'MECHANIC' && !pathname.startsWith('/app/oficina')) {
+    return <Navigate to="/app/oficina" replace />;
+  }
+
   return <Outlet />;
 }
