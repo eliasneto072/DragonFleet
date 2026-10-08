@@ -50,7 +50,8 @@ export type ChaveDaFonte =
   | 'bookingsPropostas'        // a oficina contrapôs uma hora: alguém tem de aceitar
   | 'bookingsSemAcompanhante'  // o motorista pediu companhia e ninguém foi designado
   | 'bookingsPorConcluir'      // a hora já passou e a marcação não foi fechada
-  | 'bookingsPendentes'        // à espera da oficina — informativo, não é nosso
+  | 'bookingsPendentes'        // pedida, à espera de a oficina confirmar
+  | 'bookingsAgendadas'        // confirmada, ainda por acontecer
   | 'inspections'              // inspeção a chegar ao fim, ou já fora de prazo
   // Frota
   | 'vehiclesPending'          // carros por ativar
@@ -90,7 +91,18 @@ export const FONTES: Record<ChaveDaFonte, DefinicaoDaFonte> = {
   bookingsPropostas:       { area: 'FLEET',          nivel: 'resolve', minimo: 'MANAGE' },
   bookingsSemAcompanhante: { area: 'FLEET',          nivel: 'open',    minimo: 'MANAGE' },
   bookingsPorConcluir:     { area: 'FLEET',          nivel: 'open',    minimo: 'MANAGE' },
-  bookingsPendentes:       { area: 'FLEET',          nivel: 'inform',  minimo: 'VIEW' },
+  // ─── AS MARCAÇÕES CONTAM, MESMO AS QUE NÃO PEDEM DECISÃO ─────────────────
+  //
+  // A primeira versão pôs estas duas em 'inform', com o raciocínio de que uma
+  // marcação à espera da oficina não é trabalho nosso. O raciocínio estava
+  // errado: um carro com ida à oficina marcada é um carro que vai estar parado
+  // naquele dia, e quem gere a frota precisa de o ter à frente dos olhos — para
+  // telefonar à oficina que não confirma, e para não atribuir o carro nesse dia.
+  //
+  // E esvaziam-se sozinhas: a marcação acontece e sai da lista. Não é o caso
+  // dos saldos negativos, que é o que o 'inform' existe para arrumar.
+  bookingsPendentes:       { area: 'FLEET',          nivel: 'open',    minimo: 'VIEW' },
+  bookingsAgendadas:       { area: 'FLEET',          nivel: 'open',    minimo: 'VIEW' },
   inspections:             { area: 'FLEET',          nivel: 'open',    minimo: 'VIEW' },
   vehiclesPending:         { area: 'FLEET',          nivel: 'open',    minimo: 'MANAGE' },
   materialsLow:            { area: 'FLEET',          nivel: 'open',    minimo: 'VIEW' },

@@ -36,6 +36,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import {
   pendingService, type PendingKey, type PendingSummary,
 } from '@/shared/services/pending.service';
+import { notificationsService } from '@/features/driver/services/notifications.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { Area } from '@/shared/lib/areas';
 
@@ -73,7 +74,10 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       },
       {
         to: '/app/admin/oficina', icon: Wrench, label: 'Oficina', area: 'FLEET',
-        fontes: ['bookingsPropostas', 'bookingsSemAcompanhante', 'bookingsPorConcluir'],
+        fontes: [
+          'bookingsPropostas', 'bookingsSemAcompanhante', 'bookingsPorConcluir',
+          'bookingsPendentes', 'bookingsAgendadas',
+        ],
       },
       {
         to: '/app/admin/material', icon: Boxes, label: 'Material', area: 'FLEET',
@@ -205,6 +209,24 @@ export function AdminLayout() {
   });
   const pending = pendingQ.data?.pending;
 
+  // ── As notificações por ler ──────────────────────────────────────────────
+  //
+  // Fora do /pending de propósito: aquilo conta TRABALHO por fazer, e uma
+  // notificação não é trabalho — é novidade. Daí o tom neutro e não o laranja.
+  //
+  // Os avisos automáticos (inspeções a expirar, marcações novas) chegam à
+  // administração por aqui, e sem este número ficavam à espera de alguém
+  // decidir abrir o menu por iniciativa própria.
+  const notifsQ = useQuery({
+    queryKey: queryKeys.notifications.list,
+    queryFn: () => notificationsService.list(),
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
+  const porLer = (notifsQ.data?.notifications ?? []).filter(
+    (n) => n.userId === user?.id && !n.read,
+  ).length;
+
   if (user?.role === 'DRIVER') {
     return <Navigate to="/app/driver" replace />;
   }
@@ -219,6 +241,11 @@ export function AdminLayout() {
           icon: e.icon,
           label: e.label,
           ...marcaDaEntrada(e, pending),
+          // As notificações por ler mandam na entrada delas: é a única que não
+          // conta trabalho por fazer, e por isso não vem do /pending.
+          ...(e.area === 'NOTIFICATIONS' && porLer > 0
+            ? { badge: porLer, badgeTone: 'new' as const }
+            : {}),
         })),
     }))
     // Um grupo sem entradas desaparece com o título: um cabeçalho "Dinheiro"

@@ -23,6 +23,8 @@ import { documentsService } from '@/features/driver/services/documents.service';
 import { notificationsService } from '@/features/driver/services/notifications.service';
 import { vehiclesService } from '@/features/driver/services/vehicles.service';
 import { bookingsService } from '@/features/admin/services/bookings.service';
+import { withdrawalsService } from '@/features/driver/services/withdrawals.service';
+import { supportService } from '@/features/driver/services/support.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 
 export function DriverLayout() {
@@ -62,6 +64,20 @@ export function DriverLayout() {
     enabled: !!user?.id,
   });
 
+  // As retiradas dele. Mesma chave da tela de Retiradas: o React Query serve
+  // as duas da mesma cache, por isso isto não é um pedido a mais.
+  const retiradasQ = useQuery({
+    queryKey: queryKeys.withdrawals.list,
+    queryFn: () => withdrawalsService.list(),
+    enabled: !!user?.id,
+  });
+
+  const ticketsQ = useQuery({
+    queryKey: queryKeys.support.tickets,
+    queryFn: () => supportService.list(),
+    enabled: !!user?.id,
+  });
+
   const documents = docsQ.data?.documents ?? [];
   const myDocs = documents.filter((d) => d.userId === user?.id);
 
@@ -87,15 +103,47 @@ export function DriverLayout() {
   // Só o que ESPERA por ele: a oficina propôs outra hora e alguém tem de a
   // aceitar. Uma marcação já confirmada não é pendência — é um compromisso, e
   // assinalá-la seria um número que ele não consegue baixar.
-  const marcacoesPorResponder = (marcacoesQ.data?.bookings ?? []).filter(
+  const marcacoes = marcacoesQ.data?.bookings ?? [];
+
+  // A oficina propôs outra hora: é dele a resposta, e é isso que fica em
+  // vermelho. As confirmadas que ainda vão acontecer aparecem na mesma, em
+  // laranja — ele precisa de se lembrar de levar o carro nesse dia.
+  const marcacoesPorResponder = marcacoes.filter(
     (m) => m.status === 'NOVA_DATA_PROPOSTA',
+  ).length;
+  const marcacoesAbertas = marcacoes.length;
+
+  // ── Retiradas ────────────────────────────────────────────────────────────
+  //
+  // Uma rejeitada é dele: tem de perceber porquê e voltar a pedir. Uma
+  // pendente é da empresa, mas é bom que ele saiba que está em andamento —
+  // poupa a pergunta ao suporte.
+  const retiradas = retiradasQ.data?.withdrawals ?? [];
+  const retiradasRejeitadas = retiradas.filter(
+    (w) => w.userId === user?.id && w.status === 'REJECTED',
+  ).length;
+  const retiradasPendentes = retiradas.filter(
+    (w) => w.userId === user?.id && w.status === 'PENDING',
+  ).length;
+
+  // Tickets ainda não resolvidos. Não distingue "respondido" de "à espera"
+  // porque não há no sistema marca de lido numa resposta — e inventar uma
+  // aqui, a partir de datas, acertaria umas vezes e falharia noutras.
+  const ticketsAbertos = (ticketsQ.data?.tickets ?? []).filter(
+    (t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS',
   ).length;
 
   const NAV_GROUPS: readonly NavGroup[] = [
     {
       items: [
         { to: '/app/driver/dashboard', icon: LayoutDashboard, label: 'Início' },
-        { to: '/app/driver/withdrawals', icon: Wallet, label: 'Retiradas' },
+        {
+          to: '/app/driver/withdrawals',
+          icon: Wallet,
+          label: 'Retiradas',
+          badge: retiradasRejeitadas + retiradasPendentes,
+          badgeTone: retiradasRejeitadas > 0 ? 'late' : 'waiting',
+        },
         { to: '/app/driver/investments', icon: PiggyBank, label: 'Investimentos' },
       ],
     },
@@ -124,9 +172,8 @@ export function DriverLayout() {
           to: '/app/driver/oficina',
           icon: Wrench,
           label: 'Oficina',
-          badge: marcacoesPorResponder,
-          // A oficina propôs outra hora e está à espera de resposta dele.
-          badgeTone: 'late',
+          badge: marcacoesPorResponder > 0 ? marcacoesPorResponder : marcacoesAbertas,
+          badgeTone: marcacoesPorResponder > 0 ? 'late' : 'waiting',
         },
         { to: '/app/driver/profile', icon: User, label: 'Perfil' },
       ],
@@ -139,8 +186,17 @@ export function DriverLayout() {
           icon: Bell,
           label: 'Notificações',
           badge: unreadNotifs,
+          // Tom próprio: uma notificação por ler é novidade, não pendência.
+          // Em vermelho ou laranja ficaria ao nível de um documento rejeitado.
+          badgeTone: 'new',
         },
-        { to: '/app/driver/support', icon: MessageCircle, label: 'Suporte' },
+        {
+          to: '/app/driver/support',
+          icon: MessageCircle,
+          label: 'Suporte',
+          badge: ticketsAbertos,
+          badgeTone: 'waiting',
+        },
       ],
     },
   ];

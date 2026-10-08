@@ -20,6 +20,7 @@ export type PendingKey =
   | 'bookingsSemAcompanhante'
   | 'bookingsPorConcluir'
   | 'bookingsPendentes'
+  | 'bookingsAgendadas'
   | 'inspections'
   | 'vehiclesPending'
   | 'materialsLow'
@@ -59,6 +60,8 @@ export interface PendingSource {
     drivers?: { id: string; name: string }[];
     weekStart?: string;
     weekEnd?: string;
+    /** A próxima ida à oficina já confirmada. */
+    nextAt?: string;
   };
 }
 

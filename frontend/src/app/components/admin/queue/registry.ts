@@ -108,8 +108,28 @@ const COMO_MOSTRAR: Partial<Record<PendingKey, ComoMostrar>> = {
   bookingsPendentes: {
     icon: Wrench,
     to: '/app/admin/oficina',
-    titulo: (f) => `${f.count} ${p(f.count, 'marcação', 'ões')} à espera da oficina`,
-    detalhe: (_f, d) => `Nada a fazer deste lado. ${espera(d, true)}`,
+    titulo: (f) => `${f.count} ${p(f.count, 'marcação', 'ões')} à espera de a oficina confirmar`,
+    // Com a idade à frente de propósito: uma marcação pedida há cinco dias e
+    // ainda por confirmar é um telefonema à oficina, não é esperar mais.
+    detalhe: (_f, d) => espera(d, true),
+  },
+
+  bookingsAgendadas: {
+    icon: CalendarClock,
+    to: '/app/admin/oficina',
+    titulo: (f) => f.count === 1
+      ? '1 ida à oficina marcada'
+      : `${f.count} idas à oficina marcadas`,
+    detalhe: (f) => {
+      const quando = f.extra?.nextAt;
+      if (!quando) return 'Confirmadas pela oficina';
+      const d = new Date(quando);
+      const dia = d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' });
+      const hora = d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+      // O carro vai estar parado nesse dia — é isso que isto serve para
+      // lembrar antes de alguém o atribuir a um motorista.
+      return `A próxima é ${dia} às ${hora}`;
+    },
   },
 
   inspections: {

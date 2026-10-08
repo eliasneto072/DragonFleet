@@ -88,6 +88,7 @@ export const pendingService = {
       semAcompanhanteCount, semAcompanhanteVelha,
       porConcluirCount, porConcluirVelha,
       pendentesCount, pendentesVelha,
+      agendadasCount, agendadasProxima,
       inspecoes,
       // ── Frota ──
       carrosPorAtivar, carrosPorAtivarVelho,
@@ -141,6 +142,16 @@ export const pendingService = {
         where: { status: 'PENDENTE' },
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true },
+      }),
+
+      // Confirmada e ainda por acontecer: o carro vai estar parado naquele dia.
+      prisma.booking.count({
+        where: { status: 'CONFIRMADA', scheduledAt: { gte: agora } },
+      }),
+      prisma.booking.findFirst({
+        where: { status: 'CONFIRMADA', scheduledAt: { gte: agora } },
+        orderBy: { scheduledAt: 'asc' },
+        select: { scheduledAt: true },
       }),
 
       // As inspeções vêm com a data: é ela que decide se está só a chegar ao
@@ -294,6 +305,12 @@ export const pendingService = {
       // Atrasada por definição: a hora já passou. Não é a idade que manda.
       f('bookingsPorConcluir', porConcluirCount, iso(porConcluirVelha?.scheduledAt), { late: true }),
       f('bookingsPendentes', pendentesCount, iso(pendentesVelha?.createdAt)),
+      // Sem idade: a data que interessa numa marcação confirmada é a da ida à
+      // oficina, que está no futuro. Contar "espera há X dias" a partir dela
+      // daria sempre zero e empurrava-a para o fim da lista por engano.
+      f('bookingsAgendadas', agendadasCount, null, {
+        extra: { nextAt: iso(agendadasProxima?.scheduledAt) ?? undefined },
+      }),
       f('inspections', inspecoes.length, iso(inspecoes[0]?.nextInspectionOn ?? null), {
         // Um carro fora de prazo não pode circular: isso arde no primeiro dia,
         // e não ao quarto.

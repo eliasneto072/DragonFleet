@@ -174,7 +174,23 @@ export function AppShell({
   const CLASSE_DO_TOM: Record<NonNullable<NavItem['badgeTone']>, string> = {
     late: 'bg-destructive text-destructive-foreground',
     waiting: 'bg-amber-500 text-white dark:bg-amber-600',
-    new: 'bg-secondary text-muted-foreground',
+    new: 'bg-brand-600 text-white',
+  };
+
+  /**
+   * A cor do PRÓPRIO nome do menu quando tem algo à espera.
+   *
+   * O número sozinho é pequeno e fica encostado à direita, longe do nome. Com o
+   * nome também pintado, a entrada inteira salta à vista — que é o ponto de
+   * ter isto no menu em vez de só no painel.
+   *
+   * Entra em cima da cor normal e não substitui o estado ativo: o fundo da
+   * entrada aberta continua a ser o que era.
+   */
+  const CLASSE_DO_TEXTO: Record<NonNullable<NavItem['badgeTone']>, string> = {
+    late: 'text-destructive font-semibold',
+    waiting: 'text-amber-600 dark:text-amber-400 font-semibold',
+    new: 'text-accent dark:text-emerald-300 font-semibold',
   };
 
   function Badge({ value, tone = 'new' }: { value: number; tone?: NavItem['badgeTone'] }) {
@@ -211,8 +227,19 @@ export function AppShell({
                 ].join(' ')
               }
             >
-              <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
-              <span className="truncate">{label}</span>
+              <Icon
+                className={`h-[18px] w-[18px] shrink-0 ${
+                  badge && badge > 0 ? CLASSE_DO_TEXTO[badgeTone ?? 'new'] : ''
+                }`}
+                aria-hidden
+              />
+              <span
+                className={`truncate ${
+                  badge && badge > 0 ? CLASSE_DO_TEXTO[badgeTone ?? 'new'] : ''
+                }`}
+              >
+                {label}
+              </span>
               {!!badge && badge > 0 && <Badge value={badge} tone={badgeTone} />}
             </NavLink>
           ))}
