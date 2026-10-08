@@ -105,6 +105,15 @@ export function DriverDetailPage() {
   // Dialog de ajuste de saldo
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustType, setAdjustType] = useState<AdjustmentType>('CREDIT');
+  /**
+   * A data do movimento.
+   *
+   * Hoje por omissão, que é o caso normal. Existe porque corrigir um
+   * lançamento de terça-feira feito na quinta obrigava a criá-lo e logo a
+   * seguir a editar-lhe a data — duas operações, e a segunda deixava rasto de
+   * edição num movimento que nunca tinha estado errado.
+   */
+  const [adjustDate, setAdjustDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
 
@@ -202,6 +211,11 @@ export function DriverDetailPage() {
       type: adjustType,
       amount: Number(amount),
       reason: reason.trim() || undefined,
+      // Só vai quando é diferente de hoje: mandar sempre encheria o histórico
+      // de datas explícitas em movimentos que nunca precisaram de uma.
+      createdAt: adjustDate !== new Date().toISOString().slice(0, 10)
+        ? `${adjustDate}T12:00:00.000Z`
+        : undefined,
     }),
     onSuccess: () => {
       invalidateAfterAdjustment(queryClient);
@@ -230,6 +244,7 @@ export function DriverDetailPage() {
     setAdjustType(type);
     setAmount('');
     setReason('');
+    setAdjustDate(new Date().toISOString().slice(0, 10));
     setAdjustOpen(true);
   }
 
@@ -644,6 +659,19 @@ export function DriverDetailPage() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adjust-date">Data do movimento</Label>
+              <Input
+                id="adjust-date"
+                type="date"
+                value={adjustDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setAdjustDate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                É esta data que posiciona o movimento no extrato. Por omissão, hoje.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="reason">Motivo <span className="text-muted-foreground font-normal">(opcional)</span></Label>

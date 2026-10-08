@@ -29,6 +29,7 @@ import { AlertCircle, ChevronRight, TrendingDown, TrendingUp } from 'lucide-reac
 import { analyticsService, type ApiOverview } from '@/features/admin/services/analytics.service';
 import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency } from '@/shared/lib/format';
+import { RemindersCard } from '@/app/components/admin/reminders-card';
 import { WorkQueue } from '@/app/components/admin/queue/WorkQueue';
 import { buildQueue, sortQueue } from '@/app/components/admin/queue/registry';
 import type { QueueItem } from '@/app/components/admin/queue/types';
@@ -161,6 +162,13 @@ export function AdminDashboard() {
 
       {/* Fila de trabalho — três níveis, ver queue/types.ts */}
       <WorkQueue items={queue} expiringDays={overview.queue.documentsExpiringSoon.days} />
+
+      {/* ── Lembretes ────────────────────────────────────────────────────
+          Logo a seguir à fila de trabalho e antes dos números, de propósito:
+          a fila é o que o SISTEMA diz que falta fazer, isto é o que a PESSOA
+          se lembrou que falta. São a mesma pergunta vista dos dois lados, e
+          separá-las por meio ecrã de gráficos fazia perder a segunda. */}
+      <RemindersCard />
 
       {/* Posição financeira */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">

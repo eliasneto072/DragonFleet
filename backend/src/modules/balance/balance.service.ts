@@ -229,20 +229,7 @@ export class BalanceService {
       throw new AppError('Ajuste não encontrado.', 404, 'ADJUSTMENT_NOT_FOUND');
     }
 
-    if (input.createdAt) {
-      // Uma data no futuro põe o movimento no fim do extrato para sempre, e o
-      // saldo corrido das linhas seguintes deixa de fazer sentido até esse dia
-      // chegar. Uma margem de um dia cobre quem está noutro fuso.
-      const limite = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      if (input.createdAt > limite) {
-        throw new AppError('A data não pode ser no futuro.', 400, 'DATE_IN_FUTURE');
-      }
-      // Antes de 2020 é quase de certeza um ano mal escrito. O sistema não
-      // existia, e uma data assim manda o movimento para o princípio de tudo.
-      if (input.createdAt < new Date('2020-01-01')) {
-        throw new AppError('A data parece errada — anterior a 2020.', 400, 'DATE_TOO_OLD');
-      }
-    }
+    if (input.createdAt) validarDataDoMovimento(input.createdAt);
 
     const mudouData = !!input.createdAt
       && input.createdAt.getTime() !== atual.createdAt.getTime();
@@ -296,7 +283,7 @@ export class BalanceService {
   async createAdjustment(
     actor: Actor,
     userId: string,
-    input: { type: AdjustmentType; amount: number; reason?: string },
+    input: { type: AdjustmentType; amount: number; reason?: string; createdAt?: Date },
   ): Promise<AdjustmentPublic> {
     if (!canManageBalance(actor.role)) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
@@ -318,6 +305,17 @@ export class BalanceService {
 
     const reasonText = input.reason?.trim() || '';
 
+    // ── A data do movimento, escolhida na criação ─────────────────────────
+    //
+    // Antes era sempre "agora", e corrigir um lançamento de terça-feira feito
+    // na quinta obrigava a criá-lo e logo a seguir a editar-lhe a data — duas
+    // operações, e a segunda deixava rasto de edição num movimento que nunca
+    // tinha estado errado.
+    //
+    // Omitida, continua a ser agora. É o caso normal e não se pede nada a quem
+    // está só a lançar o de hoje.
+    if (input.createdAt) validarDataDoMovimento(input.createdAt);
+
     try {
       const created = await prisma.balanceAdjustment.create({
         data: {
@@ -326,6 +324,7 @@ export class BalanceService {
           reason: reasonText,
           userId,
           createdBy: actor.id,
+          ...(input.createdAt ? { createdAt: input.createdAt } : {}),
         },
         include: { admin: { select: { name: true } } },
       });
@@ -363,6 +362,30 @@ export class BalanceService {
       logger.error('Erro ao criar ajuste de saldo', err);
       throw err;
     }
+  }
+}
+
+/**
+ * A data de um movimento manual é aceitável?
+ *
+ * Partilhada entre CRIAR e EDITAR de propósito. Estas duas regras estavam
+ * escritas só dentro da edição, e a criação nem sequer aceitava data. Agora que
+ * aceita, duplicá-las garantia que daqui a uns meses uma das duas ganhava uma
+ * guarda que a outra não tinha — e a que ficasse para trás seria a da criação,
+ * que é por onde entram quase todos os movimentos.
+ */
+export function validarDataDoMovimento(data: Date): void {
+  // Uma data no futuro põe o movimento no fim do extrato para sempre, e o
+  // saldo corrido das linhas seguintes deixa de fazer sentido até esse dia
+  // chegar. Uma margem de um dia cobre quem está noutro fuso.
+  const limite = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  if (data > limite) {
+    throw new AppError('A data não pode ser no futuro.', 400, 'DATE_IN_FUTURE');
+  }
+  // Antes de 2020 é quase de certeza um ano mal escrito. O sistema não
+  // existia, e uma data assim manda o movimento para o princípio de tudo.
+  if (data < new Date('2020-01-01')) {
+    throw new AppError('A data parece errada — anterior a 2020.', 400, 'DATE_TOO_OLD');
   }
 }
 

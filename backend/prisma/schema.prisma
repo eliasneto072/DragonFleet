@@ -115,6 +115,22 @@ enum AdjustmentType {
   DEBIT
 }
 
+/// De quanto em quanto tempo um pagamento agendado se repete.
+///
+/// `UNICO` existe porque metade das vezes o que se quer agendar NÃO se repete:
+/// uma caução a devolver no dia 30, um prémio combinado para o fim do mês.
+/// Sem ele, essas pessoas criavam um mensal e lembravam-se de o desligar —
+/// ou não se lembravam, e o motorista era descontado para sempre.
+enum PaymentFrequency {
+  UNICO
+  SEMANAL
+  QUINZENAL
+  MENSAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
 /* =========================
    MODELS
    ========================= */
@@ -165,6 +181,9 @@ model User {
   settlements        WeeklySettlement[]  @relation("settlementsReceived")
   settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
   settlementRevisions SettlementRevision[] @relation("settlementRevisions")
+  scheduledPaymentsReceived ScheduledPayment[] @relation("scheduledPaymentsReceived")
+  scheduledPaymentsCreated  ScheduledPayment[] @relation("scheduledPaymentsCreated")
+  remindersOwned            Reminder[]         @relation("remindersOwned")
   earningsReviewed   Earning[]           @relation("earningsReviewed")
   bankAccounts       BankAccount[]
   bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
@@ -458,6 +477,135 @@ model BalanceAdjustment {
 
   @@index([userId])
   @@map("balance_adjustments")
+}
+
+/// Um tipo de pagamento, para a lista do formulário.
+///
+/// ─── PORQUE É QUE ISTO É UMA TABELA E NÃO UM enum ──────────────────────────
+///
+/// Porque o cliente pediu que fosse ele a acrescentar: "um dropbox e editavel,
+/// eu posso adiconar coisas que me lembre". Um enum do Prisma precisa de uma
+/// migração e de um deploy para ganhar um valor novo — ou seja, precisa de mim.
+/// Numa tabela, ele escreve "Seguro de saúde" e usa-o no minuto seguinte.
+///
+/// O nome do tipo NÃO é o que o motorista vê. O que ele lê é a descrição
+/// escrita no agendamento, que é livre. Isto serve para agrupar e para o
+/// formulário não começar numa caixa de texto vazia.
+model PaymentCategory {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  /// Desligada em vez de apagada: os agendamentos antigos continuam a
+  /// apontar para ela, e apagá-la deixaria o histórico a falar de um tipo que
+  /// já não existe.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payments ScheduledPayment[]
+
+  @@map("payment_categories")
+}
+
+/// Um pagamento que entra ou sai do saldo de um motorista, sozinho, numa data.
+///
+/// ─── O QUE ISTO NÃO É ───────────────────────────────────────────────────────
+///
+/// Não é um movimento. É a REGRA que fabrica movimentos. Quando chega a data, o
+/// job cria um `BalanceAdjustment` normal — exatamente igual ao que sairia de
+/// alguém o lançar à mão, com a mesma descrição e o mesmo sentido.
+///
+/// Foi pedido assim de propósito: "aparece esse movimento ao motorista como se
+/// fosse manual". E é a decisão certa por mais do que gosto — o extrato, o
+/// saldo, os relatórios e o recibo já sabem ler ajustes manuais. Um tipo novo
+/// de movimento obrigaria a ensinar-lhes a todos, e algum ficaria por ensinar.
+///
+/// ─── PORQUE É QUE GUARDA A PRÓXIMA DATA EM VEZ DE A CALCULAR ────────────────
+///
+/// `nextRunOn` é escrita e não deduzida da data de início mais o intervalo.
+/// Deduzir parece mais limpo até ao dia em que o servidor está em baixo e falha
+/// uma execução: a conta diria que a próxima é daqui a um mês e o mês saltado
+/// desaparecia sem nada a dizê-lo. Escrita, a data fica para trás, o job vê-a
+/// vencida, e paga o que ficou por pagar.
+model ScheduledPayment {
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  type        AdjustmentType
+  amount      Decimal          @db.Decimal(12, 2)
+  /// O que o motorista vai ler no extrato. Livre, como o motivo de um manual.
+  description String
+  categoryId  String?          @map("category_id")
+
+  frequency PaymentFrequency
+
+  /// A data do primeiro lançamento, e a data do próximo.
+  startsOn  DateTime  @map("starts_on")  @db.Date
+  nextRunOn DateTime? @map("next_run_on") @db.Date
+
+  /// O fim, opcional e de duas formas. Nulos os dois = corre até ser parado.
+  ///
+  /// `remaining` conta para baixo a cada lançamento. Serve para "esta multa em
+  /// 6 prestações", que é como as pessoas pensam — ninguém calcula a data do
+  /// sexto mês de cabeça.
+  endsOn    DateTime? @map("ends_on") @db.Date
+  remaining Int?
+
+  /// Desligado à mão. Separado de `endsOn` porque são coisas diferentes: um
+  /// acabou, o outro foi interrompido.
+  active Boolean @default(true)
+
+  /// Quantos lançamentos já fez, e quando foi o último. Para o ecrã poder
+  /// mostrar "3 de 6, o último a 12/09".
+  runCount  Int       @default(0) @map("run_count")
+  lastRunAt DateTime? @map("last_run_at")
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  user      User             @relation("scheduledPaymentsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("scheduledPaymentsCreated", fields: [createdById], references: [id])
+  category  PaymentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  // O job pergunta sempre a mesma coisa: quais os activos com data vencida.
+  @@index([active, nextRunOn])
+  @@map("scheduled_payments")
+}
+
+/// Um lembrete que insiste até alguém o dar por feito.
+///
+/// ─── PORQUE É QUE INSISTE ───────────────────────────────────────────────────
+///
+/// Porque foi o ponto do pedido: "ele vai mandando notificação desse lembrete,
+/// até eu carregar no concluir". Um lembrete que avisa uma vez é um alarme que
+/// se perde entre as outras notificações do dia. Um que volta todos os dias é
+/// uma lista de coisas por fazer que se esvazia sozinha quando se fazem.
+///
+/// `lastNotifiedOn` guarda o DIA e não o instante: é o que garante uma
+/// notificação por dia mesmo que o job corra duas vezes — um reinício do
+/// servidor, um deploy a meio da manhã.
+model Reminder {
+  id    String  @id @default(cuid())
+  title String
+  notes String?
+
+  /// A partir de que dia começa a avisar. Hoje, por omissão.
+  dueOn DateTime @map("due_on") @db.Date
+
+  /// Quem recebe os avisos. É também quem o criou, mas fica em campo próprio
+  /// para um dia se poder lembrar outra pessoa sem mexer na tabela.
+  ownerId String @map("owner_id")
+
+  doneAt         DateTime? @map("done_at")
+  lastNotifiedOn DateTime? @map("last_notified_on") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  owner User @relation("remindersOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, doneAt])
+  @@index([dueOn])
+  @@map("reminders")
 }
 
 model SupportTicket {

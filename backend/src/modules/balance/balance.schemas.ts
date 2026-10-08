@@ -16,6 +16,13 @@ export const createAdjustmentSchema = z.object({
     amount: z.coerce.number().positive('O valor deve ser maior que zero.'),
     // Motivo opcional. Se vier, no máximo 500 caracteres.
     reason: z.string().trim().max(500).optional(),
+    /**
+     * A data do movimento. Omitida, é agora.
+     *
+     * É esta data que ancora a linha no extrato e, portanto, decide os saldos
+     * corridos — as mesmas guardas da edição aplicam-se aqui, na mesma função.
+     */
+    createdAt: z.coerce.date().optional(),
   }),
 });
 

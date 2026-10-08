@@ -48,6 +48,14 @@ interface CreateAdjustmentInput {
    * obrigava quem chama a inventar um valor para o compilador aceitar.
    */
   reason?: string;
+  /**
+   * A data do movimento, em ISO. Omitida, é o instante em que se grava.
+   *
+   * É esta data que ancora a linha no extrato e, portanto, decide os saldos
+   * corridos. O servidor aplica-lhe as mesmas guardas da edição — nem no
+   * futuro, nem antes de 2020.
+   */
+  createdAt?: string;
 }
 
 export type LedgerKind = 'SETTLEMENT' | 'CREDIT' | 'DEBIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'REDEMPTION';

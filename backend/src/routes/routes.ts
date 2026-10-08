@@ -21,6 +21,8 @@ import { ranksRouter } from '../modules/ranks/ranks.routes';
 import { investorsRouter } from '../modules/investors/investors.routes';
 import { denyInvestor } from '../middlewares/deny-investor.middleware';
 import { permissionsRouter } from '../modules/permissions/permissions.routes';
+import { scheduledPaymentsRouter } from '../modules/scheduled-payments/scheduled-payments.routes';
+import { remindersRouter } from '../modules/reminders/reminders.routes';
 import { requireArea } from '../middlewares/area.middleware';
 
 const router = Router();
@@ -64,5 +66,12 @@ router.use('/bank', requireArea('FINANCIAL'), bankRouter());
 router.use('/companies', requireArea('GREEN_RECEIPTS'), companiesRouter());
 router.use('/investments', requireArea('INVESTMENTS'), investmentsRouter());
 router.use('/ranks', requireArea('RANKS'), ranksRouter());
+// Os agendamentos mexem no saldo, por isso vivem sob a mesma área que o resto
+// do dinheiro. Quem não pode lançar um ajuste à mão também não pode agendar um.
+router.use('/scheduled-payments', requireArea('FINANCIAL'), scheduledPaymentsRouter());
+// Os lembretes são de cada um e não tocam em dados de ninguém — por isso vão
+// sob o painel e não sob uma área de negócio. Quem vê o painel pode ter notas
+// no painel.
+router.use('/reminders', requireArea('DASHBOARD'), remindersRouter());
 
 export { router };

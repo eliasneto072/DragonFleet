@@ -23,6 +23,7 @@ import { DriversPage } from '@/features/admin/pages/DriversPage';
 import { DriverDetailPage } from '@/features/admin/pages/DriverDetailPage'; // ← novo
 import { SettlementsPage } from '@/features/admin/pages/SettlementsPage';
 import { FinancialPage } from '@/features/admin/pages/FinancialPage';
+import { ScheduledPaymentsPage } from '@/features/admin/pages/ScheduledPaymentsPage';
 import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
@@ -97,6 +98,8 @@ export const router = createBrowserRouter([
           // Cria fechos, por isso vive na mesma área da faturação.
           { path: 'importar',       element: <RequireArea area="SETTLEMENTS"><ExpenseImportPage /></RequireArea> },
           { path: 'financial',      element: <RequireArea area="FINANCIAL"><FinancialPage /></RequireArea> },
+          // Mexe no saldo, por isso vive na mesma área do resto do dinheiro.
+          { path: 'agendamentos',   element: <RequireArea area="FINANCIAL"><ScheduledPaymentsPage /></RequireArea> },
           { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
           { path: 'analytics',      element: <RequireArea area="ANALYTICS"><AnalyticsPage /></RequireArea> },
           { path: 'estatisticas',   element: <RequireArea area="ANALYTICS"><FleetStatsPage /></RequireArea> },

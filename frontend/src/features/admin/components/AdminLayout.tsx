@@ -26,7 +26,7 @@ import { Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
-  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp,
+  ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
@@ -60,6 +60,7 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       { to: '/app/admin/settlements',    icon: ReceiptText,     label: 'Faturação',      area: 'SETTLEMENTS' },
       { to: '/app/admin/importar',       icon: FileUp,          label: 'Importar',       area: 'SETTLEMENTS' },
       { to: '/app/admin/financial',      icon: DollarSign,      label: 'Financeiro',     area: 'FINANCIAL' },
+      { to: '/app/admin/agendamentos',   icon: CalendarClock,   label: 'Agendamentos',   area: 'FINANCIAL' },
       { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes', area: 'GREEN_RECEIPTS' },
       { to: '/app/admin/analytics',      icon: TrendingUp,      label: 'Análises',       area: 'ANALYTICS' },
       { to: '/app/admin/estatisticas',   icon: Gauge,           label: 'Estatísticas',   area: 'ANALYTICS' },
