@@ -1,0 +1,1617 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* =========================
+   ENUMS
+   ========================= */
+
+enum UserRole {
+  ADMIN
+  DRIVER
+  MANAGER
+
+  /// Vê o que precisa para responder a um ticket; não mexe em dinheiro.
+  ///
+  /// Existe porque a pergunta número um do suporte de uma frota é "onde está o
+  /// meu dinheiro", e quem não consegue ver retiradas, fechos e documentos tem
+  /// de ir perguntar à administração — o que não poupa trabalho a ninguém, só
+  /// acrescenta um passo.
+  SUPPORT
+
+  /// Investidor: entra pelo invest.dragonfleet.pt e não vê nada da frota.
+  ///
+  /// O bloqueio não é a interface esconder menus — é o servidor recusar tudo o
+  /// que não seja o portal dele (ver `deny-investor.middleware.ts`). Uma conta
+  /// destas não é um motorista com menos botões: é alguém de fora da empresa.
+  INVESTOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  AGUARDANDO_REGULARIZACAO
+}
+
+enum DocumentType {
+  // Documentos do motorista (pessoais)
+  CARTAO_CIDADAO
+  REGISTO_CRIMINAL
+  CARTA_CONDUCAO
+  CERTIFICADO_TVDE
+  FOTO_PERFIL
+  /// Comprovativo de titularidade da conta bancária.
+  COMPROVATIVO_IBAN
+
+  // Documentos do veículo
+  DUA
+  SEGURO_CARTA_VERDE
+  SEGURO_CONDICOES_ESPECIAIS
+  INSPECAO_PERIODICA
+
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum VehicleStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  SOLD
+}
+
+enum EarningStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EarningPlatform {
+  UBER
+  BOLT
+  FREE_NOW
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  TECHNICAL
+  FINANCIAL
+  DOCUMENTS
+  ACCOUNT
+  OTHER
+}
+
+enum AdjustmentType {
+  CREDIT
+  DEBIT
+}
+
+/// De quanto em quanto tempo um pagamento agendado se repete.
+///
+/// `UNICO` existe porque metade das vezes o que se quer agendar NÃO se repete:
+/// uma caução a devolver no dia 30, um prémio combinado para o fim do mês.
+/// Sem ele, essas pessoas criavam um mensal e lembravam-se de o desligar —
+/// ou não se lembravam, e o motorista era descontado para sempre.
+enum PaymentFrequency {
+  UNICO
+  SEMANAL
+  QUINZENAL
+  MENSAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+/* =========================
+   MODELS
+   ========================= */
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  password  String
+
+  /// Contacto telefónico, preenchido pelo próprio no perfil.
+  ///
+  /// Opcional e sem `@unique`. Opcional porque nenhum registo existente o tem e
+  /// tornar obrigatório trancava a conta de toda a gente no próximo arranque.
+  /// Sem `@unique` porque um casal que partilhe um número não é uma anomalia
+  /// que valha a pena impedir — e um índice único aqui rejeitaria o segundo com
+  /// uma mensagem que ninguém saberia explicar.
+  ///
+  /// Guardado normalizado (`+` opcional seguido de dígitos, ver
+  /// `shared/utils/phone.ts`). O email continua a ser o contacto principal:
+  /// isto serve para ligar a alguém por causa de uma multa ou de um acidente.
+  phone     String?
+
+  /// Este motorista É a empresa (o dono, que também conduz).
+  ///
+  /// Muda como as estatísticas o contam: o aluguer da viatura que lhe é
+  /// lançado é a empresa a cobrar a si própria e NÃO entra no lucro; o que ele
+  /// fecha na semana entra por inteiro. Marca e não um nome no código, para
+  /// poderem ser vários e para não se partir quando um nome muda.
+  isCompany Boolean @default(false) @map("is_company")
+
+  role      UserRole   @default(DRIVER)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt
+
+  earnings           Earning[]
+  vehicles           Vehicle[]
+  notifications      Notification[]
+  documents          Document[]
+  withdrawals        Withdrawal[]
+  supportTickets     SupportTicket[]
+  ticketReplies      TicketReply[]
+  vehicleAssignments VehicleAssignment[]
+  balanceAdjustments BalanceAdjustment[] @relation("adjustmentsReceived")
+  adjustmentsMade    BalanceAdjustment[] @relation("adjustmentsMade")
+  adjustmentsEdited  BalanceAdjustment[] @relation("adjustmentsEdited")
+  settlements        WeeklySettlement[]  @relation("settlementsReceived")
+  settlementsCreated WeeklySettlement[]  @relation("settlementsCreated")
+  settlementRevisions SettlementRevision[] @relation("settlementRevisions")
+  scheduledPaymentsReceived ScheduledPayment[] @relation("scheduledPaymentsReceived")
+  scheduledPaymentsCreated  ScheduledPayment[] @relation("scheduledPaymentsCreated")
+  remindersOwned            Reminder[]         @relation("remindersOwned")
+  earningsReviewed   Earning[]           @relation("earningsReviewed")
+  bankAccounts       BankAccount[]
+  bankAccountsReviewed BankAccount[]     @relation("bankAccountsReviewed")
+  investments        Investment[]
+  rank               DriverRank?
+  rankEvents         RankEvent[]
+  investorAccount    InvestorAccount?
+  permissions        StaffPermission[]
+
+  @@map("users")
+}
+
+// Lançamento comunicado pelo motorista.
+//
+// NÃO movimenta saldo. O dinheiro entra por uma porta só — o fecho semanal.
+// Isto aqui é o que o motorista diz ter feito, e serve de conferência cruzada
+// quando a administração fecha a semana: se o relatório da Uber disser 109 € e
+// o motorista tiver comunicado 119 €, alguém olha antes de fechar.
+//
+// Se estes valores também creditassem, o mesmo dinheiro entraria por dois
+// caminhos e o motorista seria pago duas vezes pela mesma semana.
+model Earning {
+  id        String          @id @default(cuid())
+  amount    Decimal         @db.Decimal(12, 2)
+  date      DateTime        @db.Date
+  platform  EarningPlatform
+  status    EarningStatus   @default(PENDING)
+  /// Justificação do motorista, ou motivo da recusa.
+  notes     String?
+  userId    String          @map("user_id")
+
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("earningsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([date])
+  @@index([status])
+  @@map("earnings")
+}
+
+/// Combustível, elétrico ou híbrido.
+///
+/// Três valores e não um `isElectric`: um booleano obrigava a decidir hoje o
+/// que fazer com um híbrido, e qualquer resposta escondia metade do gasto.
+enum VehicleEnergy {
+  FUEL
+  ELECTRIC
+  HYBRID
+}
+
+model Vehicle {
+  id               String        @id @default(cuid())
+  brand            String
+  model            String
+  plate            String        @unique
+  year             Int
+  vin              String?       @unique
+  status           VehicleStatus @default(PENDING)
+
+  /// Decide o RÓTULO do campo de despesa no fecho (Combustível ou
+  /// Carregamento) e separa os gastos nas estatísticas. A coluna do dinheiro
+  /// continua a ser uma só — ver a migração.
+  energyType       VehicleEnergy @default(FUEL) @map("energy_type")
+  activationForced Boolean       @default(false) @map("activation_forced")
+
+  /// Encargo semanal da viatura, usado como valor sugerido no fecho semanal.
+  /// Fica aqui e não no fecho porque é uma característica do carro; o fecho
+  /// grava a sua própria cópia, para que alterar isto não reescreva semanas
+  /// já pagas.
+  weeklyFee        Decimal       @default(0) @map("weekly_fee") @db.Decimal(12, 2)
+  userId           String?       @map("user_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt
+
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  documents   Document[]
+  assignments VehicleAssignment[]
+  settlements WeeklySettlement[]
+  projects    InvestmentProject[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("vehicles")
+}
+
+model VehicleAssignment {
+  id        String    @id @default(cuid())
+  vehicleId String    @map("vehicle_id")
+  userId    String?   @map("user_id")
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId])
+  @@index([userId])
+  @@map("vehicle_assignments")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    String   @map("user_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+model Document {
+  id      String         @id @default(cuid())
+  type    DocumentType
+  fileUrl String         @map("file_url")
+  fileKey String         @map("file_key")
+  notes   String?
+  status  DocumentStatus @default(PENDING)
+
+  // Controlo de validade (usado pelo Registo Criminal: 90 dias a partir da emissão).
+  issuedAt  DateTime? @map("issued_at")
+  expiresAt DateTime? @map("expires_at")
+
+  userId    String   @map("user_id")
+  vehicleId String?  @map("vehicle_id") // vazio = documento pessoal; preenchido = documento do veículo
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@index([type, status])
+  @@index([status, expiresAt])
+  @@map("documents")
+}
+
+model Withdrawal {
+  id          String           @id @default(cuid())
+  amount      Decimal          @db.Decimal(12, 2)
+  status      WithdrawalStatus @default(PENDING)
+  notes       String?
+  requestedAt DateTime         @default(now()) @map("requested_at")
+  processedAt DateTime?        @map("processed_at")
+  userId      String           @map("user_id")
+
+  /// Recibo verde, anexado no momento do pedido. Obrigatório: a empresa não
+  /// paga sem fatura, e exigir depois da aprovação deixaria pedidos aprovados
+  /// à espera de um documento que ninguém lembra de pedir.
+  receiptUrl String @map("receipt_url")
+  receiptKey String @map("receipt_key")
+
+  /// A conta escolhida pelo motorista ao pedir. Serve para a tela do
+  /// administrador mostrar o nome que ele lhe deu em vez do número, e para se
+  /// saber qual das três foi pedida mesmo que depois seja arquivada.
+  ///
+  /// Nula nas retiradas anteriores a esta funcionalidade — nessas havia uma
+  /// conta só e não havia escolha nenhuma a registar.
+  bankAccountId String?      @map("bank_account_id")
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
+  /// IBAN para onde o valor foi enviado, copiado no momento da APROVAÇÃO.
+  ///
+  /// Congelado de propósito, como a percentagem no fecho semanal: se o
+  /// motorista alterar os dados bancários depois, uma retirada já decidida não
+  /// pode mudar de destino sem ninguém reparar.
+  paidToIban   String?   @map("paid_to_iban")
+  paidToHolder String?   @map("paid_to_holder")
+
+  // ── A quem foi emitido o recibo verde ──────────────────────────────────────
+  //
+  // Registado no momento da aprovação. Serve a contabilidade: um operador com
+  // várias sociedades tem de saber que entidade recebeu que fatura.
+  //
+  // DUAS colunas porque a escolha tem duas naturezas: uma sociedade da lista,
+  // ou texto livre para o que não esteja lá. "Nenhum" é ambas nulas — e é
+  // diferente de "por classificar", que são as retiradas anteriores a este
+  // campo, distinguidas por companySetAt nulo.
+  //
+  // SetNull e não Cascade: apagar uma sociedade não pode apagar retiradas.
+  companyId    String?   @map("company_id")
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyOther String?   @map("company_other")
+
+  // Quem classificou e quando. Ao contrário do IBAN, este campo é corrigível:
+  // não entra em cálculo nenhum, é uma anotação contabilística, e um clique
+  // errado no dropdown não deve obrigar a rejeitar a retirada. Corrigível com
+  // rasto é melhor do que imutável.
+  companySetById String?   @map("company_set_by_id")
+  companySetAt   DateTime? @map("company_set_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  // A tela de Recibos Verdes agrupa e soma por sociedade, e o cartao das
+  // sociedades conta os recibos de cada uma. Sem este indice, cada uma dessas
+  // consultas e um varrimento sequencial da tabela toda.
+  @@index([companyId])
+  @@index([bankAccountId])
+  @@map("withdrawals")
+}
+
+/// Dados bancários do motorista.
+///
+/// Alterações passam por aprovação: trocar o IBAN é o vetor clássico de
+/// fraude — quem ganhe acesso à conta muda o número e desvia o pagamento
+/// seguinte. Enquanto a alteração está pendente, o IBAN anterior continua a
+/// valer, por isso os dois pares de campos coexistem.
+/// Uma conta bancária do motorista. Até três por pessoa.
+///
+/// Cada uma tem o seu ciclo de aprovação: submete-se com comprovativo, fica
+/// pendente, e só depois de aprovada pode receber dinheiro. Três contas são
+/// três aprovações — a confiança é por conta, não por pessoa.
+model BankAccount {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  /// O nome que o motorista dá à conta ("Millennium", "conta da empresa").
+  /// Sem isto, escolher entre três IBANs é escolher entre três filas de
+  /// dígitos.
+  label String?
+
+  /// A que vem escolhida por omissão no pedido de retirada.
+  /// Um índice parcial na base garante que só há uma ativa por motorista.
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  /// Arquivada. Não se apaga: retiradas antigas apontam para cá.
+  archivedAt DateTime? @map("archived_at")
+
+  /// Em vigor. Vazio até a primeira aprovação.
+  iban       String?
+  holderName String? @map("holder_name")
+
+  /// Submetido e à espera de decisão.
+  pendingIban       String? @map("pending_iban")
+  pendingHolderName String? @map("pending_holder_name")
+  /// Comprovativo que acompanha a alteração pendente.
+  pendingProofUrl   String? @map("pending_proof_url")
+  pendingProofKey   String? @map("pending_proof_key")
+  pendingAt         DateTime? @map("pending_at")
+
+  /// Motivo, quando a alteração é recusada.
+  rejectionReason String? @map("rejection_reason")
+
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy  User?        @relation("bankAccountsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+  withdrawals Withdrawal[]
+
+  @@index([userId])
+  @@map("bank_accounts")
+}
+
+model BalanceAdjustment {
+  id        String         @id @default(cuid())
+  amount    Decimal        @db.Decimal(12, 2) // sempre positivo; o sinal vem do type
+  type      AdjustmentType
+  reason    String
+  userId    String         @map("user_id")
+  createdBy String?        @map("created_by") // admin que fez o ajuste (auditoria)
+
+  /// A data do movimento. É esta que ancora a linha no extrato e, portanto,
+  /// decide os saldos corridos. Pode ser corrigida pelo painel — daí o rasto
+  /// de edição abaixo.
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  /// Nulos enquanto nunca foi editado, que é o que se quer dizer.
+  editedAt DateTime? @map("edited_at")
+  editedBy String?   @map("edited_by")
+
+  user   User  @relation("adjustmentsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  admin  User? @relation("adjustmentsMade", fields: [createdBy], references: [id], onDelete: SetNull)
+  editor User? @relation("adjustmentsEdited", fields: [editedBy], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("balance_adjustments")
+}
+
+/// Um tipo de pagamento, para a lista do formulário.
+///
+/// ─── PORQUE É QUE ISTO É UMA TABELA E NÃO UM enum ──────────────────────────
+///
+/// Porque o cliente pediu que fosse ele a acrescentar: "um dropbox e editavel,
+/// eu posso adiconar coisas que me lembre". Um enum do Prisma precisa de uma
+/// migração e de um deploy para ganhar um valor novo — ou seja, precisa de mim.
+/// Numa tabela, ele escreve "Seguro de saúde" e usa-o no minuto seguinte.
+///
+/// O nome do tipo NÃO é o que o motorista vê. O que ele lê é a descrição
+/// escrita no agendamento, que é livre. Isto serve para agrupar e para o
+/// formulário não começar numa caixa de texto vazia.
+model PaymentCategory {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  /// Desligada em vez de apagada: os agendamentos antigos continuam a
+  /// apontar para ela, e apagá-la deixaria o histórico a falar de um tipo que
+  /// já não existe.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payments ScheduledPayment[]
+
+  @@map("payment_categories")
+}
+
+/// Um pagamento que entra ou sai do saldo de um motorista, sozinho, numa data.
+///
+/// ─── O QUE ISTO NÃO É ───────────────────────────────────────────────────────
+///
+/// Não é um movimento. É a REGRA que fabrica movimentos. Quando chega a data, o
+/// job cria um `BalanceAdjustment` normal — exatamente igual ao que sairia de
+/// alguém o lançar à mão, com a mesma descrição e o mesmo sentido.
+///
+/// Foi pedido assim de propósito: "aparece esse movimento ao motorista como se
+/// fosse manual". E é a decisão certa por mais do que gosto — o extrato, o
+/// saldo, os relatórios e o recibo já sabem ler ajustes manuais. Um tipo novo
+/// de movimento obrigaria a ensinar-lhes a todos, e algum ficaria por ensinar.
+///
+/// ─── PORQUE É QUE GUARDA A PRÓXIMA DATA EM VEZ DE A CALCULAR ────────────────
+///
+/// `nextRunOn` é escrita e não deduzida da data de início mais o intervalo.
+/// Deduzir parece mais limpo até ao dia em que o servidor está em baixo e falha
+/// uma execução: a conta diria que a próxima é daqui a um mês e o mês saltado
+/// desaparecia sem nada a dizê-lo. Escrita, a data fica para trás, o job vê-a
+/// vencida, e paga o que ficou por pagar.
+model ScheduledPayment {
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  type        AdjustmentType
+  amount      Decimal          @db.Decimal(12, 2)
+  /// O que o motorista vai ler no extrato. Livre, como o motivo de um manual.
+  description String
+  categoryId  String?          @map("category_id")
+
+  frequency PaymentFrequency
+
+  /// A data do primeiro lançamento, e a data do próximo.
+  startsOn  DateTime  @map("starts_on")  @db.Date
+  nextRunOn DateTime? @map("next_run_on") @db.Date
+
+  /// O fim, opcional e de duas formas. Nulos os dois = corre até ser parado.
+  ///
+  /// `remaining` conta para baixo a cada lançamento. Serve para "esta multa em
+  /// 6 prestações", que é como as pessoas pensam — ninguém calcula a data do
+  /// sexto mês de cabeça.
+  endsOn    DateTime? @map("ends_on") @db.Date
+  remaining Int?
+
+  /// Desligado à mão. Separado de `endsOn` porque são coisas diferentes: um
+  /// acabou, o outro foi interrompido.
+  active Boolean @default(true)
+
+  /// Quantos lançamentos já fez, e quando foi o último. Para o ecrã poder
+  /// mostrar "3 de 6, o último a 12/09".
+  runCount  Int       @default(0) @map("run_count")
+  lastRunAt DateTime? @map("last_run_at")
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  user      User             @relation("scheduledPaymentsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("scheduledPaymentsCreated", fields: [createdById], references: [id])
+  category  PaymentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  // O job pergunta sempre a mesma coisa: quais os activos com data vencida.
+  @@index([active, nextRunOn])
+  @@map("scheduled_payments")
+}
+
+/// Um lembrete que insiste até alguém o dar por feito.
+///
+/// ─── PORQUE É QUE INSISTE ───────────────────────────────────────────────────
+///
+/// Porque foi o ponto do pedido: "ele vai mandando notificação desse lembrete,
+/// até eu carregar no concluir". Um lembrete que avisa uma vez é um alarme que
+/// se perde entre as outras notificações do dia. Um que volta todos os dias é
+/// uma lista de coisas por fazer que se esvazia sozinha quando se fazem.
+///
+/// `lastNotifiedOn` guarda o DIA e não o instante: é o que garante uma
+/// notificação por dia mesmo que o job corra duas vezes — um reinício do
+/// servidor, um deploy a meio da manhã.
+model Reminder {
+  id    String  @id @default(cuid())
+  title String
+  notes String?
+
+  /// A partir de que dia começa a avisar. Hoje, por omissão.
+  dueOn DateTime @map("due_on") @db.Date
+
+  /// Quem recebe os avisos. É também quem o criou, mas fica em campo próprio
+  /// para um dia se poder lembrar outra pessoa sem mexer na tabela.
+  ownerId String @map("owner_id")
+
+  doneAt         DateTime? @map("done_at")
+  lastNotifiedOn DateTime? @map("last_notified_on") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  owner User @relation("remindersOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, doneAt])
+  @@index([dueOn])
+  @@map("reminders")
+}
+
+model SupportTicket {
+  id        String         @id @default(cuid())
+  subject   String
+  category  TicketCategory
+  message   String
+  status    TicketStatus   @default(OPEN)
+  userId    String         @map("user_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies TicketReply[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketReply {
+  id        String   @id @default(cuid())
+  message   String
+  ticketId  String   @map("ticket_id")
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_replies")
+}
+
+/// Sociedades do grupo a quem os motoristas emitem recibo verde.
+///
+/// TABELA e não enum: o cliente opera várias sociedades e a lista muda —
+/// criam-se, mudam de nome, dissolvem-se. Um enum obrigaria a uma migração de
+/// cada vez, e a terceira sociedade dele nem nome tem ainda.
+///
+/// Renomear uma sociedade NÃO reescreve o histórico: as retiradas apontam para
+/// o id, portanto continuam ligadas à mesma entidade jurídica.
+model Company {
+  id     String  @id @default(uuid())
+  name   String
+  /// Inativa desaparece das escolhas novas mas continua a explicar o passado.
+  /// Apagar arrancaria a sociedade dos recibos já emitidos.
+  active Boolean @default(true)
+  /// Ordem de apresentação — o cliente listou-as numeradas.
+  sortOrder Int @default(0) @map("sort_order")
+
+  withdrawals Withdrawal[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("companies")
+}
+
+model SystemSettings {
+  id                        String   @id @default("global")
+  companyCommission         Int      @default(15) // %
+  /// Imposto do Estado sobre a faturação TVDE, em pontos percentuais.
+  /// Configurável e não cravado no código: o Estado altera taxas, e no dia em
+  /// que isso acontecer os fechos passados têm de continuar a mostrar a que
+  /// foi aplicada — por isso cada fecho grava a sua própria cópia.
+  settlementTaxRate         Decimal  @default(6) @map("settlement_tax_rate") @db.Decimal(5, 2)
+  minWithdrawalAmount       Int      @default(50) // €
+  maxWithdrawalAmount       Int      @default(5000) // €
+  withdrawalProcessingDays  Int      @default(1)
+  documentExpiryWarningDays Int      @default(30)
+  uberIntegration           Boolean  @default(true)
+  boltIntegration           Boolean  @default(true)
+  emailNotifications        Boolean  @default(true)
+  smsNotifications          Boolean  @default(false)
+  autoApproveDocuments      Boolean  @default(false)
+  requireTwoFactorAuth      Boolean  @default(false)
+  updatedAt                 DateTime @updatedAt
+  updatedBy                 String?  @map("updated_by")
+
+  @@map("system_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fecho semanal de faturação
+//
+// A ÚNICA porta pela qual entra dinheiro na conta do motorista.
+//
+// O administrador regista, por semana e por motorista, o que entrou em cada
+// plataforma e o que saiu em despesas; a percentagem da empresa incide sobre o
+// lucro (receitas menos despesas), não sobre o bruto; e o líquido é creditado.
+//
+// Sem esta entidade, a comissão da empresa nunca era efetivamente cobrada: o
+// saldo do motorista era 100% do que ele lançava, e a percentagem existia
+// apenas como número nas telas de análise.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SettlementStatus {
+  DRAFT      // preparado, ainda nao creditado
+  REGISTERED // creditado ao motorista — imutavel a partir daqui
+  CANCELLED  // estornado; o credito e revertido
+}
+
+model WeeklySettlement {
+  id        String  @id @default(cuid())
+  userId    String  @map("user_id")
+  vehicleId String? @map("vehicle_id")
+
+  weekStart DateTime @map("week_start") @db.Date
+  weekEnd   DateTime @map("week_end")   @db.Date
+
+  // Receitas por plataforma. Campos nomeados em vez de uma tabela filha:
+  // sao poucas plataformas, fixas, e assim o fecho e uma linha so.
+  uberAmount   Decimal @default(0) @map("uber_amount")   @db.Decimal(12, 2)
+  boltAmount   Decimal @default(0) @map("bolt_amount")   @db.Decimal(12, 2)
+  otherRevenue Decimal @default(0) @map("other_revenue") @db.Decimal(12, 2)
+
+  // Deducoes operacionais.
+  tollsAmount     Decimal @default(0) @map("tolls_amount")     @db.Decimal(12, 2) // Via Verde
+  fuelAmount      Decimal @default(0) @map("fuel_amount")      @db.Decimal(12, 2) // Prio
+  /// Carregamento elétrico. Coluna PRÓPRIA e não partilhada com o
+  /// combustível: um híbrido tem os dois na mesma semana, e depois de
+  /// somados na mesma célula não há consulta que os separe.
+  chargeAmount    Decimal @default(0) @map("charge_amount")    @db.Decimal(12, 2)
+  vehicleFee      Decimal @default(0) @map("vehicle_fee")      @db.Decimal(12, 2)
+  otherDeductions Decimal @default(0) @map("other_deductions") @db.Decimal(12, 2)
+
+  // ── Imposto sobre a faturação ──────────────────────────────────────────────
+  //
+  // Pedido do cliente: "esse campo eu preciso que ele cobre 6% do valor bruto
+  // da Uber e Bolt". A base é uber + bolt e NÃO inclui otherRevenue — foi o que
+  // ele escreveu, e usar o grossRevenue tributaria receita que ele não mandou
+  // tributar.
+  //
+  // TRÊS campos e não um. Guardar só o resultado deixaria impossível saber,
+  // daqui a um ano, sobre que valor a taxa incidiu. Está por confirmar com o
+  // contabilista dele se os campos Uber e Bolt guardam o bruto pago pelo
+  // passageiro ou o líquido que a plataforma transfere — o IVA de 6% é devido
+  // sobre o primeiro. Se a resposta mudar a interpretação, muda o cálculo da
+  // base e o histórico fica intacto.
+  //
+  // NULO nos fechos anteriores a este campo, e não zero: as telas têm de poder
+  // distinguir "não teve imposto" de "é anterior à existência do imposto".
+  taxBase   Decimal? @map("tax_base")   @db.Decimal(12, 2)
+  taxRate   Decimal? @map("tax_rate")   @db.Decimal(5, 2)
+  taxAmount Decimal? @map("tax_amount") @db.Decimal(12, 2)
+
+  // Percentagem aplicada, em pontos percentuais (15 = 15%).
+  //
+  // GRAVADA no fecho, e nao lida das configuracoes na hora de exibir: quando
+  // alguem alterar a percentagem global, os fechos passados tem de continuar a
+  // mostrar a conta que foi efetivamente paga. Recibo nao muda depois de
+  // emitido.
+  commissionRate Decimal @default(0) @map("commission_rate") @db.Decimal(5, 2)
+
+  // Totais congelados no momento do registo. Guardados em vez de recalculados
+  // na leitura, pela mesma razao: o documento tem de permanecer igual ao que
+  // foi acordado, mesmo que a formula mude no futuro.
+  grossRevenue     Decimal @default(0) @map("gross_revenue")     @db.Decimal(12, 2)
+  totalDeductions  Decimal @default(0) @map("total_deductions")  @db.Decimal(12, 2)
+  profitBase       Decimal @default(0) @map("profit_base")       @db.Decimal(12, 2)
+  commissionAmount Decimal @default(0) @map("commission_amount") @db.Decimal(12, 2)
+  netToDriver      Decimal @default(0) @map("net_to_driver")     @db.Decimal(12, 2)
+
+  status SettlementStatus @default(DRAFT)
+
+  /// Conta-quilómetros no início e no fim da semana. OPCIONAIS, e nulos em
+  /// tudo o que é anterior a este campo: é a diferença entre "não foram
+  /// registados" e "andou zero quilómetros", e um zero a fingir estragava
+  /// qualquer média. A base garante que o fim não é menor que o início.
+  odometerStart Int? @map("odometer_start")
+  odometerEnd   Int? @map("odometer_end")
+
+  /// Observações visíveis ao motorista, no detalhe da semana.
+  notes String?
+
+  /// Observações internas. NUNCA saem numa resposta para o motorista — ver o
+  /// filtro em settlements.repository.toPublic. Existem separadas de `notes`
+  /// porque aquelas já são mostradas no painel dele, e reaproveitar o campo
+  /// exporia o que se pretende reservado.
+  internalNotes String? @map("internal_notes")
+
+  createdById  String    @map("created_by_id")
+  registeredAt DateTime? @map("registered_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt      @map("updated_at")
+
+  /// Quando este fecho foi corrigido DEPOIS de já ter sido creditado.
+  ///
+  /// Nulo é a maioria e quer dizer "nunca foi mexido depois de registado" —
+  /// não se confunde com `updatedAt`, que mexe por tudo e mais alguma coisa,
+  /// incluindo pelo próprio ato de registar.
+  ///
+  /// Existe como COLUNA e não como consulta às revisões porque é por aqui que
+  /// o filtro da lista pesquisa, e um filtro que tenha de visitar outra tabela
+  /// para cada linha é o género de coisa que fica lenta sem ninguém reparar.
+  editedAfterRegisterAt DateTime? @map("edited_after_register_at")
+
+  user      User     @relation("settlementsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("settlementsCreated", fields: [createdById], references: [id])
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  revisions SettlementRevision[]
+
+  // Guarda estrutural contra creditar a mesma semana duas vezes. E a protecao
+  // que nao depende de ninguem se lembrar de conferir.
+  @@unique([userId, weekStart])
+  @@index([userId])
+  @@index([weekStart])
+  @@index([status])
+  @@index([editedAfterRegisterAt])
+  @@map("weekly_settlements")
+}
+
+/// Uma correção feita a um fecho, com o motivo e o que mudou.
+///
+/// ─── PORQUE É QUE ISTO EXISTE ───────────────────────────────────────────────
+///
+/// Um fecho registado é dinheiro já creditado. Até aqui era imutável, e a única
+/// forma de corrigir um engano era cancelar e criar outro — o que deixa o
+/// extrato do motorista com um estorno e um lançamento novo para explicar uma
+/// vírgula trocada.
+///
+/// Passa a poder ser editado, mas nunca em silêncio: cada correção escreve uma
+/// linha aqui, e é essa linha que torna a edição aceitável. Sem ela, um saldo
+/// que muda sozinho é indistinguível de uma avaria — ou de má-fé.
+///
+/// ─── PORQUE É QUE OS VALORES FICAM AQUI E NÃO SÓ NO FECHO ───────────────────
+///
+/// `changes` guarda o antes e o depois de cada campo tocado. Podia-se pensar
+/// que basta guardar o antes e ir ao fecho buscar o depois — e basta, para a
+/// última revisão. Para a penúltima não: o "depois" dela é o "antes" da
+/// seguinte, e reconstruir isso de trás para a frente é o tipo de conta que
+/// está certa até alguém apagar uma linha.
+model SettlementRevision {
+  id           String @id @default(cuid())
+  settlementId String @map("settlement_id")
+
+  /// Quem fez a correção. Só ADMIN, garantido no serviço.
+  ///
+  /// Opcional porque a conta pode ser apagada e o rasto não deve desaparecer
+  /// com ela: fica a revisão sem autor, que é muito melhor do que nenhuma.
+  editedById String? @map("edited_by_id")
+
+  /// Obrigatório, e é o coração disto. Vai inteiro para a notificação do
+  /// motorista: é a frase que ele vai ler quando o dinheiro dele mudar.
+  reason String
+
+  /// O estado em que o fecho estava quando foi corrigido (DRAFT/REGISTERED).
+  /// Guardado porque corrigir um rascunho e corrigir dinheiro já creditado são
+  /// duas coisas com peso muito diferente, e daqui a um ano ninguém saberá
+  /// dizer qual foi qual.
+  statusAtEdit SettlementStatus @map("status_at_edit")
+
+  /// `[{ campo, antes, depois }]`. JSON e não colunas: os campos do fecho são
+  /// muitos e mudam com o tempo, e uma tabela com uma coluna por campo teria de
+  /// ser migrada sempre que o fecho ganhasse outro.
+  changes Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  settlement WeeklySettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  editedBy   User?            @relation("settlementRevisions", fields: [editedById], references: [id], onDelete: SetNull)
+
+  @@index([settlementId])
+  @@index([createdAt])
+  @@map("settlement_revisions")
+}
+
+
+/* =========================
+   INVESTIMENTOS
+   =========================
+
+   O motorista aplica parte do saldo num plano e o valor rende todos os dias.
+
+   ─── ONDE O DINHEIRO ESTÁ ───────────────────────────────────────────────────
+
+   Aplicar TIRA do saldo principal (o `principal` da aplicação é subtraído na
+   view `driver_balances`), e resgatar DEVOLVE (o `payout` é somado). Entre uma
+   coisa e outra o dinheiro vive aqui, e os ganhos diários acumulam-se na
+   própria aplicação — NÃO no saldo principal. Só entram no saldo principal no
+   resgate, como parte do `payout`.
+
+   ─── JUROS SIMPLES ──────────────────────────────────────────────────────────
+
+   Decisão do cliente: cada dia rende sobre o valor aplicado, nunca sobre os
+   ganhos já acumulados. Ganho de um dia = principal × taxa anual ÷ 100 ÷ 365.
+
+   ─── PORQUE HÁ UMA LINHA POR DIA ────────────────────────────────────────────
+
+   `investment_accruals` guarda cada dia com a taxa que se aplicou nesse dia.
+   Nos planos flexíveis a taxa muda; recalcular o passado com a taxa de hoje
+   mudaria ganhos que o motorista já viu. Com uma linha por dia, o passado fica
+   escrito e o `@@unique([investmentId, day])` impede que o job, corrido duas
+   vezes, pague o mesmo dia duas vezes.
+*/
+
+enum InvestmentPlanType {
+  /// Taxa fixa, congelada no momento da aplicação, com prazo.
+  FIXED
+  /// Taxa definida pela administração e alterável; o histórico fica em
+  /// `investment_plan_rates`.
+  FLEXIBLE
+}
+
+enum InvestmentStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum InvestmentCloseReason {
+  /// Plano fixo que chegou ao fim do prazo. Sem penalização.
+  MATURED
+  /// Plano fixo resgatado antes do prazo. Aplica a penalização do plano.
+  EARLY
+  /// Plano flexível resgatado pelo titular.
+  WITHDRAWN
+}
+
+model InvestmentPlan {
+  id          String             @id @default(cuid())
+  name        String
+  description String?
+  type        InvestmentPlanType
+
+  /// Taxa anual em percentagem (2.5 = 2,5% ao ano).
+  ///
+  /// Nos FIXOS é a taxa oferecida a quem aplicar a partir de agora — quem já
+  /// aplicou fica com a que estava em vigor (copiada para a aplicação).
+  /// Nos FLEXÍVEIS é a taxa em vigor hoje; a que conta para cada dia vem do
+  /// histórico em `investment_plan_rates`.
+  annualRate  Decimal            @map("annual_rate") @db.Decimal(6, 3)
+
+  /// Só FIXED: duração em dias.
+  termDays    Int?               @map("term_days")
+
+  /// Só FIXED: penalização por resgate antecipado, em % do valor aplicado.
+  earlyWithdrawalPenalty Decimal? @map("early_withdrawal_penalty") @db.Decimal(5, 2)
+
+  minAmount   Decimal            @default(0) @map("min_amount") @db.Decimal(12, 2)
+
+  /// Rank mínimo para aplicar neste plano. Nulo = aberto a todos.
+  minRank     RankTier?          @map("min_rank")
+
+  /// Desativar deixa de aceitar aplicações novas; as que existem continuam.
+  active      Boolean            @default(true)
+
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  rates       InvestmentPlanRate[]
+  investments Investment[]
+
+  @@map("investment_plans")
+}
+
+/// Histórico de taxas de um plano. Cada linha vale a partir de `effectiveFrom`
+/// até à linha seguinte. Nunca se altera um dia que já foi pago: o serviço só
+/// aceita `effectiveFrom` de hoje em diante.
+model InvestmentPlanRate {
+  id            String   @id @default(cuid())
+  planId        String   @map("plan_id")
+  annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  plan InvestmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, effectiveFrom])
+  @@map("investment_plan_rates")
+}
+
+model Investment {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  planId    String   @map("plan_id")
+
+  /// O valor aplicado. Sai do saldo principal no momento da aplicação.
+  principal Decimal  @db.Decimal(12, 2)
+
+  /// Copiados do plano no momento da aplicação, e congelados. Mudar o plano
+  /// depois não muda o que foi prometido a quem já aplicou.
+  /// `annualRate` só nos FIXOS; nos FLEXÍVEIS fica nulo e a taxa de cada dia
+  /// vem do histórico do plano.
+  planType    InvestmentPlanType @map("plan_type")
+  annualRate  Decimal?           @map("annual_rate") @db.Decimal(6, 3)
+  termDays    Int?               @map("term_days")
+  penaltyRate Decimal?           @map("penalty_rate") @db.Decimal(5, 2)
+
+  /// Dia (em Lisboa) em que foi aplicado. Rende a partir deste dia, inclusive.
+  startDate    DateTime  @map("start_date") @db.Date
+  /// Só FIXED: startDate + termDays. Rende até à véspera; neste dia fecha.
+  maturityDate DateTime? @map("maturity_date") @db.Date
+
+  /// Último dia já pago em `investment_accruals`. Nulo = nenhum.
+  accruedThrough DateTime? @map("accrued_through") @db.Date
+  /// Soma das linhas diárias, com seis casas: arredondar cada dia ao cêntimo
+  /// perderia até meio cêntimo por dia, e num ano isso nota-se.
+  accrued        Decimal   @default(0) @db.Decimal(16, 6)
+
+  status      InvestmentStatus       @default(ACTIVE)
+  closeReason InvestmentCloseReason? @map("close_reason")
+
+  /// O que voltou ao saldo principal: principal + ganhos − penalização,
+  /// arredondado ao cêntimo. É este valor que a view soma.
+  payout        Decimal?  @db.Decimal(12, 2)
+  penaltyAmount Decimal?  @map("penalty_amount") @db.Decimal(12, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  closedAt  DateTime? @map("closed_at")
+
+  /// Cascade como os fechos e os ajustes: apagar um utilizador leva o histórico
+  /// dele. O serviço de utilizadores RECUSA apagar quem tem aplicações ativas —
+  /// isso seria apagar dinheiro que a empresa deve.
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     InvestmentPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  accruals InvestmentAccrual[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([planId])
+  @@map("investments")
+}
+
+model InvestmentAccrual {
+  id           String   @id @default(cuid())
+  investmentId String   @map("investment_id")
+  day          DateTime @db.Date
+  /// A taxa que se aplicou neste dia. Guardada para o extrato explicar o valor.
+  annualRate   Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  amount       Decimal  @db.Decimal(16, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+
+  @@unique([investmentId, day])
+  @@map("investment_accruals")
+}
+
+
+/* =========================
+   RANKS
+   =========================
+
+   Cinco níveis, do mais baixo para o mais alto. Os nomes e as cores são
+   editáveis no painel — nascem como Dragon Driver, Dragon Elite, Dragon Leader,
+   Dragon Manager e Dragon Master — e o código usa sempre TIER_1..TIER_5, para
+   mudar um nome não obrigar a uma migração.
+
+   ─── COMO SE SOBE E SE DESCE ────────────────────────────────────────────────
+
+   As metas contam dentro de uma TEMPORADA de dois meses do calendário
+   (janeiro–fevereiro, março–abril, …). Durante a temporada o rank acompanha as
+   metas em tempo real: atinge, sobe e ganha os benefícios nesse momento; deixa
+   de cumprir, desce e perde-os.
+
+   ─── A PROTEÇÃO DE 30 DIAS ──────────────────────────────────────────────────
+
+   No fim da temporada, o rank com que terminou fica GARANTIDO COMO MÍNIMO
+   durante 30 dias. Em março ninguém fica abaixo do que conquistou até 28 de
+   fevereiro, mesmo começando a nova temporada do zero. Para cima não há
+   travão: se as metas novas derem um rank melhor, esse vale de imediato.
+
+   Guarda-se `floorTier` e `floorUntil`, e o rank efetivo é o maior dos dois.
+*/
+
+enum RankTier {
+  TIER_1
+  TIER_2
+  TIER_3
+  TIER_4
+  TIER_5
+}
+
+enum RankEventKind {
+  /// Subiu de rank dentro da temporada.
+  UP
+  /// Desceu de rank dentro da temporada.
+  DOWN
+  /// Fim de temporada: o rank alcançado passou a mínimo garantido.
+  SEASON_END
+  /// Acabaram os 30 dias de proteção.
+  FLOOR_EXPIRED
+}
+
+/// As metas e os benefícios de cada nível. Uma linha por nível, sempre cinco.
+model RankConfig {
+  tier  RankTier @id
+  label String
+  /// Cor base em hexadecimal, usada no cartão e no emblema.
+  color String
+
+  // ── Metas. Zero = não conta. ──
+  /// Faturação (bruto dos fechos) acumulada DENTRO da temporada.
+  minSeasonRevenue Decimal @default(0) @map("min_season_revenue") @db.Decimal(12, 2)
+  /// Valor aplicado em investimentos, neste momento.
+  minInvested      Decimal @default(0) @map("min_invested") @db.Decimal(12, 2)
+  /// Saldo disponível em banca, neste momento.
+  minBalance       Decimal @default(0) @map("min_balance") @db.Decimal(12, 2)
+  /// Semanas com fecho registado dentro da temporada.
+  minWeeks         Int     @default(0) @map("min_weeks")
+
+  /// Documentos expirados travam a subida a este nível.
+  requireValidDocuments Boolean @default(true) @map("require_valid_documents")
+
+  // ── Benefícios. Em percentagem; a aplicação ao fecho semanal fica para a
+  //    fase 2, mas os valores vivem aqui desde já para o motorista os ver. ──
+  fuelDiscount        Decimal @default(0) @map("fuel_discount") @db.Decimal(5, 2)
+  vehicleDiscount     Decimal @default(0) @map("vehicle_discount") @db.Decimal(5, 2)
+  tollsDiscount       Decimal @default(0) @map("tolls_discount") @db.Decimal(5, 2)
+  /// Pontos percentuais somados à taxa dos investimentos (fase 2).
+  investmentRateBonus Decimal @default(0) @map("investment_rate_bonus") @db.Decimal(5, 3)
+  /// Texto livre, uma vantagem por linha, mostrado ao motorista.
+  perks               String?
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("rank_configs")
+}
+
+/// O estado de cada motorista. Uma linha por utilizador, criada no primeiro
+/// cálculo.
+model DriverRank {
+  userId String @id @map("user_id")
+
+  /// O que vale hoje: o maior entre o conquistado e o garantido.
+  tier       RankTier @default(TIER_1)
+  /// O que as metas dão neste momento.
+  earnedTier RankTier @default(TIER_1) @map("earned_tier")
+
+  /// Mínimo garantido e até quando. Nulos fora do período de proteção.
+  floorTier  RankTier? @map("floor_tier")
+  floorUntil DateTime? @map("floor_until") @db.Date
+
+  /// Primeiro dia da temporada a que as métricas abaixo dizem respeito.
+  seasonStart DateTime @map("season_start") @db.Date
+
+  // Métricas do último cálculo, guardadas para a tela não as recalcular.
+  seasonRevenue Decimal @default(0) @map("season_revenue") @db.Decimal(12, 2)
+  invested      Decimal @default(0) @db.Decimal(12, 2)
+  balance       Decimal @default(0) @db.Decimal(12, 2)
+  weeks         Int     @default(0)
+  /// Falso quando há documentos expirados: trava a subida.
+  documentsOk   Boolean @default(true) @map("documents_ok")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tier])
+  @@map("driver_ranks")
+}
+
+/// Histórico: quando subiu, quando desceu, e porquê. Sem isto, um motorista que
+/// pergunte "porque perdi o desconto" não tem resposta.
+model RankEvent {
+  id         String        @id @default(cuid())
+  userId     String        @map("user_id")
+  kind       RankEventKind
+  tier       RankTier
+  fromTier   RankTier?     @map("from_tier")
+  /// Explicação curta, já escrita para ser mostrada.
+  note       String?
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("rank_events")
+}
+
+/* =========================
+   PORTAL DO INVESTIDOR
+   invest.dragonfleet.pt
+   ========================= */
+
+/// Estado da conta. FECHADA não aceita depósitos nem rende; o histórico fica.
+enum InvestorAccountStatus {
+  ACTIVE
+  CLOSED
+}
+
+/// Os dois bolsos de uma conta de investidor.
+///
+/// CAPITAL é o que foi depositado; EARNINGS é o que os juros somaram. Andam
+/// separados porque o rendimento pode ser levantado sem mexer no capital, e
+/// porque os juros de cada dia contam sobre o capital e não sobre o total.
+enum InvestorBucket {
+  CAPITAL
+  EARNINGS
+}
+
+enum InvestorMovementKind {
+  DEPOSIT
+  ACCRUAL
+  WITHDRAWAL
+  ADJUSTMENT
+  /// Distribuição mensal do lucro de um projeto.
+  PROFIT_SHARE
+  /// Mais-valia (ou perda) apurada quando um projeto liquida.
+  PROJECT_RESULT
+}
+
+enum InvestorWithdrawalStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+/// A conta de um investidor. Uma por utilizador com o papel INVESTOR.
+model InvestorAccount {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  /// Primeiro dia que pode render.
+  startDate      DateTime  @map("start_date") @db.Date
+  /// Último dia já pago em movimentos ACCRUAL. Nulo = ainda não rendeu.
+  accruedThrough DateTime? @map("accrued_through") @db.Date
+
+  /// Dias de aviso prévio para levantar capital. Zero = sem aviso.
+  /// Não se aplica ao rendimento.
+  noticeDays Int @default(0) @map("notice_days")
+
+  status InvestorAccountStatus @default(ACTIVE)
+  notes  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// RESTRICT: apagar um utilizador não pode levar o registo do dinheiro que
+  /// ele pôs cá dentro. Fecha-se a posição primeiro.
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  rates       InvestorRate[]
+  movements   InvestorMovement[]
+  withdrawals InvestorWithdrawal[]
+  shares      ProjectShare[]
+
+  @@map("investor_accounts")
+}
+
+/// A taxa não é uma coluna da conta: é uma série com datas.
+///
+/// Assim, baixar a taxa hoje não reescreve os juros já pagos — cada dia é pago
+/// à taxa que estava em vigor nesse dia.
+model InvestorRate {
+  id            String   @id @default(cuid())
+  accountId     String   @map("account_id")
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdBy     String?  @map("created_by")
+
+  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, effectiveFrom], map: "investor_rates_account_from_key")
+  @@map("investor_rates")
+}
+
+/// O extrato. O saldo é a soma disto — não há coluna de saldo em lado nenhum.
+model InvestorMovement {
+  id        String @id @default(cuid())
+  accountId String @map("account_id")
+
+  /// Dia civil em Lisboa a que o movimento pertence. O juro do dia 30 é
+  /// lançado na madrugada do 31 e tem de aparecer no dia 30.
+  day DateTime @db.Date
+
+  kind   InvestorMovementKind
+  bucket InvestorBucket
+
+  /// Com sinal: entradas positivas, saídas negativas. Somar dá o saldo.
+  amount Decimal @db.Decimal(16, 6)
+
+  description  String?
+  withdrawalId String? @map("withdrawal_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  /// O projeto que gerou este movimento, quando veio de um.
+  /// Sem isto, o extrato mostrava "+142,30 €" sem dizer de que carro veio.
+  projectId String? @map("project_id")
+
+  account InvestorAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  project InvestmentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, day])
+  @@index([projectId])
+  @@map("investor_movements")
+}
+
+/// Pedido de resgate. Só vira movimento quando a administração o marca como
+/// pago — antes disso é dinheiro prometido, descontado do disponível.
+model InvestorWithdrawal {
+  id        String         @id @default(cuid())
+  accountId String         @map("account_id")
+  bucket    InvestorBucket
+  amount    Decimal        @db.Decimal(12, 2)
+
+  status InvestorWithdrawalStatus @default(PENDING)
+
+  /// Já com o aviso prévio contado.
+  availableOn DateTime @map("available_on") @db.Date
+
+  note     String?
+  decision String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  decidedAt DateTime? @map("decided_at")
+  decidedBy String?   @map("decided_by")
+
+  account InvestorAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status])
+  @@map("investor_withdrawals")
+}
+
+
+/* =========================
+   PROJETOS DE INVESTIMENTO
+   participação nos lucros de um carro
+   ========================= */
+
+/// O ciclo de vida de um projeto.
+enum ProjectStatus {
+  /// A preparar. Os investidores não o veem.
+  DRAFT
+  /// Aberto a subscrições.
+  FUNDING
+  /// Financiado; o carro a render e a distribuir todos os meses.
+  ACTIVE
+  /// Liquidado: o capital voltou às contas dos investidores.
+  CLOSED
+  /// Abortado antes de arrancar; o capital foi libertado.
+  CANCELLED
+}
+
+enum ProjectShareStatus {
+  ACTIVE
+  LIQUIDATED
+  CANCELLED
+}
+
+enum ProjectPeriodStatus {
+  /// Apurado, ainda não pago.
+  DRAFT
+  /// Pago aos investidores.
+  DISTRIBUTED
+}
+
+/// Um projeto: um carro financiado por investidores, que repartem o que ele der.
+///
+/// AS DISTRIBUIÇÕES MENSAIS NÃO AMORTIZAM O CAPITAL. Quem pôs 10 000 €
+/// continua com 10 000 € em dívida depois de já ter recebido 10 000 € de
+/// lucros; o capital só volta na liquidação. Foi uma decisão explícita do
+/// cliente e é o que faz o investidor continuar a ganhar enquanto o carro
+/// rodar. Está escrito aqui porque quem ler isto daqui a dois anos vai assumir
+/// o contrário.
+model InvestmentProject {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  /// Quanto é preciso angariar.
+  targetAmount Decimal @map("target_amount") @db.Decimal(12, 2)
+  /// Mínimo por participação. Zero = sem mínimo.
+  minTicket    Decimal @default(0) @map("min_ticket") @db.Decimal(12, 2)
+
+  /// A fatia do lucro que vai para os investidores, em percentagem.
+  profitShare  Decimal @default(50) @map("profit_share") @db.Decimal(5, 2)
+
+  /// O carro. Nulo enquanto não estiver escolhido.
+  vehicleId String? @map("vehicle_id")
+
+  /// Que parcelas do fecho semanal contam como rendimento do carro.
+  includeCommission Boolean @default(true) @map("include_commission")
+  includeVehicleFee Boolean @default(true) @map("include_vehicle_fee")
+
+  status ProjectStatus @default(DRAFT)
+
+  fundingClosesOn DateTime? @map("funding_closes_on") @db.Date
+  /// Primeiro mês que conta lucro.
+  startedOn       DateTime? @map("started_on") @db.Date
+  /// Prazo OPCIONAL. Vazio = corre até o carro ser vendido.
+  endsOn          DateTime? @map("ends_on") @db.Date
+  closedOn        DateTime? @map("closed_on") @db.Date
+
+  /// Quanto rendeu a venda. É isto que se reparte na liquidação.
+  saleAmount Decimal? @map("sale_amount") @db.Decimal(12, 2)
+
+  riskLevel String? @map("risk_level")
+  imageUrl  String? @map("image_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  vehicle   Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  shares    ProjectShare[]
+  periods   ProjectPeriod[]
+  expenses  ProjectExpense[]
+  updates   ProjectUpdate[]
+  movements InvestorMovement[]
+
+  @@index([status])
+  @@index([vehicleId])
+  @@map("investment_projects")
+}
+
+/// A participação de um investidor num projeto.
+///
+/// Enquanto está ACTIVE, o valor sai do DISPONÍVEL da conta dele mas continua
+/// a contar como capital — a empresa continua a devê-lo. É a view
+/// `investor_balances` que faz essa distinção.
+model ProjectShare {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+  accountId String @map("account_id")
+
+  amount Decimal @db.Decimal(12, 2)
+
+  status ProjectShareStatus @default(ACTIVE)
+
+  /// O que voltou na liquidação. Pode ser menos do que entrou, se o carro se
+  /// desvalorizou — é a contrapartida de ter recebido lucros sem que isso
+  /// abatesse o capital.
+  liquidatedAmount Decimal?  @map("liquidated_amount") @db.Decimal(12, 2)
+  liquidatedAt     DateTime? @map("liquidated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// RESTRICT: apagar uma conta de investidor não pode levar por à frente o
+  /// registo do que ele pôs num carro.
+  account InvestorAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([projectId])
+  @@index([accountId])
+  @@map("project_shares")
+}
+
+/// Um mês de um projeto, com as parcelas à vista.
+///
+/// As parcelas ficam guardadas e não recalculadas na leitura: um investidor
+/// que pergunte "de onde vem este valor" tem de ter resposta, e alterar a
+/// percentagem do projeto não pode reescrever meses já pagos.
+model ProjectPeriod {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  /// Sempre o dia 1 do mês.
+  month     DateTime @db.Date
+
+  commissionTotal  Decimal @default(0) @map("commission_total") @db.Decimal(12, 2)
+  vehicleFeeTotal  Decimal @default(0) @map("vehicle_fee_total") @db.Decimal(12, 2)
+  expensesTotal    Decimal @default(0) @map("expenses_total") @db.Decimal(12, 2)
+  settlementsCount Int     @default(0) @map("settlements_count")
+
+  /// comissão + aluguer − despesas
+  profit          Decimal @default(0) @db.Decimal(12, 2)
+  /// A fatia dos investidores. Nunca negativa: um mês de prejuízo distribui
+  /// zero, não cobra ao investidor.
+  investorsAmount Decimal @default(0) @map("investors_amount") @db.Decimal(12, 2)
+  /// A percentagem em vigor no apuramento, congelada.
+  profitShare     Decimal @map("profit_share") @db.Decimal(5, 2)
+
+  status        ProjectPeriodStatus @default(DRAFT)
+  distributedAt DateTime?           @map("distributed_at")
+  notes         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month], map: "project_periods_project_month_key")
+  @@map("project_periods")
+}
+
+/// Despesas do carro que não passam pelo fecho semanal: seguro, revisão,
+/// pneus, IUC. Sem um sítio para as lançar, o lucro apurado seria sempre
+/// otimista.
+model ProjectExpense {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  month       DateTime @db.Date
+  amount      Decimal  @db.Decimal(12, 2)
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdBy   String?  @map("created_by")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, month])
+  @@map("project_expenses")
+}
+
+
+/// As etapas de um projeto, do financiamento ao carro a render.
+///
+/// Lista fechada porque é o que permite desenhar uma escada de progresso e
+/// dizer "vamos em 4 de 7". O texto de cada entrada é livre — cada carro tem a
+/// sua história, e obrigá-la a caber num enum daria entradas sem conteúdo.
+enum ProjectUpdateStage {
+  FUNDING_COMPLETE
+  FUNDS_RECEIVED
+  VEHICLE_PAID
+  PAPERWORK
+  INSURANCE
+  TVDE_LICENSE
+  DRIVER_ASSIGNED
+  EARNING
+  MAINTENANCE
+  INCIDENT
+  SALE
+  OTHER
+}
+
+/// Uma entrada do diário de bordo de um projeto.
+///
+/// Entre o financiamento fechar e o carro render passam semanas, e durante
+/// esse tempo o investidor tem dinheiro parado num projeto que não distribui
+/// nada. É esta sequência que lhe diz onde as coisas estão — e que substitui o
+/// telefonema.
+model ProjectUpdate {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+
+  stage ProjectUpdateStage @default(OTHER)
+  title String
+  body  String?
+
+  /// Fotografia do carro, do documento, do que for. Uma imagem de um carro
+  /// real vale mais do que três parágrafos a dizer que ele existe.
+  imageUrl String? @map("image_url")
+
+  /// O dia a que a entrada se refere, que não é o dia em que foi escrita: o
+  /// pagamento foi feito na sexta e registado na segunda.
+  happenedOn DateTime @map("happened_on") @db.Date
+
+  /// Falso deixa a entrada só para uso interno.
+  visible Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  project InvestmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, happenedOn])
+  @@map("project_updates")
+}
+
+
+/* =========================
+   PERMISSÕES DA EQUIPA
+   ========================= */
+
+/// As áreas do painel de administração. Uma por entrada do menu.
+enum StaffArea {
+  DASHBOARD
+  DRIVERS
+  DOCUMENTS
+  FLEET
+  RANKS
+  SETTLEMENTS
+  FINANCIAL
+  GREEN_RECEIPTS
+  ANALYTICS
+  INVESTMENTS
+  INVESTORS
+  PROJECTS
+  NOTIFICATIONS
+  SUPPORT
+  SETTINGS
+  TEAM
+}
+
+/// NONE não vê; VIEW lê; MANAGE lê e escreve.
+///
+/// NONE é um valor explícito e não a ausência de linha: "nunca foi
+/// configurado" e "foi expressamente tirado" são coisas diferentes, e só a
+/// primeira cai no comportamento antigo do papel.
+enum StaffAccess {
+  NONE
+  VIEW
+  MANAGE
+}
+
+/// O que uma pessoa da equipa pode fazer em cada área.
+///
+/// DUAS REGRAS QUE NÃO SE MEXEM:
+///   1. O ADMIN tem tudo, sempre, e estas linhas são ignoradas para ele —
+///      senão uma configuração errada tranca o dono fora do sistema.
+///   2. Sem linhas nenhumas, vale o comportamento antigo do papel.
+model StaffPermission {
+  id     String      @id @default(cuid())
+  userId String      @map("user_id")
+  area   StaffArea
+  access StaffAccess @default(NONE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, area], map: "staff_permissions_user_area_key")
+  @@map("staff_permissions")
+}

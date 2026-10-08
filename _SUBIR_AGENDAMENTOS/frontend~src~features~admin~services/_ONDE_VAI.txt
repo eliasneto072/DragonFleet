@@ -1,0 +1,6 @@
+Estes ficheiros vao para esta pasta do repositorio:
+
+    frontend/src/features/admin/services
+
+Abra essa pasta no GitHub, "Add file" > "Upload files",
+e arraste os ficheiros SOLTOS (nao a pasta). Nao envie este _ONDE_VAI.txt.

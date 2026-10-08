@@ -1,0 +1,14 @@
+Este ficheiro vai para uma pasta NOVA, que ainda nao existe no repositorio:
+
+    backend/prisma/migrations/20261007090000_scheduled_payments_and_reminders/migration.sql
+
+Como a pasta nao existe, nao da para navegar ate la e arrastar:
+
+ 1. No GitHub, "Add file" > "Create new file".
+ 2. No campo do nome escreva o caminho INTEIRO acima, com as barras.
+    Ao escrever cada "/" o GitHub vai criando as pastas sozinho.
+ 3. Abra o migration.sql aqui ao lado no bloco de notas, copie tudo, e cole.
+ 4. "Commit changes".
+
+O nome da pasta com a data TEM de ser exatamente esse: o Prisma usa-o para
+saber que migracoes ja correram, e um nome diferente fa-la correr outra vez.

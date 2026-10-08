@@ -1,0 +1,80 @@
+OS TRES MINI-UPDATES
+====================
+
+  1. Agendamento de pagamentos (menu novo: Dinheiro > Agendamentos)
+  2. Data escolhida ao criar um lancamento manual
+  3. Lembretes no painel, que avisam ate serem concluidos
+
+
+COMO SUBIR
+----------
+
+Sem pastas dentro de pastas, como da ultima vez. Cada pasta aqui corresponde a
+UMA pasta do repositorio, e o nome dela diz qual -- o "~" le-se como "/".
+
+Para cada uma:
+
+ 1. No GitHub, navegue ate a pasta de destino.
+ 2. "Add file" > "Upload files".
+ 3. Arraste os ficheiros SOLTOS la de dentro, nao a pasta.
+    NAO envie o _ONDE_VAI.txt: e so para si.
+ 4. "Commit changes".
+
+Se o carregamento voltar a dar erro, abra uma janela anonima -- foi o que
+resolveu da ultima vez. O culpado e uma extensao do Chrome.
+
+
+ORDEM
+-----
+
+Suba primeiro TODO o backend, e so depois o frontend. Desta vez importa mesmo:
+o painel novo chama rotas que ainda nao existem se o backend for a seguir.
+
+  BACKEND                                    FICHEIROS
+  backend~prisma                                 1
+  MIGRACAO-NOVA  (ver abaixo, e diferente)       1
+  backend~src~modules~scheduled-payments         4
+  backend~src~modules~reminders                  2
+  backend~src~modules~balance                    2
+  backend~src~jobs                               3
+  backend~src~routes                             1
+
+  FRONTEND
+  frontend~src~features~admin~services           3
+  frontend~src~features~admin~pages              2
+  frontend~src~features~admin~components         1
+  frontend~src~app~components~admin              3
+  frontend~src~app~router                        1
+
+
+A PASTA "MIGRACAO-NOVA"
+-----------------------
+
+Essa e diferente: vai para uma pasta que ainda NAO existe no repositorio, por
+isso nao da para navegar ate la. Use "Create new file" e escreva o caminho
+inteiro no nome -- esta explicado no _ONDE_VAI.txt dela.
+
+
+DEPOIS DE SUBIR
+---------------
+
+O Render constroi e a migracao corre no arranque. Nessa altura ja encontra:
+
+ * "Agendamentos" no menu, por baixo de Financeiro
+ * O campo "Data do movimento" ao lancar um credito ou debito a mao
+ * O cartao de lembretes no painel, logo a seguir a fila de trabalho
+
+Os pagamentos agendados sao lancados as 01:00 (hora de Lisboa) e os lembretes
+avisam as 08:00.
+
+PARA TESTAR SEM ESPERAR PELA NOITE: crie um agendamento com a data de hoje. O
+job tambem corre quando o servidor arranca, e um deploy e um arranque -- por
+isso basta o Render acabar de construir.
+
+
+UMA COISA QUE CONVEM SABER
+--------------------------
+
+Apagar um agendamento NAO desfaz os movimentos que ele ja lancou. Esses sao
+lancamentos normais, com vida propria, e o saldo do motorista depende deles.
+Para desfazer um movimento, o caminho e o do costume: um lancamento contrario.
