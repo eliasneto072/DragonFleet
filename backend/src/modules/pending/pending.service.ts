@@ -26,6 +26,7 @@
 // datas, e os nomes dos motoristas que já vinham no painel.
 
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
 import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
 import { permissionsService, ehEquipa } from '../permissions/permissions.service';
@@ -205,7 +206,7 @@ export const pendingService = {
         SELECT COUNT(*)::bigint AS n
         FROM driver_balances b
         JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
-        WHERE b.available < 0
+        WHERE b.fleet_id = ${frotaObrigatoria()} AND b.available < 0
       `,
 
       prisma.earning.count({ where: { status: 'PENDING' } }),

@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
 import {
   UserRole, UserStatus, WithdrawalStatus, DocumentStatus, EarningPlatform,
   EarningStatus, SettlementStatus, TicketStatus,
@@ -141,6 +142,13 @@ function pickGranularity(from: Date, to: Date): Granularity {
 
 export const analyticsRepository = {
   async getStats(from: Date, to: Date): Promise<AnalyticsStats> {
+    // A frota de quem está a pedir, escrita à mão nas consultas em SQL.
+    //
+    // A camada de `escopo.ts` carimba as consultas do Prisma, mas não vê uma
+    // linha de SQL. Aqui o filtro é nosso, e `frotaObrigatoria()` recusa correr
+    // fora de uma frota — é o que impede estas somas de atravessarem clientes.
+    const frota = frotaObrigatoria();
+
     const granularity = pickGranularity(from, to);
     const bucketFormat = granularity === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
 
@@ -195,7 +203,8 @@ export const analyticsRepository = {
           TO_CHAR(week_start, ${bucketFormat})   AS bucket,
           CAST(SUM(gross_revenue) AS FLOAT)      AS total
         FROM weekly_settlements
-        WHERE status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
+        WHERE fleet_id = ${frota}
+          AND status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
@@ -206,14 +215,16 @@ export const analyticsRepository = {
       prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(DISTINCT user_id)::int AS count
         FROM weekly_settlements
-        WHERE status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
+        WHERE fleet_id = ${frota}
+          AND status = 'REGISTERED' AND week_end >= ${from} AND week_end <= ${to}
       `,
 
       prisma.$queryRaw<{ name: string; email: string; total: number }[]>`
         SELECT u.name, u.email, CAST(SUM(s.gross_revenue) AS FLOAT) AS total
         FROM weekly_settlements s
         JOIN users u ON u.id = s.user_id
-        WHERE s.status = 'REGISTERED' AND s.week_end >= ${from} AND s.week_end <= ${to}
+        WHERE s.fleet_id = ${frota}
+          AND s.status = 'REGISTERED' AND s.week_end >= ${from} AND s.week_end <= ${to}
         GROUP BY u.id, u.name, u.email
         ORDER BY total DESC
         LIMIT 10
@@ -255,6 +266,13 @@ export const analyticsRepository = {
     expiringUntil: Date,
     lastWeek: { start: Date; end: Date },
   ): Promise<OverviewRaw> {
+    // A frota de quem está a pedir, escrita à mão nas consultas em SQL.
+    //
+    // A camada de `escopo.ts` carimba as consultas do Prisma, mas não vê uma
+    // linha de SQL. Aqui o filtro é nosso, e `frotaObrigatoria()` recusa correr
+    // fora de uma frota — é o que impede estas somas de atravessarem clientes.
+    const frota = frotaObrigatoria();
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -394,7 +412,7 @@ export const analyticsRepository = {
       prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(DISTINCT user_id)::int AS count
         FROM earnings
-        WHERE date >= ${last30}
+        WHERE fleet_id = ${frota} AND date >= ${last30}
       `,
 
       // Passivo real: soma apenas os saldos POSITIVOS. Um motorista com saldo
@@ -424,12 +442,13 @@ export const analyticsRepository = {
             + COALESCE((
                 SELECT SUM(i.accrued) FROM investments i
                 JOIN users iu ON iu.id = i.user_id AND iu.role = 'DRIVER'
-                WHERE i.status = 'ACTIVE'
+                WHERE i.fleet_id = ${frota} AND i.status = 'ACTIVE'
               ), 0)
           AS FLOAT) AS owed_to,
           CAST(COALESCE(SUM(CASE WHEN available < 0 THEN -available ELSE 0 END), 0) AS FLOAT) AS owed_by
         FROM driver_balances b
         JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
+        WHERE b.fleet_id = ${frota}
       `,
 
       // Quem está negativo, por nome. O total já era calculado, mas sem os
@@ -438,7 +457,7 @@ export const analyticsRepository = {
         SELECT b.user_id AS id, b.user_name AS name, CAST(b.available AS FLOAT) AS available
         FROM driver_balances b
         JOIN users u ON u.id = b.user_id AND u.role = 'DRIVER'
-        WHERE b.available < 0
+        WHERE b.fleet_id = ${frota} AND b.available < 0
         ORDER BY b.available ASC
       `,
 
@@ -454,7 +473,8 @@ export const analyticsRepository = {
           CAST(SUM(e.amount) AS FLOAT) AS total_earned
         FROM users u
         JOIN earnings e ON e.user_id = u.id
-        WHERE u.role = 'DRIVER' AND u.status = 'ACTIVE'
+        WHERE u.fleet_id = ${frota}
+          AND u.role = 'DRIVER' AND u.status = 'ACTIVE'
         GROUP BY u.id, u.name, u.email
         HAVING MAX(e.date) < ${stalledSince}
         ORDER BY total_earned DESC

@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { comoSistema } from '../../config/escopo';
 import { AppError } from '../../shared/errors/AppError';
 import { CreateUserInput, UpdateUserInput } from './users.service.types';
 import { CreateUserData, UpdateUserData } from './users.repository.types';
@@ -25,6 +26,42 @@ function isStaff(role?: UserRole) {
   return role === UserRole.ADMIN
       || role === UserRole.MANAGER
       || role === UserRole.SUPPORT;
+}
+
+
+/**
+ * Em que frota nasce quem se regista pelo caminho público.
+ *
+ * ─── UMA REGRA DE TRANSIÇÃO, E ASSUMIDA ─────────────────────────────────────
+ *
+ * O registo público não diz a que frota pertence — não há forma de saber. A
+ * resposta definitiva são os convites: um link gerado pelo gestor, que já traz
+ * a frota dentro. Até lá, esta regra:
+ *
+ *   - Há UMA frota no sistema  → é essa. É o estado de hoje, e nada muda.
+ *   - Há mais do que uma       → recusa, e manda pedir um convite.
+ *
+ * O que isto NÃO faz é escolher a frota do dono quando há várias. Essa seria a
+ * escolha cómoda e é exactamente a errada: um motorista de outra empresa a
+ * cair dentro da frota do dono, com acesso a um painel que não é o dele.
+ *
+ * Esta função desaparece quando os convites existirem.
+ */
+async function frotaDoRegistoPublico(): Promise<string> {
+  // Atravessa frotas de propósito: está a contá-las para decidir.
+  const frotas = await comoSistema(() => prisma.fleet.findMany({
+    where: { active: true },
+    select: { id: true },
+    take: 2,
+  }));
+
+  if (frotas.length === 1) return frotas[0].id;
+
+  throw new AppError(
+    'O registo é por convite. Peça o link à frota com que vai trabalhar.',
+    403,
+    'REGISTO_POR_CONVITE',
+  );
 }
 
 export class UsersService {
@@ -132,6 +169,7 @@ export class UsersService {
     const passwordHash = await bcrypt.hash(input.password, 10);
 
     const data: CreateUserData = {
+      fleetId: await frotaDoRegistoPublico(),
       name: input.name,
       email: input.email,
       password: passwordHash,

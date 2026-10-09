@@ -41,6 +41,11 @@
 // estatísticas e o saldo de um motorista contem histórias diferentes.
 
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
+
+// A frota entra como PARÂMETRO ($3) e nunca colada ao texto do SQL: estas
+// consultas correm por `$queryRawUnsafe`, e um valor concatenado numa string
+// de SQL é por onde entra uma injeção. Ver `escopo.ts`.
 
 /**
  * O lucro, fecho a fecho. Uma definição só, para não haver duas a divergirem.
@@ -139,9 +144,10 @@ export const fleetStatsRepository = {
       FROM weekly_settlements s
       JOIN users u        ON u.id = s.user_id
       LEFT JOIN vehicles v ON v.id = s.vehicle_id
-      WHERE s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
+      WHERE s.fleet_id = $3
+        AND s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
       `,
-      from, to,
+      from, to, frotaObrigatoria(),
     );
 
     return {
@@ -181,11 +187,12 @@ export const fleetStatsRepository = {
       FROM weekly_settlements s
       JOIN users u    ON u.id = s.user_id
       JOIN vehicles v ON v.id = s.vehicle_id
-      WHERE s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
+      WHERE s.fleet_id = $3
+        AND s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
       GROUP BY v.id, v.plate, v.brand, v.model, v.energy_type
       ORDER BY lucro DESC
       `,
-      from, to,
+      from, to, frotaObrigatoria(),
     );
 
     return linhas.map((l) => ({
@@ -219,11 +226,12 @@ export const fleetStatsRepository = {
         CAST(COALESCE(SUM(${LUCRO}), 0)        AS FLOAT) AS lucro
       FROM weekly_settlements s
       JOIN users u ON u.id = s.user_id
-      WHERE s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
+      WHERE s.fleet_id = $3
+        AND s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
       GROUP BY u.id, u.name, u.is_company
       ORDER BY faturacao DESC
       `,
-      from, to,
+      from, to, frotaObrigatoria(),
     );
 
     return linhas.map((l) => ({
@@ -260,11 +268,12 @@ export const fleetStatsRepository = {
         CAST(COALESCE(SUM(s.net_to_driver), 0) AS FLOAT) AS pago
       FROM weekly_settlements s
       JOIN users u ON u.id = s.user_id
-      WHERE s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
+      WHERE s.fleet_id = $3
+        AND s.status = 'REGISTERED' AND s.week_end >= $1 AND s.week_end <= $2
       GROUP BY mes
       ORDER BY mes ASC
       `,
-      from, to,
+      from, to, frotaObrigatoria(),
     );
     return linhas;
   },

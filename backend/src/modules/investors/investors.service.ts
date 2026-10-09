@@ -33,6 +33,7 @@
 // movimentos ACCRUAL é a segunda rede contra pagar o mesmo dia a dobrar.
 
 import bcrypt from 'bcrypt';
+import { frotaObrigatoria } from '../../config/escopo';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
@@ -156,7 +157,8 @@ export class InvestorsService {
 
   private async balanceByAccount(accountId: string, tx: Tx | typeof prisma = prisma) {
     const rows = await tx.$queryRaw<BalanceRow[]>`
-      SELECT ${BALANCE_COLS} FROM investor_balances WHERE account_id = ${accountId}`;
+      SELECT ${BALANCE_COLS} FROM investor_balances
+      WHERE fleet_id = ${frotaObrigatoria()} AND account_id = ${accountId}`;
     if (!rows[0]) throw new AppError('Conta não encontrada.', 404, 'ACCOUNT_NOT_FOUND');
     return toBalance(rows[0]);
   }
@@ -201,7 +203,8 @@ export class InvestorsService {
       // Tranca a conta: o job e um resgate à mesma hora não podem pagar o
       // mesmo dia duas vezes.
       const locked = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM investor_accounts WHERE id = ${accountId} FOR UPDATE`;
+        SELECT id FROM investor_accounts
+        WHERE fleet_id = ${frotaObrigatoria()} AND id = ${accountId} FOR UPDATE`;
       if (!locked[0]) return 0;
 
       const account = await tx.investorAccount.findUniqueOrThrow({ where: { id: accountId } });
@@ -399,7 +402,7 @@ export class InvestorsService {
       SELECT to_char(day, 'YYYY-MM')       AS month,
              CAST(SUM(amount) AS FLOAT)    AS amount
       FROM investor_movements
-      WHERE account_id = ${id} AND kind = 'ACCRUAL'
+      WHERE fleet_id = ${frotaObrigatoria()} AND account_id = ${id} AND kind = 'ACCRUAL'
       GROUP BY 1
       ORDER BY 1 DESC
       LIMIT 24`;
@@ -426,7 +429,8 @@ export class InvestorsService {
     return prisma.$transaction(async (tx) => {
       // Tranca antes de ler o disponível: sem isto, dois pedidos do saldo todo
       // enviados ao mesmo tempo passam os dois.
-      await tx.$queryRaw`SELECT id FROM investor_accounts WHERE id = ${account.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM investor_accounts
+        WHERE fleet_id = ${frotaObrigatoria()} AND id = ${account.id} FOR UPDATE`;
 
       const balance = await this.balanceByAccount(account.id, tx);
       const disponivel = input.bucket === 'CAPITAL'
@@ -536,7 +540,7 @@ export class InvestorsService {
 
     const rows = await prisma.$queryRaw<BalanceRow[]>`
       SELECT ${BALANCE_COLS} FROM investor_balances
-      WHERE (${filter.status ?? null}::text IS NULL OR account_status::text = ${filter.status ?? null})
+      WHERE fleet_id = ${frotaObrigatoria()} AND (${filter.status ?? null}::text IS NULL OR account_status::text = ${filter.status ?? null})
         AND (${termo}::text IS NULL
              OR lower(user_name) LIKE ${termo}
              OR lower(user_email) LIKE ${termo})
@@ -569,13 +573,13 @@ export class InvestorsService {
              CAST(COALESCE(SUM(total), 0) AS FLOAT)              AS total,
              CAST(COALESCE(SUM(pending_capital + pending_earnings), 0) AS FLOAT) AS pending
       FROM investor_balances
-      WHERE account_status = 'ACTIVE'`;
+      WHERE fleet_id = ${frotaObrigatoria()} AND account_status = 'ACTIVE'`;
 
     // O que a empresa deve aos motoristas, para a comparação valer a pena.
     // Lido da view deles — não recalculado aqui.
     const [drv] = await prisma.$queryRaw<{ owed: number }[]>`
       SELECT CAST(COALESCE(SUM(available + invested_active), 0) AS FLOAT) AS owed
-      FROM driver_balances`;
+      FROM driver_balances WHERE fleet_id = ${frotaObrigatoria()}`;
 
     const investors = {
       accounts: Number(inv?.accounts ?? 0),
@@ -610,13 +614,13 @@ export class InvestorsService {
         SELECT user_name AS name, user_email AS email, start_date,
                CAST(total AS FLOAT) AS total
         FROM investor_balances
-        WHERE account_status = 'ACTIVE'
+        WHERE fleet_id = ${frotaObrigatoria()} AND account_status = 'ACTIVE'
         ORDER BY start_date ASC LIMIT 1`,
 
       prisma.$queryRaw<{ name: string; email: string; capital: number }[]>`
         SELECT user_name AS name, user_email AS email, CAST(capital AS FLOAT) AS capital
         FROM investor_balances
-        WHERE account_status = 'ACTIVE'
+        WHERE fleet_id = ${frotaObrigatoria()} AND account_status = 'ACTIVE'
         ORDER BY capital DESC LIMIT 1`,
 
       // Quem mais GANHOU, e não quem mais tem: são perguntas diferentes, e
@@ -626,14 +630,14 @@ export class InvestorsService {
         FROM investor_movements m
         JOIN investor_accounts a ON a.id = m.account_id
         JOIN users u ON u.id = a.user_id
-        WHERE m.bucket = 'EARNINGS' AND m.amount > 0
+        WHERE m.fleet_id = ${frotaObrigatoria()} AND m.bucket = 'EARNINGS' AND m.amount > 0
         GROUP BY u.id, u.name, u.email
         ORDER BY 3 DESC LIMIT 1`,
 
       // O que os depósitos custaram à empresa em juros, desde sempre.
       prisma.$queryRaw<{ total: number }[]>`
         SELECT CAST(COALESCE(SUM(amount), 0) AS FLOAT) AS total
-        FROM investor_movements WHERE kind = 'ACCRUAL'`,
+        FROM investor_movements WHERE fleet_id = ${frotaObrigatoria()} AND kind = 'ACCRUAL'`,
 
       // Os projetos: o que os carros deram, quanto foi para os investidores, e
       // o que sobrou para a empresa. Só os meses JÁ DISTRIBUÍDOS — um mês
@@ -641,7 +645,7 @@ export class InvestorsService {
       prisma.$queryRaw<{ profit: number; investors: number }[]>`
         SELECT CAST(COALESCE(SUM(profit), 0) AS FLOAT)           AS profit,
                CAST(COALESCE(SUM(investors_amount), 0) AS FLOAT) AS investors
-        FROM project_periods WHERE status = 'DISTRIBUTED'`,
+        FROM project_periods WHERE fleet_id = ${frotaObrigatoria()} AND status = 'DISTRIBUTED'`,
     ]);
 
     const p = projetos[0];
@@ -842,7 +846,8 @@ export class InvestorsService {
       : null;
 
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM investor_accounts WHERE id = ${accountId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM investor_accounts
+        WHERE fleet_id = ${frotaObrigatoria()} AND id = ${accountId} FOR UPDATE`;
 
       await tx.investorMovement.create({
         data: {
@@ -1027,7 +1032,8 @@ export class InvestorsService {
         throw new AppError('Este pedido já foi decidido.', 409, 'ALREADY_DECIDED');
       }
 
-      await tx.$queryRaw`SELECT id FROM investor_accounts WHERE id = ${w.accountId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM investor_accounts
+        WHERE fleet_id = ${frotaObrigatoria()} AND id = ${w.accountId} FOR UPDATE`;
 
       const amount = Number(w.amount);
 

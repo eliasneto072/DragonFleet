@@ -18,6 +18,7 @@
 // hora, sem esperar pela madrugada.
 
 import { Prisma } from '@prisma/client';
+import { frotaObrigatoria } from '../../config/escopo';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
 import { logger } from '../../shared/utils/logger';
@@ -139,7 +140,7 @@ async function readMetrics(userId: string, season: Season): Promise<DriverMetric
         CAST(COALESCE(SUM(gross_revenue), 0) AS FLOAT) AS revenue,
         COUNT(*)::int AS weeks
       FROM weekly_settlements
-      WHERE user_id = ${userId}
+      WHERE fleet_id = ${frotaObrigatoria()} AND user_id = ${userId}
         AND status = 'REGISTERED'
         AND week_start >= ${dayToDate(season.start)}::date
         AND week_start <= ${dayToDate(season.end)}::date
@@ -147,7 +148,8 @@ async function readMetrics(userId: string, season: Season): Promise<DriverMetric
     prisma.$queryRaw<{ available: number; invested_active: number }[]>`
       SELECT CAST(available AS FLOAT) AS available,
              CAST(invested_active AS FLOAT) AS invested_active
-      FROM driver_balances WHERE user_id = ${userId}
+      FROM driver_balances
+      WHERE fleet_id = ${frotaObrigatoria()} AND user_id = ${userId}
     `,
     prisma.document.count({ where: { userId, status: 'EXPIRED' } }),
   ]);

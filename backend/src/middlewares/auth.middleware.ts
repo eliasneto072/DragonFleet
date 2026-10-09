@@ -15,6 +15,42 @@ export interface AuthRequest extends Request {
   };
 }
 
+/**
+ * Lê a sessão SE houver, e nunca recusa.
+ *
+ * ─── PORQUE É QUE ISTO EXISTE ───────────────────────────────────────────────
+ *
+ * Porque a frota tem de ser conhecida antes de o pedido correr, e o pedido pode
+ * ser público. O `authMiddleware` responde 401 a quem não traz token, e pô-lo
+ * à frente de tudo fechava o login e o registo.
+ *
+ * Então: este lê o token quando existe, ignora-o quando não existe ou está
+ * estragado, e deixa passar sempre. Quem exige sessão continua a ser o
+ * `authMiddleware` de cada router — isto não autentica ninguém, só identifica
+ * para o âmbito da frota ser definido a tempo.
+ */
+export function lerSessaoSeHouver(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction,
+) {
+  const cabecalho = req.headers.authorization;
+  if (!cabecalho || !cabecalho.startsWith('Bearer ')) return next();
+
+  try {
+    const payload = jwt.verify(
+      cabecalho.slice('Bearer '.length), env.JWT_SECRET,
+    ) as TokenPayload;
+    if (payload.sub) {
+      req.user = { id: String(payload.sub), role: payload.role };
+    }
+  } catch {
+    // Token inválido ou expirado: segue como anónimo. A rota que exigir sessão
+    // responde 401 com a mensagem certa, que é onde essa resposta pertence.
+  }
+  return next();
+}
+
 export function authMiddleware(
   req: AuthRequest,
   res: Response,

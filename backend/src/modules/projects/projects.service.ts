@@ -35,6 +35,7 @@
 // sítios de propósito: toda a gente assume o contrário.
 
 import { Prisma } from '@prisma/client';
+import { frotaObrigatoria } from '../../config/escopo';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
 import { logger } from '../../shared/utils/logger';
@@ -504,7 +505,8 @@ export class ProjectsService {
              CAST(COALESCE(SUM(vehicle_fee), 0) AS FLOAT)       AS vehicle_fee,
              COUNT(*)::int                                      AS n
       FROM weekly_settlements
-      WHERE vehicle_id = ${p.vehicleId}
+      WHERE fleet_id = ${frotaObrigatoria()}
+        AND vehicle_id = ${p.vehicleId}
         AND status = 'REGISTERED'
         AND week_start >= ${monthStart(month)}::date
         AND week_start <  ${nextMonthStart(month)}::date`;
@@ -920,11 +922,11 @@ export class ProjectsService {
     const conta = await contaDe(actor);
 
     return prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM investor_accounts WHERE id = ${conta.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM investor_accounts WHERE fleet_id = ${frotaObrigatoria()} AND id = ${conta.id} FOR UPDATE`;
       // Também o projeto: duas pessoas a subscrever o que falta ao mesmo tempo
       // podiam ultrapassar a meta.
       const p = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM investment_projects WHERE id = ${projectId} FOR UPDATE`;
+        SELECT id FROM investment_projects WHERE fleet_id = ${frotaObrigatoria()} AND id = ${projectId} FOR UPDATE`;
       if (!p[0]) throw new AppError('Projeto não encontrado.', 404, 'PROJECT_NOT_FOUND');
 
       const projeto = await tx.investmentProject.findUniqueOrThrow({ where: { id: projectId } });
@@ -934,7 +936,7 @@ export class ProjectsService {
 
       const [balance] = await tx.$queryRaw<{ available_capital: number }[]>`
         SELECT CAST(available_capital AS FLOAT) AS available_capital
-        FROM investor_balances WHERE account_id = ${conta.id}`;
+        FROM investor_balances WHERE fleet_id = ${frotaObrigatoria()} AND account_id = ${conta.id}`;
 
       const raised = await this.raised(projectId, tx);
       const check = checkSubscription({

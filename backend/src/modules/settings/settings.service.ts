@@ -10,8 +10,6 @@ import { AppError } from '../../shared/errors/AppError';
 
 type Actor = { id: string; role?: UserRole };
 
-const GLOBAL_ID = 'global';
-
 // Whitelist of updatable fields (prevents mass-assignment of id/updatedAt/etc).
 const EDITABLE_KEYS = [
   'companyCommission',
@@ -31,11 +29,23 @@ const EDITABLE_KEYS = [
 export type SettingsInput = Partial<Record<(typeof EDITABLE_KEYS)[number], number | boolean>>;
 
 export class SettingsService {
-  /** Returns the settings row, creating it with defaults on first access. */
+  /**
+   * As definições DESTA frota, criadas com os valores de origem na primeira vez.
+   *
+   * ─── ERA UMA LINHA SÓ, E PASSOU A SER UMA POR FROTA ──────────────────────
+   *
+   * O id fixo "global" fazia sentido enquanto havia uma frota. Com várias, a
+   * comissão, o imposto e os limites são de cada uma — e duas frotas a
+   * partilhar a mesma linha era uma a mudar a comissão da outra.
+   *
+   * O `findFirst` já vem filtrado pela frota do pedido (ver `escopo.ts`), e o
+   * `create` já nasce carimbado com ela. Não há aqui nenhum `where` de frota
+   * escrito à mão, e é de propósito: o que não se escreve não se esquece.
+   */
   async get() {
-    const existing = await prisma.systemSettings.findUnique({ where: { id: GLOBAL_ID } });
-    if (existing) return existing;
-    return prisma.systemSettings.create({ data: { id: GLOBAL_ID } });
+    const existente = await prisma.systemSettings.findFirst();
+    if (existente) return existente;
+    return prisma.systemSettings.create({ data: {} });
   }
 
   /** ADMIN-only update. Validates ranges and ignores unknown keys. */
@@ -70,10 +80,10 @@ export class SettingsService {
       throw new AppError('O valor mínimo não pode ser maior que o máximo.', 400, 'INVALID_RANGE');
     }
 
-    // Ensure the row exists, then update
-    await this.get();
+    // Garante que a linha desta frota existe, e altera-a pelo id dela.
+    const atual = await this.get();
     return prisma.systemSettings.update({
-      where: { id: GLOBAL_ID },
+      where: { id: atual.id },
       data: { ...data, updatedBy: actor.id },
     });
   }

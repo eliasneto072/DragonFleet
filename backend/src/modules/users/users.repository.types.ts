@@ -1,6 +1,14 @@
 import { UserRole, UserStatus } from '../../shared/types/enums';
 
 export type CreateUserData = {
+  /**
+   * A frota onde a conta nasce.
+   *
+   * Escrita à mão e não deixada à camada do âmbito (`escopo.ts`) de propósito:
+   * o registo público corre ANTES de haver frota definida — ninguém está
+   * autenticado ainda — e por isso é quem chama que tem de a resolver.
+   */
+  fleetId: string;
   name: string;
   email: string;
   password: string; // já hasheada

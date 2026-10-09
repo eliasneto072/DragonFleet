@@ -3,6 +3,7 @@
 // Data aggregation for reports. Pure data — no PDF concerns here.
 
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
 import {
   UserRole, UserStatus, WithdrawalStatus, EarningPlatform, AdjustmentType,
 } from '../../shared/types/enums';
@@ -110,7 +111,8 @@ export const reportsRepository = {
         SELECT u.name, u.email, CAST(SUM(e.amount) AS FLOAT) AS total
         FROM earnings e
         JOIN users u ON u.id = e.user_id
-        WHERE e.date >= ${from} AND e.date <= ${to}
+        WHERE e.fleet_id = ${frotaObrigatoria()}
+          AND e.date >= ${from} AND e.date <= ${to}
         GROUP BY u.id, u.name, u.email
         ORDER BY total DESC
         LIMIT 10
@@ -119,7 +121,7 @@ export const reportsRepository = {
       prisma.$queryRaw<{ month: string; total: number }[]>`
         SELECT TO_CHAR(date, 'YYYY-MM') AS month, CAST(SUM(amount) AS FLOAT) AS total
         FROM earnings
-        WHERE date >= ${from} AND date <= ${to}
+        WHERE fleet_id = ${frotaObrigatoria()} AND date >= ${from} AND date <= ${to}
         GROUP BY month
         ORDER BY month ASC
       `,

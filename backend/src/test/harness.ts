@@ -106,7 +106,20 @@ export async function resetDb(): Promise<void> {
 
   const list = tables.map((t) => `"public"."${t.tablename}"`).join(', ');
   await testDb.$executeRawUnsafe(`TRUNCATE TABLE ${list} CASCADE`);
+
+  // ─── A frota tem de voltar ────────────────────────────────────────────
+  //
+  // O TRUNCATE leva `fleets` com o resto, e sem uma frota não se consegue
+  // criar nada: a coluna é obrigatória em todas as tabelas. Repô-la aqui
+  // mantém os testes a escrever fixtures como sempre escreveram — o id é o
+  // mesmo que a migração usa, por isso nada mais precisa de saber dela.
+  await testDb.fleet.create({
+    data: { id: FROTA_DE_TESTE, name: 'Frota de teste', slug: 'frota-de-teste' },
+  });
 }
+
+/** A frota onde os testes vivem. O mesmo id que a migração cria. */
+export const FROTA_DE_TESTE = 'fleet_do_dono';
 
 /**
  * Cabeçalho de autenticação para um utilizador.

@@ -28,8 +28,25 @@ import { scheduledPaymentsRouter } from '../modules/scheduled-payments/scheduled
 import { remindersRouter } from '../modules/reminders/reminders.routes';
 import { pendingRouter } from '../modules/pending/pending.routes';
 import { requireArea } from '../middlewares/area.middleware';
+import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
+import { escopoDaFrota } from '../middlewares/escopo.middleware';
 
 const router = Router();
+
+// ─── A frota de quem está a pedir ──────────────────────────────────────────
+//
+// Antes de TUDO. A partir daqui, cada consulta deste pedido sabe a que frota
+// pertence o que vai ler ou escrever — e as que não souberem rebentam, de
+// propósito (ver `config/escopo.ts`).
+//
+// Corre também nas rotas públicas, onde não faz nada: sem sessão não há frota
+// a definir, e as públicas que leem a base de dados — o login, o registo —
+// declaram `comoSistema()` elas próprias.
+//
+// Repara que isto NÃO autentica ninguém. Quem exige sessão continua a ser o
+// `authMiddleware` de cada router. Isto só lê o token, se existir, para saber
+// a frota antes de o resto correr.
+router.use(lerSessaoSeHouver, escopoDaFrota);
 
 // ─── As duas rotas abertas a uma conta de investidor ───────────────────────
 //

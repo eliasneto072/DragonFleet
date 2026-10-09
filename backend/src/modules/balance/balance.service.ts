@@ -22,6 +22,7 @@
 // esquecida noutra, e o painel divergiu das contas individuais.
 
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
 import { AdjustmentType, UserRole } from '../../shared/types/enums';
@@ -136,7 +137,9 @@ export class BalanceService {
           CAST(investment_returns  AS FLOAT) AS investment_returns,
           CAST(invested_active     AS FLOAT) AS invested_active
         FROM driver_balances
-        WHERE user_id = ${userId}
+        -- O id do utilizador já identifica uma frota só, mas o filtro vai na
+        -- mesma: um id vindo de fora deixa de poder ler o saldo de outra.
+        WHERE user_id = ${userId} AND fleet_id = ${frotaObrigatoria()}
       `;
 
       // ensureUserExists já garantiu que o utilizador existe; a linha só falta

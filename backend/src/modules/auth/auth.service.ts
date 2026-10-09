@@ -2,6 +2,7 @@
 import bcrypt from 'bcrypt';
 import { AppError }          from '../../shared/errors/AppError';
 import { usersRepository }   from '../users/users.repository';
+import { comoSistema }       from '../../config/escopo';
 import { IUserPublic }       from '../users/users.types';
 import { LoginInput, LoginResult } from './auth.types';
 import { permissionsService } from '../permissions/permissions.service';
@@ -43,7 +44,13 @@ export class AuthService {
 
   async refresh(refreshToken: string): Promise<{ token: string }> {
     const payload = verifyRefreshToken(refreshToken);
-    const user    = await usersRepository.findById(payload.sub);
+    // ─── ATRAVESSA FROTAS, E TEM DE SER ──────────────────────────────────
+    //
+    // O refresh chega sem token de acesso, por isso ainda não há frota
+    // definida — é esta leitura que a descobriria. Procura UM utilizador por
+    // um id que veio de um refresh token já verificado: não é uma lista, e não
+    // há aqui nada de uma frota a chegar a outra.
+    const user    = await comoSistema(() => usersRepository.findById(payload.sub));
 
     if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     ensureUserCanLogin(user.status);

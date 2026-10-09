@@ -30,6 +30,7 @@
 // retiradas, e fica para um pacote próprio.
 
 import { Prisma } from '@prisma/client';
+import { frotaObrigatoria } from '../../config/escopo';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
 import { logger } from '../../shared/utils/logger';
@@ -232,7 +233,7 @@ async function catchUp(tx: Tx, inv: {
 
 /** Tranca a linha de uma aplicação e devolve-a fresca. */
 async function lockInvestment(tx: Tx, id: string) {
-  await tx.$queryRaw`SELECT id FROM investments WHERE id = ${id} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM investments WHERE fleet_id = ${frotaObrigatoria()} AND id = ${id} FOR UPDATE`;
   const inv = await tx.investment.findUnique({ where: { id } });
   if (!inv) throw new AppError('Aplicação não encontrada.', 404, 'INVESTMENT_NOT_FOUND');
   return inv;
@@ -484,7 +485,7 @@ export class InvestmentsService {
 
     const id = await prisma.$transaction(async (tx) => {
       // Fila por utilizador: ver a nota de concorrência no topo.
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM users WHERE fleet_id = ${frotaObrigatoria()} AND id = ${actor.id} FOR UPDATE`;
 
       const plan = await tx.investmentPlan.findUnique({ where: { id: input.planId } });
       if (!plan || !plan.active) {
@@ -507,7 +508,7 @@ export class InvestmentsService {
       // O MESMO disponível que as retiradas verificam: lido da view, dentro
       // da transação, com a linha já trancada.
       const rows = await tx.$queryRaw<{ available: number }[]>`
-        SELECT CAST(available AS FLOAT) AS available FROM driver_balances WHERE user_id = ${actor.id}
+        SELECT CAST(available AS FLOAT) AS available FROM driver_balances WHERE fleet_id = ${frotaObrigatoria()} AND user_id = ${actor.id}
       `;
       const available = round2(Number(rows[0]?.available ?? 0));
       if (amount > available) {

@@ -2,7 +2,15 @@
 //
 // Agendador central dos jobs do sistema. Usa node-cron.
 
+//
+// ─── OS TRABALHOS CORREM UMA VEZ POR FROTA ──────────────────────────────────
+//
+// Nenhum deles sabe que há frotas, e é de propósito: `porCadaFrota` corre o
+// mesmo código dentro de cada uma, e é a camada do âmbito que trata do resto.
+// Uma frota que rebente não leva as outras atrás.
+
 import cron from 'node-cron';
+import { porCadaFrota } from './por-frota';
 import { runDocumentsExpiryCheck } from './documents-expiry.job';
 import { runInvestmentsAccrual } from './investments-accrual.job';
 import { runInvestorsAccrual } from './investors-accrual.job';
@@ -59,7 +67,7 @@ const INSPECTIONS_SCHEDULE = '10 8 * * *';
 export function startScheduler(): void {
   // Validação de documentos (regra dos 90 dias)
   cron.schedule(DOCUMENTS_EXPIRY_SCHEDULE, () => {
-    runDocumentsExpiryCheck().catch((err) =>
+    porCadaFrota('runDocumentsExpiryCheck', runDocumentsExpiryCheck).catch((err) =>
       console.error('[scheduler] Erro ao correr a verificação de documentos:', err),
     );
   });
@@ -67,7 +75,7 @@ export function startScheduler(): void {
   cron.schedule(
     INVESTMENTS_SCHEDULE,
     () => {
-      runInvestmentsAccrual().catch((err) =>
+      porCadaFrota('runInvestmentsAccrual', runInvestmentsAccrual).catch((err) =>
         console.error('[scheduler] Erro no pagamento diário dos investimentos:', err),
       );
     },
@@ -77,7 +85,7 @@ export function startScheduler(): void {
   cron.schedule(
     INVESTORS_SCHEDULE,
     () => {
-      runInvestorsAccrual().catch((err) =>
+      porCadaFrota('runInvestorsAccrual', runInvestorsAccrual).catch((err) =>
         console.error('[scheduler] Erro no juro diário das contas de investidor:', err),
       );
     },
@@ -87,7 +95,7 @@ export function startScheduler(): void {
   cron.schedule(
     RANKS_SCHEDULE,
     () => {
-      runRanksRecalculation().catch((err) =>
+      porCadaFrota('runRanksRecalculation', runRanksRecalculation).catch((err) =>
         console.error('[scheduler] Erro no recálculo dos níveis:', err),
       );
     },
@@ -97,7 +105,7 @@ export function startScheduler(): void {
   cron.schedule(
     SCHEDULED_PAYMENTS_SCHEDULE,
     () => {
-      runScheduledPayments().catch((err) =>
+      porCadaFrota('runScheduledPayments', runScheduledPayments).catch((err) =>
         console.error('[scheduler] Erro nos pagamentos agendados:', err),
       );
     },
@@ -107,7 +115,7 @@ export function startScheduler(): void {
   cron.schedule(
     REMINDERS_SCHEDULE,
     () => {
-      runReminders().catch((err) =>
+      porCadaFrota('runReminders', runReminders).catch((err) =>
         console.error('[scheduler] Erro nos lembretes:', err),
       );
     },
@@ -117,7 +125,7 @@ export function startScheduler(): void {
   cron.schedule(
     INSPECTIONS_SCHEDULE,
     () => {
-      runInspectionsCheck().catch((err) =>
+      porCadaFrota('runInspectionsCheck', runInspectionsCheck).catch((err) =>
         console.error('[scheduler] Erro no aviso de inspeções:', err),
       );
     },
@@ -126,18 +134,18 @@ export function startScheduler(): void {
 
   // Ao arrancar, os dois pagamentos diários. Um deploy à meia-noite não pode
   // deixar ninguém sem o dia.
-  runInvestmentsAccrual().catch((err) =>
+  porCadaFrota('runInvestmentsAccrual', runInvestmentsAccrual).catch((err) =>
     console.error('[scheduler] Erro no pagamento dos investimentos ao arrancar:', err),
   );
 
-  runInvestorsAccrual().catch((err) =>
+  porCadaFrota('runInvestorsAccrual', runInvestorsAccrual).catch((err) =>
     console.error('[scheduler] Erro no juro dos investidores ao arrancar:', err),
   );
 
   // E os agendamentos, pela mesma razão: um deploy à uma da manhã saltava o
   // dia inteiro. Correr agora é seguro — o job só lança o que estiver vencido,
   // e o que já foi lançado tem a data avançada.
-  runScheduledPayments().catch((err) =>
+  porCadaFrota('runScheduledPayments', runScheduledPayments).catch((err) =>
     console.error('[scheduler] Erro nos pagamentos agendados ao arrancar:', err),
   );
 

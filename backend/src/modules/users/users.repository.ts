@@ -1,3 +1,4 @@
+import { comoSistema } from '../../config/escopo';
 import { prisma } from "../../config/prisma"
 import { logger } from "../../shared/utils/logger"
 import { IUserRepository } from "./users.repository.interfaces"
@@ -200,7 +201,17 @@ export class UsersRepository  implements IUserRepository{
     async findByEmail(email: string): Promise<IUser | null> {
         try{
 
-            return await prisma.user.findUnique({ where: {email} })
+            // ─── ATRAVESSA FROTAS, E TEM DE SER ─────────────────────────
+            //
+            // O email é único no sistema inteiro e é por ele que se entra: no
+            // momento do login ainda não há frota definida — é precisamente
+            // esta consulta que a vai descobrir. Daí o `comoSistema()`, que
+            // declara a travessia em vez de a deixar acontecer por omissão.
+            //
+            // Devolve UMA linha, encontrada por um email que quem pergunta já
+            // escreveu. Não é uma lista, não aceita filtros, e não há por aqui
+            // nada de uma frota a chegar a outra.
+            return await comoSistema(() => prisma.user.findUnique({ where: {email} }))
 
         } catch(err){
             logger.error('Erro ao obter utilizador por email', err)
@@ -212,6 +223,7 @@ export class UsersRepository  implements IUserRepository{
     try {
       return await prisma.user.create({
         data: {
+          fleetId: data.fleetId,
           name: data.name,
           email: data.email,
           password: data.password,
