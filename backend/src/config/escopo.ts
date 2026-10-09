@@ -90,6 +90,23 @@ export function comoSistema<T>(fn: () => T): T {
 }
 
 /**
+ * Fixa uma frota para TUDO o que correr a seguir neste contexto.
+ *
+ * ─── SÓ PARA OS TESTES ──────────────────────────────────────────────────────
+ *
+ * Ao contrário de `comFrota`, isto não envolve uma função: entra na frota e
+ * fica lá. Serve para os testes, onde as fixtures escrevem dezenas de linhas
+ * fora de qualquer pedido e não faz sentido embrulhar cada uma.
+ *
+ * NÃO usar no servidor. Um pedido tem de levar a frota dele e devolvê-la ao
+ * sair, que é o que o `comFrota` garante; com isto, uma frota ficava agarrada
+ * ao contexto e o pedido seguinte podia herdá-la.
+ */
+export function entrarNaFrota(fleetId: string): void {
+  armazem.enterWith({ fleetId, modo: 'frota' });
+}
+
+/**
  * A frota de agora, ou um erro.
  *
  * ─── PARA QUE SERVE ─────────────────────────────────────────────────────────

@@ -33,6 +33,10 @@
 
 import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
+import { comEscopo, entrarNaFrota, comoSistema } from '../config/escopo';
+
+/** A frota onde os testes vivem. O mesmo id que a migração cria. */
+export const FROTA_DE_TESTE = 'fleet_do_dono';
 import { TEST_DATABASE_URL } from './db-url';
 import { generateAccessToken } from '../modules/auth/auth.helpers';
 import { UserRole } from '../shared/types/enums';
@@ -44,10 +48,23 @@ import { UserRole } from '../shared/types/enums';
 // diretamente na base. Aponta ao MESMO sítio que a aplicação — o setup-env
 // garante isso — mas é um cliente separado, para as consultas dos testes não
 // passarem pelo caminho que estão a testar.
-export const testDb = new PrismaClient({
+//
+// ─── AS FIXTURES ESCREVEM DENTRO DA FROTA DE TESTE ──────────────────────────
+//
+// O cliente leva a mesma camada de âmbito da aplicação (`comEscopo`), e o
+// `entrarNaFrota` logo abaixo fixa a frota para tudo o que corra neste
+// processo. Assim as dezenas de fixtures espalhadas pelos testes continuam a
+// escrever como sempre escreveram — sem terem de dizer a frota uma a uma — e
+// as leituras delas veem só o que lá puseram.
+//
+// Fazê-lo aqui e não em cada ficheiro é o que evita setenta e três edições
+// iguais, e setenta e três sítios onde alguém se pode esquecer.
+export const testDb = comEscopo(new PrismaClient({
   datasources: { db: { url: TEST_DATABASE_URL } },
   log: ['warn', 'error'],
-});
+}));
+
+entrarNaFrota(FROTA_DE_TESTE);
 
 /**
  * Aplica as migrações à base de testes.
@@ -113,13 +130,11 @@ export async function resetDb(): Promise<void> {
   // criar nada: a coluna é obrigatória em todas as tabelas. Repô-la aqui
   // mantém os testes a escrever fixtures como sempre escreveram — o id é o
   // mesmo que a migração usa, por isso nada mais precisa de saber dela.
-  await testDb.fleet.create({
+  await comoSistema(() => testDb.fleet.create({
     data: { id: FROTA_DE_TESTE, name: 'Frota de teste', slug: 'frota-de-teste' },
-  });
+  }));
 }
 
-/** A frota onde os testes vivem. O mesmo id que a migração cria. */
-export const FROTA_DE_TESTE = 'fleet_do_dono';
 
 /**
  * Cabeçalho de autenticação para um utilizador.

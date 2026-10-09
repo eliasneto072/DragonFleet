@@ -10,5 +10,17 @@
     "forceConsistentCasingInFileNames": true,
     "typeRoots": ["./src/types", "./node_modules/@types"], // Corrigir o erro na chamada do re.user
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+
+  // Os testes não entram na imagem de produção.
+  //
+  // O `npm run build` compilava `src/test/**` para `dist/`, o que punha os
+  // testes de integração dentro do contentor que serve a API — e, pior, fazia
+  // um erro de tipos numa fixture de teste travar o deploy de código que
+  // estava certo. Foi exactamente o que aconteceu ao acrescentar a frota: as
+  // fixtures ficaram sem o campo novo e o build parou.
+  //
+  // Os testes continuam a correr com `npm test` (o vitest tem a sua própria
+  // compilação e não depende desta lista).
+  "exclude": ["node_modules", "dist", "src/test/**", "**/*.test.ts"]
 }
