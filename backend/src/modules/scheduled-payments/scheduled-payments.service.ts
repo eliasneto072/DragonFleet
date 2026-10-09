@@ -73,7 +73,7 @@ export const scheduledPaymentsService = {
     // Reaproveitar um desligado com o mesmo nome em vez de recusar: quem
     // escreve "Seguro" outra vez quer o "Seguro", não uma mensagem de erro
     // sobre um registo que não vê em lado nenhum.
-    const existente = await prisma.paymentCategory.findUnique({ where: { label: limpo } });
+    const existente = await prisma.paymentCategory.findFirst({ where: { label: limpo } });
     if (existente) {
       if (existente.active) return existente;
       return prisma.paymentCategory.update({ where: { id: existente.id }, data: { active: true } });

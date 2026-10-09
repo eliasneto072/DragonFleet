@@ -190,7 +190,7 @@ export const materialsService = {
     // Reaproveitar um desligado com o mesmo nome em vez de recusar: quem
     // escreve "Óleo 5W30" outra vez quer aquele óleo, não um erro sobre um
     // registo que não vê em lado nenhum. É o mesmo padrão dos tipos de serviço.
-    const existente = await prisma.material.findUnique({ where: { name: nome } });
+    const existente = await prisma.material.findFirst({ where: { name: nome } });
     if (existente) {
       if (existente.active) {
         throw new AppError('Já existe um material com este nome.', 409, 'NAME_IN_USE');
@@ -236,7 +236,7 @@ export const materialsService = {
     if (dados.name !== undefined) {
       const nome = dados.name.trim();
       if (!nome) throw new AppError('Escreva o nome do material.', 400, 'EMPTY_NAME');
-      const outro = await prisma.material.findUnique({ where: { name: nome } });
+      const outro = await prisma.material.findFirst({ where: { name: nome } });
       if (outro && outro.id !== id) {
         throw new AppError('Já existe um material com este nome.', 409, 'NAME_IN_USE');
       }

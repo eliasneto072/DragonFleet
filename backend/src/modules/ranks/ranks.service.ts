@@ -192,7 +192,13 @@ export class RanksService {
       ...(input.perks !== undefined ? { perks: input.perks?.trim() || null } : {}),
     };
 
-    const updated = await prisma.rankConfig.update({ where: { tier }, data });
+    // `updateMany` e não `update`: a chave dos níveis passou a ser a frota MAIS
+    // o nível, e o `update` exige a chave inteira — que este sítio não conhece.
+    // O `updateMany` leva o filtro da frota da camada do âmbito, por isso mexe
+    // só no nível desta frota. A leitura a seguir devolve o que ficou.
+    await prisma.rankConfig.updateMany({ where: { tier }, data });
+    const updated = await prisma.rankConfig.findFirst({ where: { tier } });
+    if (!updated) throw new AppError('Nível não encontrado.', 404, 'NOT_FOUND');
     logger.info(`[ranks] ${actor.id} alterou o nível ${tier}`);
     return toConfigPublic(updated as never);
   }

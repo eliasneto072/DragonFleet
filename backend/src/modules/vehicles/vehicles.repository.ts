@@ -61,7 +61,11 @@ export class VehiclesRepository implements IVehicleRepository {
 
   async findByPlate(plate: string): Promise<IVehicle | null> {
     try {
-      const row = await prisma.vehicle.findUnique({
+      // `findFirst` e não `findUnique`: a unicidade passou a ser POR FROTA
+      // (`@@unique([fleetId, …])`), e o `findUnique` exige a chave inteira —
+      // que este sítio não conhece. O `findFirst` leva o filtro da frota da
+      // camada do âmbito, por isso procura só dentro dela, que é o certo.
+      const row = await prisma.vehicle.findFirst({
         where: { plate },
       });
       // findByPlate devolve o registo completo (inclui campos fora do

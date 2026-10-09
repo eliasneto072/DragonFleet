@@ -233,7 +233,7 @@ export const bookingsService = {
     // Reaproveitar um desligado com o mesmo nome em vez de recusar — quem
     // escreve "Pneus" outra vez quer o "Pneus", não um erro sobre um registo
     // que não vê em lado nenhum.
-    const existente = await prisma.serviceType.findUnique({ where: { label: limpo } });
+    const existente = await prisma.serviceType.findFirst({ where: { label: limpo } });
     if (existente) {
       return existente.active
         ? existente

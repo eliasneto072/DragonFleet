@@ -495,7 +495,8 @@ export class InvestmentsService {
         throw new AppError(`O valor mínimo deste plano é ${eur(num(plan.minAmount))}.`, 400, 'BELOW_MIN_AMOUNT');
       }
       if (plan.minRank && tierIndex(meuTier) < tierIndex(plan.minRank as Tier)) {
-        const nivel = await tx.rankConfig.findUnique({
+        // `findFirst`: a chave dos níveis é agora a frota mais o nível.
+        const nivel = await tx.rankConfig.findFirst({
           where: { tier: plan.minRank }, select: { label: true },
         });
         throw new AppError(
