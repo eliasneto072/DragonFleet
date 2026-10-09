@@ -33,6 +33,7 @@
 // movimentos ACCRUAL é a segunda rede contra pagar o mesmo dia a dobrar.
 
 import bcrypt from 'bcrypt';
+import type { Transacao } from '../../config/prisma';
 import { frotaObrigatoria } from '../../config/escopo';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
@@ -46,7 +47,9 @@ import {
 } from './investors.math';
 
 type Actor = { id: string; role?: UserRole };
-type Tx = Prisma.TransactionClient;
+// O tipo vem do cliente a sério, que leva a camada do âmbito.
+// Ver a nota em `config/prisma.ts`.
+type Tx = Transacao;
 type Bucket = 'CAPITAL' | 'EARNINGS';
 
 const eur = (n: number) =>

@@ -31,3 +31,27 @@ const globalParaPrisma = globalThis as unknown as {
 export const prisma = globalParaPrisma.prisma ?? criar();
 
 if (process.env.NODE_ENV !== 'production') globalParaPrisma.prisma = prisma;
+
+/** O cliente da base de dados, já com o âmbito aplicado. */
+export type ClientePrisma = typeof prisma;
+
+/**
+ * O que uma função que trabalha dentro de uma transação deve receber.
+ *
+ * ─── PORQUE É QUE NÃO SERVE O `Prisma.TransactionClient` ────────────────────
+ *
+ * Esse é o tipo da transação de um cliente SEM extensões. A partir do momento
+ * em que o cliente leva a camada do âmbito (`$extends`), o `tx` que o
+ * `$transaction` entrega é de outro tipo — mais rico, e incompatível com
+ * aquele. Quem tivesse os parâmetros escritos como `Prisma.TransactionClient`
+ * deixava de compilar, mesmo estando correto.
+ *
+ * Aqui o tipo é DERIVADO do cliente a sério, com os métodos que não existem
+ * dentro de uma transação removidos. Como o cliente completo tem tudo isto e
+ * mais, também encaixa — e por isso a mesma função serve para ser chamada
+ * dentro ou fora de uma transação, que é como estes serviços já funcionavam.
+ */
+export type Transacao = Omit<
+  ClientePrisma,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;

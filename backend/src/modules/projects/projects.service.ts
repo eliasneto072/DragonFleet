@@ -35,6 +35,7 @@
 // sítios de propósito: toda a gente assume o contrário.
 
 import { Prisma } from '@prisma/client';
+import type { Transacao } from '../../config/prisma';
 import { frotaObrigatoria } from '../../config/escopo';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
@@ -46,7 +47,9 @@ import {
 } from './projects.math';
 
 type Actor = { id: string; role?: UserRole };
-type Tx = Prisma.TransactionClient;
+// O tipo vem do cliente a sério, que leva a camada do âmbito.
+// Ver a nota em `config/prisma.ts`.
+type Tx = Transacao;
 
 /**
  * A forma mínima de uma participação para as contas do dinheiro.

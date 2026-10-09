@@ -30,6 +30,7 @@
 // retiradas, e fica para um pacote próprio.
 
 import { Prisma } from '@prisma/client';
+import type { Transacao } from '../../config/prisma';
 import { frotaObrigatoria } from '../../config/escopo';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
@@ -45,7 +46,9 @@ import { ranksService } from '../ranks/ranks.service';
 import { tierIndex, type Tier } from '../ranks/ranks.math';
 
 type Actor = { id: string; role?: UserRole };
-type Tx = Prisma.TransactionClient;
+// O tipo vem do cliente a sério, que leva a camada do âmbito.
+// Ver a nota em `config/prisma.ts`.
+type Tx = Transacao;
 
 const eur = (n: number) =>
   new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(n || 0);
