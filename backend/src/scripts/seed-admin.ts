@@ -30,6 +30,7 @@
 // fazer numa imagem de produção.
 
 import 'dotenv/config';
+import { comFrota, comoSistema } from '../config/escopo';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
@@ -65,7 +66,26 @@ async function main() {
     process.exit(1);
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  // ─── O SEED CORRE FORA DE QUALQUER PEDIDO ──────────────────────────────
+  //
+  // Não há sessão, logo não há frota — e sem frota as consultas rebentam, que é
+  // o que `escopo.ts` promete fazer. Então declara-se: este script trabalha
+  // dentro da primeira frota da plataforma, que é a do dono.
+  //
+  // Se não houver nenhuma, a migração ainda não correu. Dizê-lo é melhor do que
+  // criar uma frota aqui às escondidas.
+  const frota = await comoSistema(() => prisma.fleet.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true },
+  }));
+  if (!frota) {
+    console.error('[seed-admin] Não existe nenhuma frota. Corra as migrações primeiro.');
+    process.exit(1);
+  }
+  console.log(`[seed-admin] A trabalhar na frota: ${frota.name}`);
+
+  const existing = await comFrota(frota.id, () =>
+    prisma.user.findUnique({ where: { email } }));
   if (existing) {
     console.log(`[seed-admin] Utilizador já existe: ${email} (nada a fazer).`);
     return;
@@ -73,9 +93,9 @@ async function main() {
 
   const hash = await bcrypt.hash(password, 10);
 
-  const user = await prisma.user.create({
+  const user = await comFrota(frota.id, () => prisma.user.create({
     data: { name, email, password: hash, role: 'ADMIN', status: 'ACTIVE' },
-  });
+  }));
 
   // Nunca imprimir a password. Mostrar apenas dados não sensíveis.
   console.log('[seed-admin] Admin criado com sucesso!');

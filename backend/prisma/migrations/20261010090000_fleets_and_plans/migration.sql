@@ -847,3 +847,66 @@ LEFT JOIN (
   SELECT "account_id", SUM("amount") AS total, COUNT(*)::int AS n
   FROM "project_shares" WHERE "status" = 'ACTIVE' GROUP BY "account_id"
 ) prj ON prj."account_id" = a."id";
+
+-- ═══ 9. O valor por omissão que NÃO salva ninguém ══════════════════════════
+--
+-- ─── PORQUE É QUE A COLUNA TEM UM VALOR POR OMISSÃO VAZIO ──────────────────
+--
+-- Por causa dos tipos. Com a coluna obrigatória e sem omissão, o Prisma passa
+-- a exigir `fleetId` escrito à mão em TODAS as criações do código — e o código
+-- não o sabe, nem tem de saber: quem o preenche é a camada em `escopo.ts`, em
+-- tempo de execução. Sem omissão, o projeto deixava de compilar em dezenas de
+-- sítios que estão certos.
+--
+-- E porque é que o valor é a string VAZIA, e não a frota do dono:
+--
+-- Porque uma escrita que escape à camada do âmbito TEM DE FALHAR, e não de
+-- aterrar em silêncio na frota de alguém. Com '' a chave estrangeira recusa a
+-- linha — não existe nenhuma frota com esse id — e o erro aparece no momento,
+-- alto e claro. Com a frota do dono por omissão, a mesma distração escreveria
+-- dados de um cliente na conta de outro sem ninguém dar por nada.
+--
+-- Ou seja: o valor por omissão existe para o compilador, e está escolhido para
+-- nunca chegar a ser gravado.
+
+ALTER TABLE "users" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "earnings" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "vehicles" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "vehicle_assignments" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "notifications" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "documents" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "withdrawals" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "bank_accounts" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "balance_adjustments" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "payment_categories" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "scheduled_payments" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "reminders" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "support_tickets" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "ticket_replies" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "companies" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "system_settings" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "weekly_settlements" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "settlement_revisions" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investment_plans" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investment_plan_rates" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investments" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investment_accruals" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "rank_configs" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "driver_ranks" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "rank_events" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investor_accounts" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investor_rates" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investor_movements" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investor_withdrawals" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "investment_projects" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "project_shares" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "project_periods" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "project_expenses" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "project_updates" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "staff_permissions" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "workshops" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "service_types" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "bookings" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "booking_files" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "materials" ALTER COLUMN "fleet_id" SET DEFAULT '';
+ALTER TABLE "stock_moves" ALTER COLUMN "fleet_id" SET DEFAULT '';

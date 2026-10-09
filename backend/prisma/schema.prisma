@@ -194,7 +194,7 @@ model User {
   /// saber se está ligada. As outras quarenta ficam com a coluna e a chave
   /// estrangeira na base de dados — quarenta listas inversas aqui não serviam
   /// ninguém e deixavam o ficheiro ilegível.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   fleet   Fleet  @relation(fields: [fleetId], references: [id])
   name      String
   email     String     @unique
@@ -295,7 +295,7 @@ model Earning {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   amount    Decimal         @db.Decimal(12, 2)
   date      DateTime        @db.Date
   platform  EarningPlatform
@@ -335,7 +335,7 @@ model Vehicle {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   brand            String
   model            String
   plate            String
@@ -393,7 +393,7 @@ model VehicleAssignment {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   vehicleId String    @map("vehicle_id")
   userId    String?   @map("user_id")
   startedAt DateTime  @default(now()) @map("started_at")
@@ -413,7 +413,7 @@ model Notification {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   title     String
   message   String
   read      Boolean  @default(false)
@@ -433,7 +433,7 @@ model Document {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   type    DocumentType
   fileUrl String         @map("file_url")
   fileKey String         @map("file_key")
@@ -465,7 +465,7 @@ model Withdrawal {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   amount      Decimal          @db.Decimal(12, 2)
   status      WithdrawalStatus @default(PENDING)
   notes       String?
@@ -547,7 +547,7 @@ model BankAccount {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId String @map("user_id")
 
   /// O nome que o motorista dá à conta ("Millennium", "conta da empresa").
@@ -597,7 +597,7 @@ model BalanceAdjustment {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   amount    Decimal        @db.Decimal(12, 2) // sempre positivo; o sinal vem do type
   type      AdjustmentType
   reason    String
@@ -639,7 +639,7 @@ model PaymentCategory {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   label     String
   /// Desligada em vez de apagada: os agendamentos antigos continuam a
   /// apontar para ela, e apagá-la deixaria o histórico a falar de um tipo que
@@ -680,7 +680,7 @@ model ScheduledPayment {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId      String           @map("user_id")
   type        AdjustmentType
   amount      Decimal          @db.Decimal(12, 2)
@@ -743,7 +743,7 @@ model Reminder {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   title String
   notes String?
 
@@ -773,7 +773,7 @@ model SupportTicket {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   subject   String
   category  TicketCategory
   message   String
@@ -796,7 +796,7 @@ model TicketReply {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   message   String
   ticketId  String   @map("ticket_id")
   authorId  String   @map("author_id")
@@ -823,7 +823,7 @@ model Company {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   name   String
   /// Inativa desaparece das escolhas novas mas continua a explicar o passado.
   /// Apagar arrancaria a sociedade dos recibos já emitidos.
@@ -850,7 +850,7 @@ model SystemSettings {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   companyCommission         Int      @default(15) // %
   /// Imposto do Estado sobre a faturação TVDE, em pontos percentuais.
   /// Configurável e não cravado no código: o Estado altera taxas, e no dia em
@@ -900,7 +900,7 @@ model WeeklySettlement {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId    String  @map("user_id")
   vehicleId String? @map("vehicle_id")
 
@@ -1035,7 +1035,7 @@ model SettlementRevision {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   settlementId String @map("settlement_id")
 
   /// Quem fez a correção. Só ADMIN, garantido no serviço.
@@ -1126,7 +1126,7 @@ model InvestmentPlan {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   name        String
   description String?
   type        InvestmentPlanType
@@ -1172,7 +1172,7 @@ model InvestmentPlanRate {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   planId        String   @map("plan_id")
   annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
   effectiveFrom DateTime @map("effective_from") @db.Date
@@ -1191,7 +1191,7 @@ model Investment {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId    String   @map("user_id")
   planId    String   @map("plan_id")
 
@@ -1248,7 +1248,7 @@ model InvestmentAccrual {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   investmentId String   @map("investment_id")
   day          DateTime @db.Date
   /// A taxa que se aplicou neste dia. Guardada para o extrato explicar o valor.
@@ -1312,7 +1312,7 @@ enum RankEventKind {
 /// As metas e os benefícios de cada nível. Uma linha por nível, sempre cinco.
 model RankConfig {
   /// A frota a que isto pertence. Ver `escopo.ts`.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   /// A chave passou a ser a frota MAIS o nível: cada frota tem os seus
   /// cinco níveis, com as metas e as vantagens dela.
   tier  RankTier
@@ -1357,7 +1357,7 @@ model DriverRank {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
 
   /// O que vale hoje: o maior entre o conquistado e o garantido.
   tier       RankTier @default(TIER_1)
@@ -1395,7 +1395,7 @@ model RankEvent {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId     String        @map("user_id")
   kind       RankEventKind
   tier       RankTier
@@ -1455,7 +1455,7 @@ model InvestorAccount {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId String @unique @map("user_id")
 
   /// Primeiro dia que pode render.
@@ -1495,7 +1495,7 @@ model InvestorRate {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   accountId     String   @map("account_id")
   effectiveFrom DateTime @map("effective_from") @db.Date
   annualRate    Decimal  @map("annual_rate") @db.Decimal(6, 3)
@@ -1515,7 +1515,7 @@ model InvestorMovement {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   accountId String @map("account_id")
 
   /// Dia civil em Lisboa a que o movimento pertence. O juro do dia 30 é
@@ -1554,7 +1554,7 @@ model InvestorWithdrawal {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   accountId String         @map("account_id")
   bucket    InvestorBucket
   amount    Decimal        @db.Decimal(12, 2)
@@ -1625,7 +1625,7 @@ model InvestmentProject {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   name        String
   description String?
 
@@ -1685,7 +1685,7 @@ model ProjectShare {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   projectId String @map("project_id")
   accountId String @map("account_id")
 
@@ -1722,7 +1722,7 @@ model ProjectPeriod {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   projectId String   @map("project_id")
   /// Sempre o dia 1 do mês.
   month     DateTime @db.Date
@@ -1762,7 +1762,7 @@ model ProjectExpense {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   projectId   String   @map("project_id")
   month       DateTime @db.Date
   amount      Decimal  @db.Decimal(12, 2)
@@ -1809,7 +1809,7 @@ model ProjectUpdate {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   projectId String @map("project_id")
 
   stage ProjectUpdateStage @default(OTHER)
@@ -1884,7 +1884,7 @@ model StaffPermission {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   userId String      @map("user_id")
   area   StaffArea
   access StaffAccess @default(NONE)
@@ -1911,7 +1911,7 @@ model Workshop {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   name    String
   kind    String  @default("OFICINA")   // OFICINA | INSPECAO | PNEUS | OUTRO
   address String?
@@ -1943,7 +1943,7 @@ model ServiceType {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   label String
 
   /// Marca os que são inspeção periódica, para o sistema poder actualizar a
@@ -1981,7 +1981,7 @@ model Booking {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   vehicleId String @map("vehicle_id")
 
   /// Quem tinha o carro quando isto foi marcado. Nulo se o carro não estava
@@ -2060,7 +2060,7 @@ model BookingFile {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   bookingId String          @map("booking_id")
   kind      BookingFileKind
   fileUrl   String          @map("file_url")
@@ -2121,7 +2121,7 @@ model Material {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   name String
   /// A referência do fornecedor, se houver. Serve para procurar.
   sku  String?
@@ -2173,7 +2173,7 @@ model StockMove {
 
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
-  fleetId String @map("fleet_id")
+  fleetId String @default("") @map("fleet_id")
   materialId String        @map("material_id")
   kind       StockMoveKind
 
