@@ -41,7 +41,7 @@ export async function porCadaFrota(
   // não devolvam nada obrigava a embrulhar metade deles por nada.
   tarefa: () => Promise<unknown>,
 ): Promise<{ ok: number; falhas: number }> {
-  const frotas = await comoSistema(() => prisma.fleet.findMany({
+  const frotas = await comoSistema(async () => prisma.fleet.findMany({
     where: { active: true },
     select: { id: true, name: true },
     orderBy: { createdAt: 'asc' },
@@ -54,7 +54,7 @@ export async function porCadaFrota(
     try {
       // O `await` tem de estar DENTRO do comFrota: sair dele antes de a
       // promessa resolver deixava o resto da tarefa fora do âmbito.
-      await comFrota(f.id, () => tarefa());
+      await comFrota(f.id, async () => await tarefa());
       ok += 1;
     } catch (erro) {
       falhas += 1;

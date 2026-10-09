@@ -49,7 +49,7 @@ function isStaff(role?: UserRole) {
  */
 async function frotaDoRegistoPublico(): Promise<string> {
   // Atravessa frotas de propósito: está a contá-las para decidir.
-  const frotas = await comoSistema(() => prisma.fleet.findMany({
+  const frotas = await comoSistema(async () => prisma.fleet.findMany({
     where: { active: true },
     select: { id: true },
     take: 2,

@@ -66,7 +66,7 @@ export async function escopoDaFrota(
 
     // Esta leitura é a única que corre ANTES de haver frota, e por isso é a
     // única que tem de a atravessar. Lê um utilizador pelo id — não uma lista.
-    const u = await comoSistema(() => prisma.user.findUnique({
+    const u = await comoSistema(async () => await prisma.user.findUnique({
       where: { id: req.user!.id },
       select: {
         fleetId: true,
@@ -95,7 +95,10 @@ export async function escopoDaFrota(
     // Tudo o que vier a seguir — middlewares, rotas, serviços, e o que eles
     // esperarem — corre dentro desta frota. É o `next()` lá dentro que faz a
     // cadeia inteira herdar o âmbito.
-    return comFrota(u.fleetId, () => next());
+    //
+    // O `await` mantém o `try/catch` útil: um erro atirado em baixo volta aqui
+    // em vez de ficar numa promessa que ninguém apanha.
+    return await comFrota(u.fleetId, () => { next(); });
   } catch (erro) {
     return next(erro);
   }

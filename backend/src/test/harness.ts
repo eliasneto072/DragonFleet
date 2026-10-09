@@ -130,7 +130,7 @@ export async function resetDb(): Promise<void> {
   // criar nada: a coluna é obrigatória em todas as tabelas. Repô-la aqui
   // mantém os testes a escrever fixtures como sempre escreveram — o id é o
   // mesmo que a migração usa, por isso nada mais precisa de saber dela.
-  await comoSistema(() => testDb.fleet.create({
+  await comoSistema(async () => await testDb.fleet.create({
     data: { id: FROTA_DE_TESTE, name: 'Frota de teste', slug: 'frota-de-teste' },
   }));
 }

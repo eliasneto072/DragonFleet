@@ -63,10 +63,28 @@ export function escopoAtual(): Escopo | null {
   return armazem.getStore() ?? null;
 }
 
-/** Corre `fn` dentro de uma frota. É o caso normal: um pedido autenticado. */
-export function comFrota<T>(fleetId: string, fn: () => T): T {
+/**
+ * Corre `fn` dentro de uma frota. É o caso normal: um pedido autenticado.
+ *
+ * ─── O `await` É AQUI DENTRO, E ISSO É O PONTO ──────────────────────────────
+ *
+ * Uma consulta do Prisma é PREGUIÇOSA: `prisma.user.findUnique(...)` não vai à
+ * base de dados — devolve uma promessa que só arranca quando alguém espera por
+ * ela. Escrito assim:
+ *
+ *     await comFrota(id, () => prisma.user.findUnique(…))   // ERRADO
+ *
+ * a consulta nasce dentro da frota mas só CORRE depois de o `run` ter saído, e
+ * chega à camada sem frota nenhuma. O sintoma é bonito de ver e difícil de
+ * adivinhar: "correu fora de qualquer frota", numa linha que está visivelmente
+ * dentro de um `comFrota`.
+ *
+ * Por isso a espera está aqui, uma vez, em vez de ficar à responsabilidade de
+ * quem chama. Assim as duas formas funcionam, e não há forma de errar.
+ */
+export async function comFrota<T>(fleetId: string, fn: () => T | Promise<T>): Promise<T> {
   if (!fleetId) throw new Error('[escopo] comFrota() sem frota');
-  return armazem.run({ fleetId, modo: 'frota' }, fn);
+  return armazem.run({ fleetId, modo: 'frota' }, async () => await fn());
 }
 
 /**
@@ -75,8 +93,9 @@ export function comFrota<T>(fleetId: string, fn: () => T): T {
  * Para o painel do dono. As escritas continuam a precisar de `fleetId` escrito
  * à mão — ver a nota em `aplicarEscrita`.
  */
-export function comoDono<T>(fn: () => T): T {
-  return armazem.run({ fleetId: null, modo: 'dono' }, fn);
+export async function comoDono<T>(fn: () => T | Promise<T>): Promise<T> {
+  // A espera é aqui dentro — ver a nota em `comFrota`.
+  return armazem.run({ fleetId: null, modo: 'dono' }, async () => await fn());
 }
 
 /**
@@ -85,8 +104,9 @@ export function comoDono<T>(fn: () => T): T {
  * Para o arranque e para os trabalhos agendados ANTES de escolherem a frota —
  * tipicamente para listarem as frotas e depois correrem `comFrota` em cada uma.
  */
-export function comoSistema<T>(fn: () => T): T {
-  return armazem.run({ fleetId: null, modo: 'sistema' }, fn);
+export async function comoSistema<T>(fn: () => T | Promise<T>): Promise<T> {
+  // A espera é aqui dentro — ver a nota em `comFrota`.
+  return armazem.run({ fleetId: null, modo: 'sistema' }, async () => await fn());
 }
 
 /**

@@ -50,7 +50,7 @@ export class AuthService {
     // definida — é esta leitura que a descobriria. Procura UM utilizador por
     // um id que veio de um refresh token já verificado: não é uma lista, e não
     // há aqui nada de uma frota a chegar a outra.
-    const user    = await comoSistema(() => usersRepository.findById(payload.sub));
+    const user    = await comoSistema(async () => await usersRepository.findById(payload.sub));
 
     if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     ensureUserCanLogin(user.status);

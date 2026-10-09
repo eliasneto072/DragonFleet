@@ -211,7 +211,7 @@ export class UsersRepository  implements IUserRepository{
             // Devolve UMA linha, encontrada por um email que quem pergunta já
             // escreveu. Não é uma lista, não aceita filtros, e não há por aqui
             // nada de uma frota a chegar a outra.
-            return await comoSistema(() => prisma.user.findUnique({ where: {email} }))
+            return await comoSistema(async () => await prisma.user.findUnique({ where: {email} }))
 
         } catch(err){
             logger.error('Erro ao obter utilizador por email', err)

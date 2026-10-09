@@ -74,7 +74,7 @@ async function main() {
   //
   // Se não houver nenhuma, a migração ainda não correu. Dizê-lo é melhor do que
   // criar uma frota aqui às escondidas.
-  const frota = await comoSistema(() => prisma.fleet.findFirst({
+  const frota = await comoSistema(async () => await prisma.fleet.findFirst({
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true },
   }));
@@ -84,8 +84,8 @@ async function main() {
   }
   console.log(`[seed-admin] A trabalhar na frota: ${frota.name}`);
 
-  const existing = await comFrota(frota.id, () =>
-    prisma.user.findUnique({ where: { email } }));
+  const existing = await comFrota(frota.id, async () =>
+    await prisma.user.findUnique({ where: { email } }));
   if (existing) {
     console.log(`[seed-admin] Utilizador já existe: ${email} (nada a fazer).`);
     return;
@@ -93,7 +93,7 @@ async function main() {
 
   const hash = await bcrypt.hash(password, 10);
 
-  const user = await comFrota(frota.id, () => prisma.user.create({
+  const user = await comFrota(frota.id, async () => await prisma.user.create({
     data: { name, email, password: hash, role: 'ADMIN', status: 'ACTIVE' },
   }));
 
