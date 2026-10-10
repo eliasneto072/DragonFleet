@@ -1,6 +1,7 @@
 import { app } from './app';
 import { assertEnv, env } from './config/env';
 import { startScheduler } from './jobs/scheduler';
+import { garantirDono } from './config/arranque';
 
 // Verifica a configuração ANTES de abrir a porta.
 //
@@ -21,4 +22,17 @@ app.listen(PORT, '0.0.0.0', () => {
 
   // Inicia os jobs agendados (ex.: validade de documentos — regra dos 90 dias).
   startScheduler();
+
+  // A plataforma tem de ter dono — ver `config/arranque.ts`.
+  //
+  // DEPOIS de abrir a porta e não antes, de propósito: se a base de dados
+  // estiver lenta ou em baixo no momento do arranque, o servidor sobe na mesma
+  // e o health check do Render passa. A alternativa era um deploy a falhar por
+  // causa de uma verificação que se pode fazer um segundo mais tarde.
+  //
+  // O `catch` é pela mesma razão: isto corrige uma coisa, não serve nenhum
+  // pedido. Rebentar aqui derrubava um servidor que está bom.
+  garantirDono().catch((erro) => {
+    console.error('[arranque] Não foi possível confirmar o dono da plataforma:', erro);
+  });
 });
