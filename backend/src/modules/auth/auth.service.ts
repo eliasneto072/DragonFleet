@@ -6,6 +6,9 @@ import { comoSistema }       from '../../config/escopo';
 import { IUserPublic }       from '../users/users.types';
 import { LoginInput, LoginResult } from './auth.types';
 import { permissionsService } from '../permissions/permissions.service';
+import { prisma } from '../../config/prisma';
+import { capacidadeDaFrota } from '../system/capacidade';
+import { idDaFrotaDaCasa } from '../../config/arranque';
 import {
   ensureUserCanLogin,
   generateAccessToken,
@@ -13,6 +16,71 @@ import {
   verifyRefreshToken,
   toPublicUser,
 } from './auth.helpers';
+
+/**
+ * O que o painel precisa de saber sobre a frota da sessão.
+ *
+ * ─── PORQUE É QUE VEM COM O UTILIZADOR E NÃO À PARTE ────────────────────────
+ *
+ * Pela mesma razão que as permissões: o menu precisa disto para saber o que
+ * desenhar. Num segundo pedido, haveria um instante com o menu já desenhado
+ * sem esta resposta — a mostrar menus que a frota não comprou, e a escondê-los
+ * um piscar de olhos depois.
+ *
+ * O que vai aqui é só o que o painel usa para decidir o que mostrar. Nada
+ * disto autoriza coisa nenhuma: quem decide é o servidor, em `plano.middleware`,
+ * que lê o plano da base de dados a cada pedido. Mexer nestes valores no
+ * browser dá um menu bonito que responde 403.
+ */
+export interface FrotaDaSessao {
+  id: string;
+  nome: string;
+  slug: string;
+  /** A frota da casa, e não a de um cliente. */
+  daCasa: boolean;
+  /** Os códigos das funcionalidades que o plano inclui. */
+  funcionalidades: string[];
+  /** `false` com a assinatura expirada: lê-se tudo, não se escreve nada. */
+  podeEscrever: boolean;
+  assinatura: { estado: string; dias: number | null };
+  /** Último dia pago. `null` sem assinatura — é o caso da casa. */
+  terminaEm: string | null;
+}
+
+/**
+ * A frota de uma sessão, pelo id.
+ *
+ * Atravessa frotas de propósito: lê UMA frota, pelo id que a conta de quem
+ * pergunta já tem. Não é uma lista e não aceita filtros.
+ */
+async function frotaDaSessao(fleetId: string): Promise<FrotaDaSessao | null> {
+  const f = await comoSistema(async () => await prisma.fleet.findUnique({
+    where: { id: fleetId },
+    select: {
+      id: true, name: true, slug: true, subscriptionEndsOn: true,
+      plan: { select: { features: true } },
+    },
+  }));
+  if (!f) return null;
+
+  const c = capacidadeDaFrota({
+    features: f.plan?.features ?? null,
+    subscriptionEndsOn: f.subscriptionEndsOn,
+  });
+
+  return {
+    id: f.id,
+    nome: f.name,
+    slug: f.slug,
+    daCasa: f.id === await idDaFrotaDaCasa(),
+    funcionalidades: c.funcionalidades,
+    podeEscrever: c.podeEscrever,
+    assinatura: { estado: c.assinatura.estado, dias: c.assinatura.dias },
+    terminaEm: f.subscriptionEndsOn
+      ? f.subscriptionEndsOn.toISOString().slice(0, 10)
+      : null,
+  };
+}
 
 export class AuthService {
   async login(input: LoginInput): Promise<LoginResult> {
@@ -38,7 +106,15 @@ export class AuthService {
     return {
       token: accessToken,
       refreshToken,
-      user: { ...toPublicUser(user), permissions },
+      user: {
+        ...toPublicUser(user),
+        permissions,
+        // Vai já no login, pela mesma razão das permissões: sem isto haveria
+        // uma janela entre entrar e o primeiro /auth/me em que o painel não
+        // sabe o que a frota comprou — e desenhava menus a mais, para os
+        // esconder um instante depois.
+        frota: await frotaDaSessao(user.fleetId),
+      },
     };
   }
 
@@ -72,12 +148,18 @@ export class AuthService {
    * pode abrir. Vêm da base e não do token: tirar um acesso tem de fazer
    * efeito na próxima página, não na próxima sessão.
    */
-  async me(userId: string): Promise<IUserPublic & { permissions: Record<string, string> }> {
+  async me(userId: string): Promise<
+    IUserPublic & { permissions: Record<string, string>; frota: FrotaDaSessao | null }
+  > {
     const user = await usersRepository.findById(userId);
     if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
 
-    const permissions = await permissionsService.grantsFor(userId, user.role);
-    return { ...user, permissions };
+    const [permissions, frota] = await Promise.all([
+      permissionsService.grantsFor(userId, user.role),
+      frotaDaSessao(user.fleetId),
+    ]);
+
+    return { ...user, permissions, frota };
   }
 }
 

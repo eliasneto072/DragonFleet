@@ -29,7 +29,7 @@ import { queryKeys } from '@/shared/lib/query-keys';
 
 export function DriverLayout() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, tem, frota } = useAuth();
 
   // Admins/managers can preview the driver portal; drivers can't switch.
   const canSwitch = user?.role === 'ADMIN' || user?.role === 'MANAGER';
@@ -133,18 +133,30 @@ export function DriverLayout() {
     (t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS',
   ).length;
 
+  // ── O que a frota comprou ────────────────────────────────────────────────
+  //
+  // O motorista vê menos quando o plano da frota inclui menos. Ao contrário do
+  // painel de administração, aqui o que falta DESAPARECE em vez de levar
+  // cadeado: um cadeado é uma montra, e o motorista não é quem compra o plano
+  // — mostrar-lhe o que a empresa dele não contratou só lhe dá uma pergunta
+  // para fazer a alguém que não lha pode responder.
+  //
+  // Os investimentos são da casa e não se vendem, por isso é a frota que
+  // decide, e não um plano.
   const NAV_GROUPS: readonly NavGroup[] = [
     {
       items: [
         { to: '/app/driver/dashboard', icon: LayoutDashboard, label: 'Início' },
-        {
+        ...(tem('FINANCIAL') ? [{
           to: '/app/driver/withdrawals',
           icon: Wallet,
           label: 'Retiradas',
           badge: retiradasRejeitadas + retiradasPendentes,
-          badgeTone: retiradasRejeitadas > 0 ? 'late' : 'waiting',
-        },
-        { to: '/app/driver/investments', icon: PiggyBank, label: 'Investimentos' },
+          badgeTone: retiradasRejeitadas > 0 ? ('late' as const) : ('waiting' as const),
+        }] : []),
+        ...(frota?.daCasa !== false
+          ? [{ to: '/app/driver/investments', icon: PiggyBank, label: 'Investimentos' }]
+          : []),
       ],
     },
     {
@@ -168,35 +180,35 @@ export function DriverLayout() {
           // ativação é só espera.
           badgeTone: vehicleDocsNeedingAction > 0 ? 'late' : 'waiting',
         },
-        {
+        ...(tem('OFICINA') ? [{
           to: '/app/driver/oficina',
           icon: Wrench,
           label: 'Oficina',
           badge: marcacoesPorResponder > 0 ? marcacoesPorResponder : marcacoesAbertas,
-          badgeTone: marcacoesPorResponder > 0 ? 'late' : 'waiting',
-        },
+          badgeTone: marcacoesPorResponder > 0 ? ('late' as const) : ('waiting' as const),
+        }] : []),
         { to: '/app/driver/profile', icon: User, label: 'Perfil' },
       ],
     },
     {
       title: 'Comunicação',
       items: [
-        {
+        ...(tem('NOTIFICATIONS') ? [{
           to: '/app/driver/notifications',
           icon: Bell,
           label: 'Notificações',
           badge: unreadNotifs,
           // Tom próprio: uma notificação por ler é novidade, não pendência.
           // Em vermelho ou laranja ficaria ao nível de um documento rejeitado.
-          badgeTone: 'new',
-        },
-        {
+          badgeTone: 'new' as const,
+        }] : []),
+        ...(tem('SUPPORT') ? [{
           to: '/app/driver/support',
           icon: MessageCircle,
           label: 'Suporte',
           badge: ticketsAbertos,
-          badgeTone: 'waiting',
-        },
+          badgeTone: 'waiting' as const,
+        }] : []),
       ],
     },
   ];

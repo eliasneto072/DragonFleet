@@ -50,6 +50,7 @@ import { AdminOnly, RequireArea } from '@/features/admin/components/AdminOnly';
 import { SystemLayout } from '@/features/system/components/SystemLayout';
 import { FleetsPage } from '@/features/system/pages/FleetsPage';
 import { PlansPage } from '@/features/system/pages/PlansPage';
+import { PlanoNecessarioPage } from '@/features/admin/pages/PlanoNecessarioPage';
 
 export const router = createBrowserRouter([
 
@@ -130,44 +131,49 @@ export const router = createBrowserRouter([
           // no servidor, isto é para a interface não prometer o que não pode
           // cumprir.
           { path: 'dashboard',      element: <RequireArea area="DASHBOARD"><AdminDashboardPage /></RequireArea> },
-          { path: 'drivers',        element: <RequireArea area="DRIVERS"><DriversPage /></RequireArea> },
-          { path: 'drivers/:id',    element: <RequireArea area="DRIVERS"><DriverDetailPage /></RequireArea> },
-          { path: 'documents',      element: <RequireArea area="DOCUMENTS"><DocumentsAdminPage /></RequireArea> },
-          { path: 'fleet',          element: <RequireArea area="FLEET"><FleetPage /></RequireArea> },
+          { path: 'drivers',        element: <RequireArea area="DRIVERS" funcionalidade="DRIVERS"><DriversPage /></RequireArea> },
+          { path: 'drivers/:id',    element: <RequireArea area="DRIVERS" funcionalidade="DRIVERS"><DriverDetailPage /></RequireArea> },
+          { path: 'documents',      element: <RequireArea area="DOCUMENTS" funcionalidade="DOCUMENTS"><DocumentsAdminPage /></RequireArea> },
+          { path: 'fleet',          element: <RequireArea area="FLEET" funcionalidade="FLEET"><FleetPage /></RequireArea> },
           // Antes de 'fleet/:id' por legibilidade — o React Router já dá
           // prioridade ao segmento estático, mas quem lê o ficheiro não tem
           // de saber isso para perceber que 'lookup' não é um id.
-          { path: 'fleet/lookup',   element: <RequireArea area="FLEET"><AssignmentLookupPage /></RequireArea> },
-          { path: 'fleet/:id',      element: <RequireArea area="FLEET"><VehicleDetailPage /></RequireArea> },
+          { path: 'fleet/lookup',   element: <RequireArea area="FLEET" funcionalidade="FLEET"><AssignmentLookupPage /></RequireArea> },
+          { path: 'fleet/:id',      element: <RequireArea area="FLEET" funcionalidade="FLEET"><VehicleDetailPage /></RequireArea> },
           // A oficina é sobre os carros, por isso vive na área da Frota — a
           // mesma que o servidor exige em `/bookings`.
-          { path: 'oficina',        element: <RequireArea area="FLEET"><BookingsPage /></RequireArea> },
+          { path: 'oficina',        element: <RequireArea area="FLEET" funcionalidade="OFICINA"><BookingsPage /></RequireArea> },
           // O material é dos carros, por isso também na área da Frota.
-          { path: 'material',       element: <RequireArea area="FLEET"><MaterialsPage /></RequireArea> },
-          { path: 'ranks',          element: <RequireArea area="RANKS"><RanksPage /></RequireArea> },
+          { path: 'material',       element: <RequireArea area="FLEET" funcionalidade="MATERIAL"><MaterialsPage /></RequireArea> },
+          { path: 'ranks',          element: <RequireArea area="RANKS" funcionalidade="RANKS"><RanksPage /></RequireArea> },
 
-          { path: 'settlements',    element: <RequireArea area="SETTLEMENTS"><SettlementsPage /></RequireArea> },
+          { path: 'settlements',    element: <RequireArea area="SETTLEMENTS" funcionalidade="SETTLEMENTS"><SettlementsPage /></RequireArea> },
           // Cria fechos, por isso vive na mesma área da faturação.
-          { path: 'importar',       element: <RequireArea area="SETTLEMENTS"><ExpenseImportPage /></RequireArea> },
-          { path: 'financial',      element: <RequireArea area="FINANCIAL"><FinancialPage /></RequireArea> },
+          { path: 'importar',       element: <RequireArea area="SETTLEMENTS" funcionalidade="IMPORTAR"><ExpenseImportPage /></RequireArea> },
+          { path: 'financial',      element: <RequireArea area="FINANCIAL" funcionalidade="FINANCIAL"><FinancialPage /></RequireArea> },
           // Mexe no saldo, por isso vive na mesma área do resto do dinheiro.
-          { path: 'agendamentos',   element: <RequireArea area="FINANCIAL"><ScheduledPaymentsPage /></RequireArea> },
-          { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
-          { path: 'analytics',      element: <RequireArea area="ANALYTICS"><AnalyticsPage /></RequireArea> },
-          { path: 'estatisticas',   element: <RequireArea area="ANALYTICS"><FleetStatsPage /></RequireArea> },
+          { path: 'agendamentos',   element: <RequireArea area="FINANCIAL" funcionalidade="AGENDAMENTOS"><ScheduledPaymentsPage /></RequireArea> },
+          { path: 'green-receipts', element: <RequireArea area="GREEN_RECEIPTS" funcionalidade="GREEN_RECEIPTS"><GreenReceiptsPage /></RequireArea> },
+          { path: 'analytics',      element: <RequireArea area="ANALYTICS" funcionalidade="ANALYTICS"><AnalyticsPage /></RequireArea> },
+          { path: 'estatisticas',   element: <RequireArea area="ANALYTICS" funcionalidade="ESTATISTICAS"><FleetStatsPage /></RequireArea> },
 
-          { path: 'investments',    element: <RequireArea area="INVESTMENTS"><InvestmentsAdminPage /></RequireArea> },
-          { path: 'investors',      element: <RequireArea area="INVESTORS"><InvestorsPage /></RequireArea> },
-          { path: 'projects',       element: <RequireArea area="PROJECTS"><ProjectsPage /></RequireArea> },
+          { path: 'investments',    element: <RequireArea area="INVESTMENTS" soDaCasa><InvestmentsAdminPage /></RequireArea> },
+          { path: 'investors',      element: <RequireArea area="INVESTORS" soDaCasa><InvestorsPage /></RequireArea> },
+          { path: 'projects',       element: <RequireArea area="PROJECTS" soDaCasa><ProjectsPage /></RequireArea> },
 
-          { path: 'notifications',  element: <RequireArea area="NOTIFICATIONS"><NotificationsAdminPage /></RequireArea> },
-          { path: 'support',        element: <RequireArea area="SUPPORT"><SupportAdminPage /></RequireArea> },
-          { path: 'settings',       element: <RequireArea area="SETTINGS"><SettingsPage /></RequireArea> },
+          { path: 'notifications',  element: <RequireArea area="NOTIFICATIONS" funcionalidade="NOTIFICATIONS"><NotificationsAdminPage /></RequireArea> },
+          { path: 'support',        element: <RequireArea area="SUPPORT" funcionalidade="SUPPORT"><SupportAdminPage /></RequireArea> },
+          { path: 'settings',       element: <RequireArea area="SETTINGS" funcionalidade="SETTINGS"><SettingsPage /></RequireArea> },
 
           // A Equipa fica em AdminOnly e não numa área: é onde se distribuem
           // as permissões, e dá-la por permissão seria dar a chave para
           // alguém se dar todas as outras.
           { path: 'team',           element: <AdminOnly><TeamPage /></AdminOnly> },
+
+          // A tela do cadeado. Sem guarda nenhuma de propósito: quem lá chega
+          // é porque uma guarda o mandou para cá, e é aqui que se explica
+          // porquê. Pô-la atrás de uma guarda dava um salto infinito.
+          { path: 'plano/:codigo',  element: <PlanoNecessarioPage /> },
         ],
       },
     ],

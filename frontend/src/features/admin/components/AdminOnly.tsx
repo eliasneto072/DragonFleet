@@ -29,17 +29,44 @@ import type { Access, Area } from '@/shared/lib/areas';
  * nenhuns. É um estado possível — alguém que ainda não foi configurado — e o
  * que ela precisa é de uma frase, não de mais um salto.
  */
-export function RequireArea({ area, nivel = 'VIEW', children }: {
+export function RequireArea({ area, nivel = 'VIEW', funcionalidade, soDaCasa, children }: {
   area: Area;
   nivel?: Access;
+  /**
+   * A funcionalidade do plano a que esta tela pertence.
+   *
+   * Duas condições, e as duas contam: a PESSOA tem de ter permissão na área, e
+   * a FROTA tem de ter comprado a funcionalidade. Quem tem permissão mas cuja
+   * frota não comprou vai para a tela que explica de que plano faz parte — e
+   * não para a primeira tela livre, que seria um salto sem explicação nenhuma.
+   */
+  funcionalidade?: string;
+  /**
+   * Só a frota da casa.
+   *
+   * Para os investimentos, os investidores e os projetos: não estão no
+   * catálogo dos planos porque não se vendem, e por isso não têm
+   * funcionalidade nenhuma que os possa cobrir. Uma frota cliente é mandada
+   * embora sem explicação de plano, porque não há plano nenhum a explicar.
+   */
+  soDaCasa?: boolean;
   children: ReactNode;
 }) {
-  const { user, can } = useAuth();
+  const { user, can, tem, frota } = useAuth();
 
   if (!user) return <Navigate to="/login" replace />;
+
+  if (soDaCasa && frota?.daCasa === false) {
+    return <Navigate to="/app/admin/dashboard" replace />;
+  }
+
+  if (funcionalidade && !tem(funcionalidade)) {
+    return <Navigate to={`/app/admin/plano/${funcionalidade}`} replace />;
+  }
+
   if (can(area, nivel)) return <>{children}</>;
 
-  const destino = primeiraTelaPermitida((a) => can(a));
+  const destino = primeiraTelaPermitida((a) => can(a), tem);
   if (destino) return <Navigate to={destino} replace />;
 
   return (
@@ -62,11 +89,11 @@ export function RequireArea({ area, nivel = 'VIEW', children }: {
  * se dar todas as outras.
  */
 export function AdminOnly({ children }: { children: ReactNode }) {
-  const { user, can } = useAuth();
+  const { user, can, tem } = useAuth();
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'ADMIN') return <>{children}</>;
 
-  const destino = primeiraTelaPermitida((a) => can(a));
+  const destino = primeiraTelaPermitida((a) => can(a), tem);
   return <Navigate to={destino ?? '/app/driver'} replace />;
 }

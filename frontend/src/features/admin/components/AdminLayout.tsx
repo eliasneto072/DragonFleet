@@ -28,7 +28,7 @@ import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
   ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
-  Wrench, Boxes,
+  Wrench, Boxes, Lock, AlertTriangle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
@@ -40,11 +40,46 @@ import { notificationsService } from '@/features/driver/services/notifications.s
 import { queryKeys } from '@/shared/lib/query-keys';
 import type { Area } from '@/shared/lib/areas';
 
+/**
+ * As funcionalidades do catálogo, com o nome e a descrição para a tela do
+ * cadeado. É uma cópia curta do catálogo do servidor — só o que o painel
+ * precisa de mostrar, e nunca o que decide o acesso.
+ */
+export const FUNCIONALIDADES_DO_MENU: { codigo: string; nome: string; descricao: string }[] = [
+  { codigo: 'DRIVERS', nome: 'Motoristas', descricao: 'Fichas dos motoristas, saldos e histórico.' },
+  { codigo: 'DOCUMENTS', nome: 'Documentos', descricao: 'Receber, validar e vigiar as validades.' },
+  { codigo: 'FLEET', nome: 'Frotas', descricao: 'Os carros: atribuições, inspeções e seguros.' },
+  { codigo: 'OFICINA', nome: 'Oficina', descricao: 'Marcações de reparação, oficinas e mecânicos.' },
+  { codigo: 'MATERIAL', nome: 'Material', descricao: 'Stock de peças e consumíveis, com os preços de compra.' },
+  { codigo: 'RANKS', nome: 'Níveis', descricao: 'A escada de níveis dos motoristas e as vantagens de cada um.' },
+  { codigo: 'SETTLEMENTS', nome: 'Faturação', descricao: 'O fecho semanal: o que entrou, o que saiu, o que se credita.' },
+  { codigo: 'IMPORTAR', nome: 'Importar despesas', descricao: 'Carregar ficheiros das plataformas em vez de escrever à mão.' },
+  { codigo: 'FINANCIAL', nome: 'Financeiro', descricao: 'Retiradas, ajustes e movimentos de banca.' },
+  { codigo: 'AGENDAMENTOS', nome: 'Agendamentos', descricao: 'Pagamentos e descontos marcados para datas futuras.' },
+  { codigo: 'GREEN_RECEIPTS', nome: 'Recibos Verdes', descricao: 'Os recibos dos motoristas, por empresa.' },
+  { codigo: 'ANALYTICS', nome: 'Análises', descricao: 'Receitas, margens e evolução ao longo do tempo.' },
+  { codigo: 'ESTATISTICAS', nome: 'Estatísticas', descricao: 'Os números da frota em bruto, por carro e por motorista.' },
+  { codigo: 'NOTIFICATIONS', nome: 'Notificações', descricao: 'Avisos automáticos e mensagens para os motoristas.' },
+  { codigo: 'SUPPORT', nome: 'Suporte', descricao: 'Os pedidos de ajuda dos motoristas, em tickets.' },
+  { codigo: 'SETTINGS', nome: 'Configurações', descricao: 'Comissão, impostos e limites da frota.' },
+  { codigo: 'TEAM', nome: 'Equipa', descricao: 'Contas de gestor e as permissões de cada uma.' },
+];
+
 interface Entrada {
   to: string;
   icon: LucideIcon;
   label: string;
   area: Area;
+  /**
+   * A funcionalidade do plano a que esta entrada pertence.
+   *
+   * Ausente quer dizer "não se vende": é o caso do Dashboard (vai em todos os
+   * planos) e das três entradas de investimento, que são da casa. Para essas
+   * usa-se `soDaCasa` em vez disto.
+   */
+  funcionalidade?: string;
+  /** Só a frota da casa vê esta entrada. Investimentos, investidores, projetos. */
+  soDaCasa?: true;
   /**
    * As pendências que pertencem a ESTA entrada.
    *
@@ -65,25 +100,25 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
     titulo: 'Operação',
     entradas: [
       { to: '/app/admin/dashboard',  icon: LayoutDashboard, label: 'Dashboard',   area: 'DASHBOARD' },
-      { to: '/app/admin/drivers',    icon: Users,           label: 'Motoristas',  area: 'DRIVERS' },
-      { to: '/app/admin/documents',  icon: FileText,        label: 'Documentos',  area: 'DOCUMENTS' },
+      { to: '/app/admin/drivers',    icon: Users,           label: 'Motoristas',  area: 'DRIVERS', funcionalidade: 'DRIVERS' },
+      { to: '/app/admin/documents',  icon: FileText,        label: 'Documentos',  area: 'DOCUMENTS', funcionalidade: 'DOCUMENTS' },
       // As três entradas da Frota repartem as pendências da área entre si.
       {
-        to: '/app/admin/fleet', icon: Car, label: 'Frotas', area: 'FLEET',
+        to: '/app/admin/fleet', icon: Car, label: 'Frotas', area: 'FLEET', funcionalidade: 'FLEET',
         fontes: ['inspections', 'vehiclesPending'],
       },
       {
-        to: '/app/admin/oficina', icon: Wrench, label: 'Oficina', area: 'FLEET',
+        to: '/app/admin/oficina', icon: Wrench, label: 'Oficina', area: 'FLEET', funcionalidade: 'OFICINA',
         fontes: [
           'bookingsPropostas', 'bookingsSemAcompanhante', 'bookingsPorConcluir',
           'bookingsPendentes', 'bookingsAgendadas',
         ],
       },
       {
-        to: '/app/admin/material', icon: Boxes, label: 'Material', area: 'FLEET',
+        to: '/app/admin/material', icon: Boxes, label: 'Material', area: 'FLEET', funcionalidade: 'MATERIAL',
         fontes: ['materialsLow'],
       },
-      { to: '/app/admin/ranks',      icon: Trophy,          label: 'Níveis',      area: 'RANKS' },
+      { to: '/app/admin/ranks',      icon: Trophy,          label: 'Níveis',      area: 'RANKS', funcionalidade: 'RANKS' },
     ],
   },
   {
@@ -93,42 +128,42 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       // "Registo semanal de faturação" quebraria em três linhas. O nome
       // completo é o título da página.
       {
-        to: '/app/admin/settlements', icon: ReceiptText, label: 'Faturação', area: 'SETTLEMENTS',
+        to: '/app/admin/settlements', icon: ReceiptText, label: 'Faturação', area: 'SETTLEMENTS', funcionalidade: 'SETTLEMENTS',
         fontes: ['earningsPending', 'missingSettlements'],
       },
       // A importação não tem pendências próprias: lista vazia para não herdar
       // as da Faturação, que se tratam no ecrã ao lado.
-      { to: '/app/admin/importar',       icon: FileUp,          label: 'Importar',       area: 'SETTLEMENTS', fontes: [] },
+      { to: '/app/admin/importar',       icon: FileUp,          label: 'Importar',       area: 'SETTLEMENTS', funcionalidade: 'IMPORTAR', fontes: [] },
       {
-        to: '/app/admin/financial', icon: DollarSign, label: 'Financeiro', area: 'FINANCIAL',
+        to: '/app/admin/financial', icon: DollarSign, label: 'Financeiro', area: 'FINANCIAL', funcionalidade: 'FINANCIAL',
         fontes: ['withdrawalsPending', 'bankPending'],
       },
       {
-        to: '/app/admin/agendamentos', icon: CalendarClock, label: 'Agendamentos', area: 'FINANCIAL',
+        to: '/app/admin/agendamentos', icon: CalendarClock, label: 'Agendamentos', area: 'FINANCIAL', funcionalidade: 'AGENDAMENTOS',
         fontes: ['scheduledLate'],
       },
-      { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes', area: 'GREEN_RECEIPTS' },
-      { to: '/app/admin/analytics',      icon: TrendingUp,      label: 'Análises',       area: 'ANALYTICS' },
+      { to: '/app/admin/green-receipts', icon: FileSpreadsheet, label: 'Recibos Verdes', area: 'GREEN_RECEIPTS', funcionalidade: 'GREEN_RECEIPTS' },
+      { to: '/app/admin/analytics',      icon: TrendingUp,      label: 'Análises',       area: 'ANALYTICS', funcionalidade: 'ANALYTICS' },
       // Duas entradas na mesma área, e nenhuma tem pendências: sem a lista
       // vazia, uma fonte nova em ANALYTICS acendia as duas.
-      { to: '/app/admin/estatisticas',   icon: Gauge,           label: 'Estatísticas',   area: 'ANALYTICS', fontes: [] },
+      { to: '/app/admin/estatisticas',   icon: Gauge,           label: 'Estatísticas',   area: 'ANALYTICS', funcionalidade: 'ESTATISTICAS', fontes: [] },
     ],
   },
   {
     titulo: 'Investimento',
     entradas: [
-      { to: '/app/admin/investments', icon: PiggyBank, label: 'Investimentos', area: 'INVESTMENTS' },
-      { to: '/app/admin/investors',   icon: Landmark,  label: 'Investidores',  area: 'INVESTORS' },
-      { to: '/app/admin/projects',    icon: Handshake, label: 'Projetos',      area: 'PROJECTS' },
+      { to: '/app/admin/investments', icon: PiggyBank, label: 'Investimentos', area: 'INVESTMENTS', soDaCasa: true },
+      { to: '/app/admin/investors',   icon: Landmark,  label: 'Investidores',  area: 'INVESTORS', soDaCasa: true },
+      { to: '/app/admin/projects',    icon: Handshake, label: 'Projetos',      area: 'PROJECTS', soDaCasa: true },
     ],
   },
   {
     titulo: 'Sistema',
     entradas: [
-      { to: '/app/admin/notifications', icon: Bell,          label: 'Notificações',  area: 'NOTIFICATIONS' },
-      { to: '/app/admin/support',       icon: MessageCircle, label: 'Suporte',       area: 'SUPPORT' },
-      { to: '/app/admin/settings',      icon: Settings,      label: 'Configurações', area: 'SETTINGS' },
-      { to: '/app/admin/team',          icon: ShieldCheck,   label: 'Equipa',        area: 'TEAM' },
+      { to: '/app/admin/notifications', icon: Bell,          label: 'Notificações',  area: 'NOTIFICATIONS', funcionalidade: 'NOTIFICATIONS' },
+      { to: '/app/admin/support',       icon: MessageCircle, label: 'Suporte',       area: 'SUPPORT', funcionalidade: 'SUPPORT' },
+      { to: '/app/admin/settings',      icon: Settings,      label: 'Configurações', area: 'SETTINGS', funcionalidade: 'SETTINGS' },
+      { to: '/app/admin/team',          icon: ShieldCheck,   label: 'Equipa',        area: 'TEAM', funcionalidade: 'TEAM' },
     ],
   },
 ];
@@ -140,11 +175,69 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
  * imediato para outro sítio, ou um ecrã em branco. Percorre o menu pela ordem
  * em que está e devolve a primeira entrada que ele pode abrir.
  */
-export function primeiraTelaPermitida(can: (a: Area) => boolean): string | null {
+export function primeiraTelaPermitida(
+  can: (a: Area) => boolean,
+  /** O plano inclui? Omitido, não há plano a limitar — é o estado antigo. */
+  tem: (codigo: string) => boolean = () => true,
+): string | null {
   for (const grupo of MENU) {
-    for (const e of grupo.entradas) if (can(e.area)) return e.to;
+    for (const e of grupo.entradas) {
+      if (!can(e.area)) continue;
+      // Uma tela com cadeado não serve de destino: mandava a pessoa para a
+      // página a dizer que não pode entrar, como primeira coisa que vê.
+      if (e.funcionalidade && !tem(e.funcionalidade)) continue;
+      if (e.soDaCasa) continue;
+      return e.to;
+    }
   }
   return null;
+}
+
+/**
+ * O aviso da assinatura, por cima de todas as telas.
+ *
+ * Três estados e três tons, e o silêncio é um deles: uma frota em dia não vê
+ * faixa nenhuma. Um aviso permanente deixa de ser lido ao terceiro dia.
+ */
+function AvisoDaAssinatura() {
+  const { frota } = useAuth();
+  if (!frota) return null;
+
+  const { estado, dias } = frota.assinatura;
+  if (estado === 'activa' || estado === 'sem_assinatura') return null;
+
+  const expirada = estado === 'expirada';
+
+  return (
+    <div
+      role="status"
+      className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
+        expirada
+          ? 'border-destructive/30 bg-destructive/10 text-destructive'
+          : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+      }`}
+    >
+      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-semibold">
+          {expirada
+            ? 'A assinatura desta frota expirou.'
+            : dias === 0
+              ? 'A assinatura desta frota acaba hoje.'
+              : `A assinatura desta frota acaba em ${dias} dia${dias === 1 ? '' : 's'}.`}
+        </p>
+        <p className="opacity-90">
+          {expirada
+            // Dito por inteiro: o que ainda dá e o que não dá. "Expirou" sozinho
+            // deixa a pessoa a descobrir os limites um clique de cada vez.
+            ? 'Pode consultar e exportar tudo o que já cá está, mas não registar '
+              + 'nada de novo até ser renovada. Fale com quem gere a vossa conta.'
+            : 'Renove para não interromper os registos. Depois do prazo, o painel '
+              + 'fica só de leitura.'}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -189,7 +282,7 @@ function marcaDaEntrada(
 }
 
 export function AdminLayout() {
-  const { user, can } = useAuth();
+  const { user, can, tem, frota } = useAuth();
   const navigate = useNavigate();
 
   // ── O que falta fazer, para os números do menu ───────────────────────────
@@ -237,17 +330,37 @@ export function AdminLayout() {
       title: g.titulo,
       items: g.entradas
         .filter((e) => can(e.area))
-        .map((e): NavItem => ({
-          to: e.to,
-          icon: e.icon,
-          label: e.label,
-          ...marcaDaEntrada(e, pending),
-          // As notificações por ler mandam na entrada delas: é a única que não
-          // conta trabalho por fazer, e por isso não vem do /pending.
-          ...(e.area === 'NOTIFICATIONS' && porLer > 0
-            ? { badge: porLer, badgeTone: 'new' as const }
-            : {}),
-        })),
+        // As áreas da casa — investimentos, investidores, projetos — não se
+        // vendem e por isso não levam cadeado: desaparecem. Um cadeado ali
+        // era uma montra de uma coisa que não está à venda.
+        .filter((e) => !e.soDaCasa || frota?.daCasa !== false)
+        .map((e): NavItem => {
+          // ── O cadeado ──
+          //
+          // A entrada fica visível e leva à tela que explica de que plano faz
+          // parte. É de propósito que não desaparece: um menu que não existe
+          // nunca é comprado. Sem número, porque não há trabalho por fazer
+          // numa secção a que a frota não chega.
+          if (e.funcionalidade && !tem(e.funcionalidade)) {
+            return {
+              to: `/app/admin/plano/${e.funcionalidade}`,
+              icon: Lock,
+              label: e.label,
+            };
+          }
+
+          return {
+            to: e.to,
+            icon: e.icon,
+            label: e.label,
+            ...marcaDaEntrada(e, pending),
+            // As notificações por ler mandam na entrada delas: é a única que não
+            // conta trabalho por fazer, e por isso não vem do /pending.
+            ...(e.area === 'NOTIFICATIONS' && porLer > 0
+              ? { badge: porLer, badgeTone: 'new' as const }
+              : {}),
+          };
+        }),
     }))
     // Um grupo sem entradas desaparece com o título: um cabeçalho "Dinheiro"
     // sozinho, sem nada por baixo, é pior do que não existir.
@@ -276,6 +389,7 @@ export function AdminLayout() {
       area="Painel Administrativo"
       switchLabel={user?.isOwner ? 'Painel da Plataforma' : null}
       onSwitch={user?.isOwner ? () => navigate('/app/sistema') : undefined}
+      banner={<AvisoDaAssinatura />}
     />
   );
 }

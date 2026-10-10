@@ -6,7 +6,7 @@ import { IUserPublic } from '../users/users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
 
 type AuthUser = {
-  id: string; name: string; email: string;
+  id: string; fleetId: string; name: string; email: string;
   // Opcional aqui e nao obrigatorio: quem chama esta funcao nem sempre tem o
   // registo completo em maos, e um login nao deve falhar por falta de um
   // contacto que e opcional por definicao.
@@ -55,7 +55,7 @@ export function verifyRefreshToken(token: string): { sub: string } {
 
 export function toPublicUser(user: AuthUser): IUserPublic {
   return {
-    id: user.id, name: user.name, email: user.email,
+    id: user.id, fleetId: user.fleetId, name: user.name, email: user.email,
     phone: user.phone ?? null,
     role: user.role, status: user.status,
     // `?? false` e não `user.isCompany`: quem não traz o campo não é a

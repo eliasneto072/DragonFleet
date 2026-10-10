@@ -3,6 +3,32 @@ import type { UserRole } from '@/shared/types/api';
 import type { Access, Area } from '@/shared/lib/areas';
 import { apiClient, tokenStorage } from '@/shared/lib/api-client';
 
+/**
+ * A frota desta sessão: o que comprou, e se ainda pode escrever.
+ *
+ * Vem com o utilizador no login e no /auth/me, pela mesma razão das
+ * permissões: o menu precisa disto para saber o que desenhar, e num segundo
+ * pedido havia um instante a mostrar menus que a frota não comprou.
+ *
+ * Nada disto autoriza coisa nenhuma. Quem decide é o servidor, que lê o plano
+ * da base de dados a cada pedido — mexer nisto no browser dá um menu bonito
+ * que responde 403.
+ */
+export interface FrotaDaSessao {
+  id: string;
+  nome: string;
+  slug: string;
+  /** A frota da casa, e não a de um cliente. */
+  daCasa: boolean;
+  /** Os códigos das funcionalidades que o plano inclui. */
+  funcionalidades: string[];
+  /** `false` com a assinatura expirada: lê-se tudo, não se escreve nada. */
+  podeEscrever: boolean;
+  assinatura: { estado: string; dias: number | null };
+  /** Último dia pago. `null` sem assinatura — é o caso da casa. */
+  terminaEm: string | null;
+}
+
 export interface AuthUser {
   id:        string;
   name:      string;
@@ -42,6 +68,13 @@ export interface AuthUser {
    * que leva a um painel que responde 403.
    */
   isOwner?: boolean;
+
+  /**
+   * A frota desta sessão. Ausente nas respostas antigas em cache — quem lê
+   * trata isso como "sem restrições", que é o que era verdade antes dos
+   * planos existirem.
+   */
+  frota?: FrotaDaSessao | null;
 }
 
 interface LoginResponse {

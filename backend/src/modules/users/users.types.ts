@@ -2,6 +2,15 @@ import { UserRole, UserStatus } from '../../shared/types/enums';
 
 export interface IUser {
   id: string;
+  /**
+   * A frota a que esta conta pertence.
+   *
+   * No tipo público porque o painel precisa de saber de que frota é a sessão —
+   * é por ela que se descobre o plano, o nome a mostrar e o estado da
+   * assinatura. É um id opaco da frota da própria pessoa: não abre nada que
+   * ela já não possa ver.
+   */
+  fleetId: string;
   name: string;
   email: string;
   password: string;

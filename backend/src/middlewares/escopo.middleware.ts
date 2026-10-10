@@ -27,6 +27,8 @@ import type { AuthRequest } from './auth.middleware';
 import { prisma } from '../config/prisma';
 import { comFrota, comoSistema } from '../config/escopo';
 import { AppError } from '../shared/errors/AppError';
+import { capacidadeDaFrota, type Capacidade } from '../modules/system/capacidade';
+import { idDaFrotaDaCasa } from '../config/arranque';
 
 /**
  * A frota e a marca de dono, lidas da base de dados.
@@ -39,6 +41,23 @@ export interface DadosDaFrota {
   fleetName: string;
   fleetActive: boolean;
   isOwner: boolean;
+  /**
+   * É a frota da própria casa, e não a de um cliente.
+   *
+   * Diferente de `isOwner`: aquilo é sobre a PESSOA (só ele tem a marca), isto
+   * é sobre a FROTA. Uma conta de investidor dele não é dona de nada e está na
+   * frota da casa na mesma — e é por isso que as áreas de investimento olham
+   * para esta e não para aquela.
+   */
+  daCasa: boolean;
+  /**
+   * O que esta frota comprou e se ainda pode escrever — ver `capacidade.ts`.
+   *
+   * Lida AQUI, na mesma consulta que já ia buscar a frota, e não num sítio
+   * qualquer mais à frente. Duas razões: não custa um pedido extra, e deixa de
+   * haver forma de uma rota correr sem a pergunta ter sido feita.
+   */
+  capacidade: Capacidade;
 }
 
 /**
@@ -71,7 +90,14 @@ export async function escopoDaFrota(
       select: {
         fleetId: true,
         isOwner: true,
-        fleet: { select: { name: true, active: true } },
+        fleet: {
+          select: {
+            name: true,
+            active: true,
+            subscriptionEndsOn: true,
+            plan: { select: { features: true } },
+          },
+        },
       },
     }));
 
@@ -90,6 +116,11 @@ export async function escopoDaFrota(
       fleetName: u.fleet.name,
       fleetActive: u.fleet.active,
       isOwner: u.isOwner,
+      daCasa: u.fleetId === await idDaFrotaDaCasa(),
+      capacidade: capacidadeDaFrota({
+        features: u.fleet.plan?.features ?? null,
+        subscriptionEndsOn: u.fleet.subscriptionEndsOn,
+      }),
     };
 
     // Tudo o que vier a seguir — middlewares, rotas, serviços, e o que eles

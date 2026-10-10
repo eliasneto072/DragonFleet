@@ -19,6 +19,33 @@ import { comoSistema } from './escopo';
 import { UserRole } from '../shared/types/enums';
 
 /**
+ * O id da frota da casa, lido uma vez por processo.
+ *
+ * ─── PORQUE É QUE DÁ PARA GUARDAR EM MEMÓRIA ────────────────────────────────
+ *
+ * Porque é a frota MAIS ANTIGA, e essa não muda: uma frota criada a seguir é
+ * sempre mais nova, e nenhuma se apaga (a chave estrangeira recusa). O valor
+ * só muda entre bases de dados diferentes, e aí o processo também é outro.
+ *
+ * Guardado porque é lido a cada pedido — é o que distingue a frota do dono de
+ * uma frota cliente, para as áreas que não se vendem (ver `soDaCasa`). Uma
+ * consulta por pedido para responder sempre o mesmo não se justifica.
+ */
+let frotaDaCasa: string | null = null;
+
+export async function idDaFrotaDaCasa(): Promise<string | null> {
+  if (frotaDaCasa) return frotaDaCasa;
+
+  const primeira = await comoSistema(async () => await prisma.fleet.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  }));
+
+  frotaDaCasa = primeira?.id ?? null;
+  return frotaDaCasa;
+}
+
+/**
  * Garante que a plataforma tem dono.
  *
  * ─── O PROBLEMA QUE ISTO RESOLVE ────────────────────────────────────────────

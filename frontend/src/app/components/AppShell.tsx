@@ -22,7 +22,7 @@
 // Documentos e Veículos, por isso o React Query reaproveita a cache em vez de
 // repetir a chamada.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, Menu, X, ArrowLeftRight } from 'lucide-react';
@@ -71,10 +71,18 @@ interface AppShellProps {
   /** Label for the role-switch button, or null to hide it. */
   switchLabel?: string | null;
   onSwitch?: () => void;
+  /**
+   * Uma faixa por cima de todas as telas deste painel.
+   *
+   * Para o que vale em qualquer página e não em nenhuma em particular — hoje,
+   * o aviso da assinatura. Posta aqui e não em cada tela porque uma pessoa que
+   * passa o dia na Faturação nunca abriria a tela onde o aviso estivesse.
+   */
+  banner?: ReactNode;
 }
 
 export function AppShell({
-  navItems, navGroups, area, switchLabel, onSwitch,
+  navItems, navGroups, area, switchLabel, onSwitch, banner,
 }: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -371,6 +379,7 @@ export function AppShell({
       {/* ── Main content ── */}
       <main className="lg:pl-64">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          {banner && <div className="mb-6">{banner}</div>}
           <Outlet />
         </div>
       </main>

@@ -13,6 +13,7 @@ export class UsersRepository  implements IUserRepository{
 
     private readonly publicSelect = {
         id: true,
+        fleetId: true,
         name: true,
         email: true,
         phone: true,

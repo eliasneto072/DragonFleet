@@ -32,6 +32,9 @@ import { invitesRouter } from '../modules/invites/invites.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
 import { escopoDaFrota } from '../middlewares/escopo.middleware';
+import {
+  exigeFuncionalidade, bloquearEscritaSeExpirada, soDaCasa,
+} from '../middlewares/plano.middleware';
 
 const router = Router();
 
@@ -54,7 +57,20 @@ router.use(lerSessaoSeHouver, escopoDaFrota);
 //
 // Autenticação e o portal dele. Mais nada.
 router.use('/auth', authRouter())
-router.use('/investors', investorsRouter())
+// O portal do investidor E a gestão deles. Da casa: ver `soDaCasa`.
+router.use('/investors', soDaCasa, investorsRouter())
+
+// ─── Assinatura expirada: daqui para baixo, só se lê ───────────────────────
+//
+// DEPOIS do /auth de propósito: entrar, sair e renovar a sessão continuam a
+// funcionar numa frota expirada. Trancar o login era trancar a pessoa fora dos
+// dados dela próprios, que é precisamente o que esta regra existe para evitar.
+//
+// Os /investors ficam acima por serem da casa, que nunca expira.
+//
+// Uma guarda só, e não uma por rota: "escrever" é tudo o que não for GET, e
+// posta aqui uma rota nova nasce protegida sem ninguém se lembrar disso.
+router.use(bloquearEscritaSeExpirada)
 
 // ─── O portal da oficina ───────────────────────────────────────────────────
 //
@@ -65,7 +81,7 @@ router.use('/investors', investorsRouter())
 //
 // `requireArea` constrange só quem é da equipa, por isso o mecânico atravessa-a
 // como um motorista atravessa, e o staff continua a precisar da área da frota.
-router.use('/bookings', denyInvestor, requireArea('FLEET'), bookingsRouter())
+router.use('/bookings', denyInvestor, requireArea('FLEET'), exigeFuncionalidade('OFICINA'), bookingsRouter())
 
 // ─── A partir daqui é a frota ──────────────────────────────────────────────
 //
@@ -90,37 +106,39 @@ router.use('/permissions', permissionsRouter())
 // área: ser ADMIN não chega, porque cada frota cliente tem o ADMIN dela.
 router.use('/system', systemRouter())
 
-router.use('/users', requireArea('DRIVERS'), usersRouter())
+router.use('/users', requireArea('DRIVERS'), exigeFuncionalidade('DRIVERS'), usersRouter())
 // Os convites inscrevem motoristas, por isso vivem sob a área dos motoristas —
 // e no nível MANAGE: gerar um link que mete gente dentro da frota é mexer na
 // frota, não consultá-la. Quem só vê a lista de motoristas não convida ninguém.
-router.use('/invites', requireArea('DRIVERS', 'MANAGE'), invitesRouter())
-router.use('/vehicles', requireArea('FLEET'), vehiclesRouter())
+router.use('/invites', requireArea('DRIVERS', 'MANAGE'), exigeFuncionalidade('DRIVERS'), invitesRouter())
+router.use('/vehicles', requireArea('FLEET'), exigeFuncionalidade('FLEET'), vehiclesRouter())
 // O material é material dos carros, por isso vive sob a área da frota. Os
 // preços de compra não são para os motoristas — a recusa está no serviço,
 // porque o `requireArea` deixa passar quem não é da equipa.
-router.use('/materials', requireArea('FLEET'), materialsRouter())
-router.use('/earnings', requireArea('SETTLEMENTS'), earningsRouter())
-router.use('/withdrawals', requireArea('FINANCIAL'), withdrawalsRouter())
-router.use('/documents', requireArea('DOCUMENTS'), documentsRouter())
-router.use('/notifications', requireArea('NOTIFICATIONS'), notificationsRouter())
+router.use('/materials', requireArea('FLEET'), exigeFuncionalidade('MATERIAL'), materialsRouter())
+router.use('/earnings', requireArea('SETTLEMENTS'), exigeFuncionalidade('SETTLEMENTS'), earningsRouter())
+router.use('/withdrawals', requireArea('FINANCIAL'), exigeFuncionalidade('FINANCIAL'), withdrawalsRouter())
+router.use('/documents', requireArea('DOCUMENTS'), exigeFuncionalidade('DOCUMENTS'), documentsRouter())
+router.use('/notifications', requireArea('NOTIFICATIONS'), exigeFuncionalidade('NOTIFICATIONS'), notificationsRouter())
 router.use('/upload', uploadRoutes);
-router.use('/analytics', requireArea('ANALYTICS'), analyticsRouter());
-router.use('/support', requireArea('SUPPORT'), supportRouter());
-router.use('/reports', requireArea('FINANCIAL'), reportsRouter());
-router.use('/settings', requireArea('SETTINGS'), settingsRouter());
-router.use('/balance', requireArea('FINANCIAL'), balanceRouter());
-router.use('/settlements', requireArea('SETTLEMENTS'), settlementsRouter());
+router.use('/analytics', requireArea('ANALYTICS'), exigeFuncionalidade('ANALYTICS'), analyticsRouter());
+router.use('/support', requireArea('SUPPORT'), exigeFuncionalidade('SUPPORT'), supportRouter());
+router.use('/reports', requireArea('FINANCIAL'), exigeFuncionalidade('FINANCIAL'), reportsRouter());
+router.use('/settings', requireArea('SETTINGS'), exigeFuncionalidade('SETTINGS'), settingsRouter());
+router.use('/balance', requireArea('FINANCIAL'), exigeFuncionalidade('FINANCIAL'), balanceRouter());
+router.use('/settlements', requireArea('SETTLEMENTS'), exigeFuncionalidade('SETTLEMENTS'), settlementsRouter());
 // A importação de despesas cria fechos, por isso vive sob a mesma área. O
 // `requireArea` mais fino (MANAGE) está dentro do router: aqui basta a porta.
-router.use('/fleet-import', requireArea('SETTLEMENTS'), fleetImportRouter());
-router.use('/bank', requireArea('FINANCIAL'), bankRouter());
-router.use('/companies', requireArea('GREEN_RECEIPTS'), companiesRouter());
-router.use('/investments', requireArea('INVESTMENTS'), investmentsRouter());
-router.use('/ranks', requireArea('RANKS'), ranksRouter());
+router.use('/fleet-import', requireArea('SETTLEMENTS'), exigeFuncionalidade('IMPORTAR'), fleetImportRouter());
+router.use('/bank', requireArea('FINANCIAL'), exigeFuncionalidade('FINANCIAL'), bankRouter());
+router.use('/companies', requireArea('GREEN_RECEIPTS'), exigeFuncionalidade('GREEN_RECEIPTS'), companiesRouter());
+// Os investimentos, os investidores e os projetos são da casa: não estão no
+// catálogo dos planos, e nenhuma frota cliente lhes chega. Ver `soDaCasa`.
+router.use('/investments', soDaCasa, requireArea('INVESTMENTS'), investmentsRouter());
+router.use('/ranks', requireArea('RANKS'), exigeFuncionalidade('RANKS'), ranksRouter());
 // Os agendamentos mexem no saldo, por isso vivem sob a mesma área que o resto
 // do dinheiro. Quem não pode lançar um ajuste à mão também não pode agendar um.
-router.use('/scheduled-payments', requireArea('FINANCIAL'), scheduledPaymentsRouter());
+router.use('/scheduled-payments', requireArea('FINANCIAL'), exigeFuncionalidade('AGENDAMENTOS'), scheduledPaymentsRouter());
 // Os lembretes são de cada um e não tocam em dados de ninguém — por isso vão
 // sob o painel e não sob uma área de negócio. Quem vê o painel pode ter notas
 // no painel.
