@@ -19,6 +19,18 @@ export interface IUser {
    * entra por inteiro.
    */
   isCompany: boolean;
+  /**
+   * É o dono da PLATAFORMA, e não de uma frota.
+   *
+   * Vem no tipo público porque é o painel que precisa dela: é esta marca que
+   * desenha o botão que troca entre o painel de sistema e o da frota. Sem ela
+   * na resposta do login, o botão só podia aparecer depois de um segundo
+   * pedido — e piscava.
+   *
+   * Não dá acessos a ninguém por si só: quem decide é a guarda do servidor
+   * (`dono.middleware.ts`), que a lê da base de dados a cada pedido.
+   */
+  isOwner: boolean;
   // relacionamentos removidos — cada módulo gere os seus próprios dados
 }
 

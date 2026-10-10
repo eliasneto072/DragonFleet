@@ -22,7 +22,7 @@
 //
 // Um grupo onde não sobra nenhuma entrada desaparece inteiro, título incluído.
 
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
@@ -190,6 +190,7 @@ function marcaDaEntrada(
 
 export function AdminLayout() {
   const { user, can } = useAuth();
+  const navigate = useNavigate();
 
   // ── O que falta fazer, para os números do menu ───────────────────────────
   //
@@ -260,9 +261,21 @@ export function AdminLayout() {
     //
     // O caminho inverso, em DriverLayout, fica: um administrador que chegue ao
     // painel do motorista precisa de voltar.
+    // ── O botão que troca para o painel da plataforma ───────────────────────
+    //
+    // Uma conta, dois painéis. Ele é o dono da plataforma E o administrador da
+    // frota dele, e faz as duas coisas no mesmo dia — com duas contas teria de
+    // sair e entrar de novo, com dois emails, para ver a lista de clientes e
+    // voltar ao trabalho da casa.
+    //
+    // Só aparece a quem tem a marca. Para todos os outros administradores —
+    // que são os das frotas clientes — este botão não existe, e o painel a que
+    // ele leva responde 403 a quem lá chegar pelo endereço.
     <AppShell
       navGroups={navGroups}
       area="Painel Administrativo"
+      switchLabel={user?.isOwner ? 'Painel da Plataforma' : null}
+      onSwitch={user?.isOwner ? () => navigate('/app/sistema') : undefined}
     />
   );
 }

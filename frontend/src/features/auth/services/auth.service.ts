@@ -29,6 +29,19 @@ export interface AuthUser {
    * permissões configuradas" e cai no papel.
    */
   permissions?: Partial<Record<Area, Access>>;
+
+  /**
+   * É o dono da PLATAFORMA, e não o administrador de uma frota.
+   *
+   * É isto que desenha o botão que troca para o painel de sistema. Opcional
+   * porque as respostas antigas em cache não o trazem, e nesse caso a resposta
+   * certa é "não é" — o botão não aparece, e nada mais muda.
+   *
+   * Não dá acesso a nada: quem decide é a guarda do servidor, que lê a mesma
+   * marca da base de dados a cada pedido. Mudar isto no browser dá um botão
+   * que leva a um painel que responde 403.
+   */
+  isOwner?: boolean;
 }
 
 interface LoginResponse {

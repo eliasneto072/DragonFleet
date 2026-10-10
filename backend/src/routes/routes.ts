@@ -27,6 +27,8 @@ import { permissionsRouter } from '../modules/permissions/permissions.routes';
 import { scheduledPaymentsRouter } from '../modules/scheduled-payments/scheduled-payments.routes';
 import { remindersRouter } from '../modules/reminders/reminders.routes';
 import { pendingRouter } from '../modules/pending/pending.routes';
+import { systemRouter } from '../modules/system/system.routes';
+import { invitesRouter } from '../modules/invites/invites.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
 import { escopoDaFrota } from '../middlewares/escopo.middleware';
@@ -80,7 +82,19 @@ router.use(denyMechanic)
 // sequer que menu desenhar.
 router.use('/permissions', permissionsRouter())
 
+// ─── O painel do dono da plataforma ────────────────────────────────────────
+//
+// SEM `requireArea`, e isso não é um esquecimento: as áreas são as do painel
+// de uma frota, e isto não é uma área de nenhuma frota — é a lista das frotas.
+// A guarda está lá dentro (`painelDoDono`), e é mais apertada do que qualquer
+// área: ser ADMIN não chega, porque cada frota cliente tem o ADMIN dela.
+router.use('/system', systemRouter())
+
 router.use('/users', requireArea('DRIVERS'), usersRouter())
+// Os convites inscrevem motoristas, por isso vivem sob a área dos motoristas —
+// e no nível MANAGE: gerar um link que mete gente dentro da frota é mexer na
+// frota, não consultá-la. Quem só vê a lista de motoristas não convida ninguém.
+router.use('/invites', requireArea('DRIVERS', 'MANAGE'), invitesRouter())
 router.use('/vehicles', requireArea('FLEET'), vehiclesRouter())
 // O material é material dos carros, por isso vive sob a área da frota. Os
 // preços de compra não são para os motoristas — a recusa está no serviço,

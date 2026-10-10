@@ -189,11 +189,12 @@ model User {
   /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
   /// daqui sem esta coluna preenchida.
   ///
-  /// É a ÚNICA tabela com relação declarada para `Fleet`, porque é a única que
-  /// o código percorre: o middleware do âmbito precisa do nome da frota e de
-  /// saber se está ligada. As outras quarenta ficam com a coluna e a chave
-  /// estrangeira na base de dados — quarenta listas inversas aqui não serviam
-  /// ninguém e deixavam o ficheiro ilegível.
+  /// Tem relação declarada para `Fleet` — tal como `Invite`, e só essas duas.
+  /// São as duas que o código percorre: o middleware do âmbito precisa do nome
+  /// da frota e de saber se está ligada, e um convite precisa de dizer em que
+  /// empresa é que a pessoa está a entrar. As outras quarenta ficam com a
+  /// coluna e a chave estrangeira na base de dados — quarenta listas inversas
+  /// aqui não serviam ninguém e deixavam o ficheiro ilegível.
   fleetId String @default("") @map("fleet_id")
   fleet   Fleet  @relation(fields: [fleetId], references: [id])
   name      String
@@ -2272,8 +2273,9 @@ model Fleet {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  plan  Plan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
-  users User[]
+  plan    Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
+  users   User[]
+  invites Invite[]
 
   @@index([active])
   @@map("fleets")
@@ -2322,4 +2324,74 @@ model Plan {
 
   @@index([active])
   @@map("plans")
+}
+
+/// Um convite: o link por onde um motorista entra numa frota.
+///
+/// ─── PORQUE É QUE O REGISTO ABERTO DEIXOU DE EXISTIR ────────────────────────
+///
+/// Porque o registo público não diz a que frota pertence quem se inscreve, e
+/// não há forma de saber. Com uma frota só, a resposta era óbvia; com várias,
+/// qualquer escolha automática punha um motorista dentro da conta de uma
+/// empresa que não é a dele — com acesso a um painel que não é o dele. O
+/// convite resolve isso levando a frota dentro do próprio link.
+///
+/// ─── AS TRÊS COLUNAS QUE PARECEM REDUNDANTES E NÃO SÃO ──────────────────────
+///
+///   - `maxUses`   — o limite que o gestor escreveu. Só para mostrar.
+///   - `remaining` — quantos faltam. É ESTA que a trava usa.
+///   - `uses`      — quantos já entraram. Só para mostrar.
+///
+/// Separadas porque a trava tem de ser um único UPDATE atómico: `remaining > 0`
+/// compara-se com um número escrito, e por isso o Postgres consegue travar duas
+/// pessoas que usem o último lugar ao mesmo tempo. Com `uses < maxUses` seria
+/// uma coluna contra outra coluna — que o Prisma sabe fazer, mas obrigava a ler
+/// primeiro e a escrever depois, e entre uma coisa e outra cabem os dois.
+model Invite {
+  id String @id @default(cuid())
+
+  /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
+  /// daqui sem esta coluna preenchida.
+  fleetId String @default("") @map("fleet_id")
+
+  /// O que vai no link. Único no sistema inteiro: é por ele que se descobre a
+  /// frota, antes de haver sessão — tal como o email no login.
+  code String @unique
+
+  /// Um nome para o gestor se lembrar do que é este link.
+  /// "Grupo do WhatsApp", "Motoristas de outubro".
+  label String?
+
+  /// Último dia em que vale, inclusive. Nulo = sem validade.
+  expiresOn DateTime? @map("expires_on") @db.Date
+
+  /// O limite escrito pelo gestor. Nulo = sem limite. Só para mostrar.
+  maxUses Int? @map("max_uses")
+
+  /// Quantas pessoas ainda pode inscrever. Nulo = sem limite.
+  remaining Int? @map("remaining")
+
+  /// Quantas já entraram por aqui.
+  uses Int @default(0)
+
+  /// Desligado à mão. Nulo = está de pé. Não se apaga um convite: saber que
+  /// alguém entrou por um link cancelado é precisamente o que se quer poder
+  /// responder mais tarde.
+  revokedAt DateTime? @map("revoked_at")
+
+  /// Quem o criou. Texto e não relação: é para a lista dizer de quem foi, e
+  /// uma conta apagada não deve levar o convite atrás.
+  createdBy String? @map("created_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// Declarada, ao contrário das outras quarenta tabelas: a página do convite
+  /// tem de dizer o nome da frota a quem o abriu, e tem de saber se ela está
+  /// ligada — e isso é lido ANTES de haver sessão, num sítio onde uma segunda
+  /// consulta era uma segunda oportunidade de a esquecer.
+  fleet Fleet @relation(fields: [fleetId], references: [id])
+
+  @@index([fleetId])
+
+  @@map("invites")
 }

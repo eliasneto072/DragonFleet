@@ -47,6 +47,9 @@ import { RanksPage } from '@/features/admin/pages/RanksPage';
 import { InvestorsPage } from '@/features/admin/pages/InvestorsPage';
 import { ProjectsPage } from '@/features/admin/pages/ProjectsPage';
 import { AdminOnly, RequireArea } from '@/features/admin/components/AdminOnly';
+import { SystemLayout } from '@/features/system/components/SystemLayout';
+import { FleetsPage } from '@/features/system/pages/FleetsPage';
+import { PlansPage } from '@/features/system/pages/PlansPage';
 
 export const router = createBrowserRouter([
 
@@ -54,6 +57,12 @@ export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  // O link do convite. A mesma página: ela lê o código e decide o que mostrar.
+  //
+  // Duas rotas e não uma com parâmetro opcional porque o /register sem código
+  // continua a existir de propósito — é onde se explica que o registo é por
+  // convite a quem chegue ali por um link antigo ou por hábito.
+  { path: '/register/:code', element: <RegisterPage /> },
 
   // ── Rotas protegidas ─────────────────────────────────────────────────────
   {
@@ -90,6 +99,23 @@ export const router = createBrowserRouter([
           { path: 'profile', element: <ProfilePage /> },
           { path: 'notifications', element: <NotificationsPage /> },
           { path: 'support', element: <SupportPage /> },
+        ],
+      },
+
+      // ── O painel da plataforma ────────────────────────────────────────
+      //
+      // Separado de 'admin' e não uma tela dentro dele: é outro painel, com
+      // outro menu e outra condição de entrada. Aqui não há áreas — ou é o
+      // dono da plataforma, ou o SystemLayout manda-o para o painel da frota.
+      // A guarda a sério está no servidor, que responde 403 a quem chegue aqui
+      // pelo endereço.
+      {
+        path: 'sistema',
+        element: <SystemLayout />,
+        children: [
+          { index: true, element: <Navigate to="frotas" replace /> },
+          { path: 'frotas', element: <FleetsPage /> },
+          { path: 'planos', element: <PlansPage /> },
         ],
       },
 

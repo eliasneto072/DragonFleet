@@ -16,6 +16,10 @@ type AuthUser = {
   // chegam aqui trazem o registo completo, e um login não pode falhar por
   // causa de uma marca que só interessa às estatísticas.
   isCompany?: boolean;
+  // Opcional pela mesma razão: nem todas as consultas a trazem, e um login não
+  // pode falhar por causa dela. Em falta vale `false`, que é o caso de toda a
+  // gente menos uma pessoa.
+  isOwner?: boolean;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -57,6 +61,7 @@ export function toPublicUser(user: AuthUser): IUserPublic {
     // `?? false` e não `user.isCompany`: quem não traz o campo não é a
     // empresa, e é isso que o tipo público promete.
     isCompany: user.isCompany ?? false,
+    isOwner: user.isOwner ?? false,
     createdAt: user.createdAt, updatedAt: user.updatedAt,
   };
 }

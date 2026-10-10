@@ -1,5 +1,5 @@
 import { comoSistema } from '../../config/escopo';
-import { prisma } from "../../config/prisma"
+import { prisma, type Transacao } from "../../config/prisma"
 import { logger } from "../../shared/utils/logger"
 import { IUserRepository } from "./users.repository.interfaces"
 import { IUser, IUserPublic } from "./users.types"
@@ -17,6 +17,9 @@ export class UsersRepository  implements IUserRepository{
         email: true,
         phone: true,
         isCompany: true,
+        // O painel precisa dela para desenhar o botão que troca para o painel
+        // de sistema. Não dá acesso a nada: quem decide é a guarda do servidor.
+        isOwner: true,
         role: true,
         status: true,
         createdAt: true,
@@ -219,9 +222,19 @@ export class UsersRepository  implements IUserRepository{
         }
     }
 
-    async create(data: CreateUserData): Promise<IUserPublic> {
+    /**
+     * Cria um utilizador.
+     *
+     * ─── PORQUE É QUE ACEITA UM CLIENTE ─────────────────────────────────────
+     *
+     * Para o registo por convite. Lá, a conta tem de nascer na MESMA transação
+     * que gastou o lugar do convite — senão uma falha a criar a conta deixava
+     * um lugar gasto sem ninguém dentro, e nada que o lembrasse. Sem argumento,
+     * é o cliente normal, que é o que todos os outros sítios usam.
+     */
+    async create(data: CreateUserData, cliente: Transacao = prisma): Promise<IUserPublic> {
     try {
-      return await prisma.user.create({
+      return await cliente.user.create({
         data: {
           fleetId: data.fleetId,
           name: data.name,

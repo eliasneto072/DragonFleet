@@ -8,6 +8,7 @@ import { Actor, IUserPublic } from './users.types';
 import { UserRole, UserStatus } from '../../shared/types/enums';
 import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
 import { prisma } from '../../config/prisma';
+import { invitesService } from '../invites/invites.service';
 
 function isAdmin(role?: UserRole) {
   return role === UserRole.ADMIN;
@@ -28,41 +29,6 @@ function isStaff(role?: UserRole) {
       || role === UserRole.SUPPORT;
 }
 
-
-/**
- * Em que frota nasce quem se regista pelo caminho público.
- *
- * ─── UMA REGRA DE TRANSIÇÃO, E ASSUMIDA ─────────────────────────────────────
- *
- * O registo público não diz a que frota pertence — não há forma de saber. A
- * resposta definitiva são os convites: um link gerado pelo gestor, que já traz
- * a frota dentro. Até lá, esta regra:
- *
- *   - Há UMA frota no sistema  → é essa. É o estado de hoje, e nada muda.
- *   - Há mais do que uma       → recusa, e manda pedir um convite.
- *
- * O que isto NÃO faz é escolher a frota do dono quando há várias. Essa seria a
- * escolha cómoda e é exactamente a errada: um motorista de outra empresa a
- * cair dentro da frota do dono, com acesso a um painel que não é o dele.
- *
- * Esta função desaparece quando os convites existirem.
- */
-async function frotaDoRegistoPublico(): Promise<string> {
-  // Atravessa frotas de propósito: está a contá-las para decidir.
-  const frotas = await comoSistema(async () => prisma.fleet.findMany({
-    where: { active: true },
-    select: { id: true },
-    take: 2,
-  }));
-
-  if (frotas.length === 1) return frotas[0].id;
-
-  throw new AppError(
-    'O registo é por convite. Peça o link à frota com que vai trabalhar.',
-    403,
-    'REGISTO_POR_CONVITE',
-  );
-}
 
 export class UsersService {
   private async ensureUserExists(id: string): Promise<IUserPublic> {
@@ -160,7 +126,27 @@ export class UsersService {
    * Se for preciso criar utilizadores com papel elevado, isso exige um
    * endpoint próprio, autenticado e com requireAdmin — não este.
    */
+  /**
+   * O registo de um motorista, por convite.
+   *
+   * ─── A FROTA VEM DO CÓDIGO, E SÓ DO CÓDIGO ────────────────────────────────
+   *
+   * É a única escrita do sistema em que alguém sem sessão cria uma linha numa
+   * frota — e por isso é a única em que a frota não vem de quem pede. Vem do
+   * convite, que o gestor dessa frota gerou. Nada no corpo do pedido pode
+   * mudar isso.
+   *
+   * ─── A ORDEM: PRIMEIRO O EMAIL, DEPOIS O LUGAR ────────────────────────────
+   *
+   * O email é confirmado ANTES de se gastar o lugar do convite. Pela outra
+   * ordem, uma pessoa que se tentasse registar duas vezes — o que acontece
+   * todos os dias, com um toque a dobrar num telefone — gastava dois lugares
+   * e recebia um erro. A transação do `usar` cobre o resto: se a criação da
+   * conta falhar por outro motivo, o lugar volta atrás com ela.
+   */
   async create(input: CreateUserInput): Promise<IUserPublic> {
+    // `findByEmail` atravessa frotas por dentro, e tem de ser: o email é único
+    // no sistema inteiro, e aqui ainda não há frota nenhuma definida.
     const existingUser = await usersRepository.findByEmail(input.email);
     if (existingUser) {
       throw new AppError('Email already in use', 409, 'EMAIL_IN_USE');
@@ -168,16 +154,21 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(input.password, 10);
 
-    const data: CreateUserData = {
-      fleetId: await frotaDoRegistoPublico(),
-      name: input.name,
-      email: input.email,
-      password: passwordHash,
-      role: UserRole.DRIVER,
-      status: UserStatus.ACTIVE,
-    };
+    // O hash é feito ANTES de entrar na transação de propósito: o bcrypt leva
+    // uma fracção de segundo e, lá dentro, essa fracção era tempo com a linha
+    // do convite trancada — a atrasar quem estivesse a usar o mesmo link.
+    return invitesService.usar(input.codigo, async (fleetId, tx) => {
+      const data: CreateUserData = {
+        fleetId,
+        name: input.name,
+        email: input.email,
+        password: passwordHash,
+        role: UserRole.DRIVER,
+        status: UserStatus.ACTIVE,
+      };
 
-    return usersRepository.create(data);
+      return usersRepository.create(data, tx);
+    });
   }
 
   /**

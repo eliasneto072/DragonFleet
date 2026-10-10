@@ -1,23 +1,59 @@
 // src/features/auth/pages/RegisterPage.tsx
 //
-// Redesign visual (split-screen fintech, a condizer com o login).
+// Criar conta — por convite, e só por convite.
 //
-// Mesmas correções aplicadas ao login:
+// ─── PORQUE É QUE O REGISTO ABERTO DEIXOU DE EXISTIR ────────────────────────
+//
+// Porque esta página não sabe a que empresa pertence quem a abre, e não há
+// forma de saber. Com uma frota só no sistema a resposta era óbvia; com
+// várias, qualquer escolha automática punha um motorista dentro da conta de
+// uma empresa que não é a dele, a ver dados que não são dele. O convite
+// resolve isso levando a frota dentro do próprio link.
+//
+// Daí as três caras desta página:
+//
+//   - sem código     → diz que o registo é por convite, e mais nada;
+//   - código a valer → mostra o NOME DA FROTA e o formulário. O nome não é
+//                      decoração: é o que deixa a pessoa perceber, antes de
+//                      escrever a palavra-passe, em que empresa está a entrar;
+//   - código que não vale → diz o que se passa (expirou, esgotou, foi
+//                      cancelado) e manda pedir um novo.
+//
+// ─── NOTAS DO DESENHO QUE SE MANTÊM ─────────────────────────────────────────
+//
 // - Inputs fixam bg-white + text-gray-900 (senão texto invisível no dark mode).
 // - if (loading) só esconde a tela no boot inicial, não durante o cadastro
 //   (o login() no fim seta loading e fazia a tela sumir / o erro piscar).
 // - Erro estável, com ícone + animação (slide + shake), limpo só ao digitar.
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { Navigate, Link } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { Navigate, Link, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, Loader2, MailQuestion } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { usersService } from '@/features/admin/services/users.service';
+import { invitesService } from '@/features/admin/services/invites.service';
 import { ApiError } from '@/shared/lib/api-client';
 import { DragonFleetLogo } from '@/app/components/DragonFleetLogo';
 
 export function RegisterPage() {
   const { isAuthenticated, user, loading, login } = useAuth();
+
+  // O código chega de duas formas: /register/CODIGO (o link que o gestor
+  // copia) e /register?convite=CODIGO (para quem o cole de uma mensagem onde
+  // ficou como parâmetro). As duas, porque a que falhar é uma chamada.
+  const { code: codeDaRota } = useParams<{ code?: string }>();
+  const [params] = useSearchParams();
+  const codigo = (codeDaRota ?? params.get('convite') ?? '').trim();
+
+  // Sem `enabled`, isto corria também na página sem código — um pedido a
+  // /auth/convite/ para nada, e um erro no painel de rede a cada visita.
+  const conviteQ = useQuery({
+    queryKey: ['convite', codigo],
+    queryFn: () => invitesService.resolver(codigo),
+    enabled: codigo.length > 0,
+    retry: false,
+  });
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -35,6 +71,12 @@ export function RegisterPage() {
   }, [loading]);
 
   if (loading && !bootedRef.current) return null;
+
+  // Um convite a valer é a ÚNICA condição para o formulário existir. Escrito
+  // numa variável só, e não repetido em cada sítio onde é preciso: assim não
+  // há forma de um dos sítios discordar do outro.
+  const conviteValido = !!codigo && conviteQ.data?.estado === 'valido';
+  const frota = conviteQ.data?.frota?.nome ?? null;
 
   if (isAuthenticated && user) {
     const dest = user.role === 'MECHANIC' ? '/app/oficina'
@@ -67,7 +109,7 @@ export function RegisterPage() {
     setSubmitting(true);
 
     try {
-      await usersService.create({ name, email, password });
+      await usersService.create({ name, email, password, codigo });
       await login(email, password);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -149,9 +191,53 @@ export function RegisterPage() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900 text-center lg:text-left">Criar conta</h2>
-              <p className="text-sm text-gray-500 mt-1 text-center lg:text-left">Registe-se como motorista para começar</p>
+              {/* O nome da frota no subtítulo, e não num aviso ao lado: é a
+                  informação mais importante desta página. Quem se inscreve
+                  tem de ver em que empresa está a entrar ANTES de escrever a
+                  palavra-passe. */}
+              <p className="text-sm text-gray-500 mt-1 text-center lg:text-left">
+                {frota
+                  ? <>Vai entrar como motorista em <strong className="text-gray-900">{frota}</strong></>
+                  : 'Registe-se como motorista para começar'}
+              </p>
             </div>
           </div>
+
+          {/* ── Sem código: o registo é por convite ─────────────────────── */}
+          {!codigo && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-5 space-y-2">
+              <div className="flex items-center gap-2 text-gray-900">
+                <MailQuestion className="h-5 w-5 shrink-0" />
+                <span className="font-semibold text-sm">O registo é por convite</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                Peça o link de inscrição à frota com que vai trabalhar. É esse
+                link que diz em que empresa a sua conta nasce.
+              </p>
+            </div>
+          )}
+
+          {/* ── A confirmar o convite ────────────────────────────────────── */}
+          {codigo && conviteQ.isLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              A confirmar o convite…
+            </div>
+          )}
+
+          {/* ── Um convite que não vale ──────────────────────────────────── */}
+          {codigo && !conviteQ.isLoading && !conviteValido && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                {conviteQ.data?.mensagem
+                  ?? 'Não foi possível confirmar este convite. Peça um novo à frota.'}
+              </span>
+            </div>
+          )}
 
           {/* Erro — estável, com ícone e animação de entrada + shake */}
           {error && (
@@ -165,7 +251,11 @@ export function RegisterPage() {
             </div>
           )}
 
-          {/* Formulário */}
+          {/* Formulário — só com um convite a valer.
+              Escondido e não desactivado: um formulário cinzento convida a
+              tentar, e o que se quer dizer aqui é "vá buscar um link", não
+              "insista". */}
+          {conviteValido && (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700" htmlFor="name">Nome completo</label>
@@ -250,6 +340,7 @@ export function RegisterPage() {
               {submitting ? 'A criar conta…' : 'Criar conta'}
             </button>
           </form>
+          )}
 
           {/* Link para login */}
           <p className="text-center text-sm text-gray-500">

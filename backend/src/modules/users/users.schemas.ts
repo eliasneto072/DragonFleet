@@ -8,18 +8,29 @@ export const userIdParamSchema = z.object({
   }),
 });
 
-// Registo público: POST /users é servido sem autenticação, por isso o corpo
+// Registo por convite: POST /users é servido sem autenticação, por isso o corpo
 // não pode aceitar `role` nem `status`. Aceitá-los permitia a qualquer pessoa
 // registar-se como ADMIN. O papel e o estado são fixados no service.
 //
 // Um endpoint de criação administrativa, se vier a existir, precisa de schema
 // próprio e de requireAdmin na rota.
+//
+// ─── O CÓDIGO DO CONVITE É OBRIGATÓRIO ──────────────────────────────────────
+//
+// E é aqui que isso se torna verdade, não no serviço. Opcional no schema, um
+// pedido sem código chegava ao serviço e ficava à espera de alguém se lembrar
+// de o recusar lá — e o dia em que ninguém se lembrasse era uma conta a nascer
+// numa frota escolhida ao acaso.
+//
+// O formato não é validado aqui: quem o valida é `normalizarCodigo`, que sabe o
+// alfabeto e responde em português em vez de um erro de schema.
 export const createUserSchema = z.object({
   body: z
     .object({
       name: z.string().min(2),
       email: z.string().email(),
       password: z.string().min(6),
+      codigo: z.string().min(1, 'O registo é por convite.').max(40),
     })
     .strict(),
 });

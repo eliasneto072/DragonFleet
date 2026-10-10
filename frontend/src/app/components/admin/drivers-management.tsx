@@ -24,6 +24,7 @@ import { formatDate } from '@/shared/lib/format';
 import type { ApiUser, UserStatus } from '@/shared/types/api';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { Pagination } from '@/app/components/ui/list-toolbar';
+import { BotaoConvidar } from '@/app/components/admin/invites-dialog';
 
 const STATUS_STYLES: Record<UserStatus, { label: string; cls: string }> = {
   ACTIVE: { label: 'Ativo', cls: 'bg-brand-50 text-brand-700' },
@@ -206,8 +207,11 @@ export function DriversManagement() {
     <div className="space-y-6">
       <PageHeader
         title="Gestão de motoristas"
-        subtitle="Gerencie todos os motoristas da plataforma"
+        subtitle="Gerencie todos os motoristas da frota"
         icon={<Users className="h-5 w-5" />}
+        // O convite vive aqui e não no menu: é a partir desta tela que se pensa
+        // "preciso de inscrever o João". Ver a nota em `invites-dialog.tsx`.
+        actions={<BotaoConvidar />}
       />
 
       {/* Stat row */}

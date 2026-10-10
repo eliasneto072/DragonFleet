@@ -10,6 +10,12 @@ interface CreateUserInput {
   name:     string;
   email:    string;
   password: string;
+  /**
+   * O código do convite. Obrigatório — é ele que diz em que frota a conta
+   * nasce. O registo aberto deixou de existir: sem convite não há como saber
+   * a que empresa pertence quem se inscreve.
+   */
+  codigo:   string;
 }
 
 interface UpdateUserInput {

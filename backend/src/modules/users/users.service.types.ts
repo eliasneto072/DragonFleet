@@ -6,6 +6,13 @@ export type CreateUserInput = {
   name: string;
   email: string;
   password: string;
+  /**
+   * O código do convite. Obrigatório: é ele que diz em que frota a conta nasce.
+   *
+   * Sem ele não há forma de saber — e qualquer escolha automática punha um
+   * motorista dentro da conta de uma empresa que não é a dele.
+   */
+  codigo: string;
 };
 
 export type UpdateUserInput = {

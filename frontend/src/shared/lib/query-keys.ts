@@ -218,4 +218,24 @@ export const queryKeys = {
   pending: {
     all: ['pending'] as const,
   },
+
+  // Os convites de uma frota — os links por onde os motoristas entram.
+  invites: {
+    all: ['invites'] as const,
+    list: ['invites', 'list'] as const,
+  },
+
+  // O painel do dono da plataforma: frotas clientes e planos.
+  //
+  // Separado de tudo o resto porque é outro âmbito — estas respostas
+  // atravessam frotas, e nenhuma tela de administração de frota as lê.
+  sistema: {
+    all: ['sistema'] as const,
+    painel: ['sistema', 'painel'] as const,
+    planos: ['sistema', 'planos'] as const,
+    // O catálogo das funcionalidades muda quando o código muda, não quando
+    // alguém mexe num plano: fica fora do prefixo que se invalida.
+    catalogo: ['sistema', 'catalogo'] as const,
+    contas: (fleetId: string) => ['sistema', 'contas', fleetId] as const,
+  },
 };
