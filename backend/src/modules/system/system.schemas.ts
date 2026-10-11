@@ -101,3 +101,13 @@ export const actualizarPlanoSchema = z.object({
     activo: z.boolean().optional(),
   }),
 });
+
+export const fecharPedidoSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z.object({
+    // DONE: resolveu-se. DISMISSED: não avançou. As duas fecham; a diferença
+    // é o que a lista conta daqui a seis meses.
+    estado: z.enum(['DONE', 'DISMISSED']),
+    nota: z.string().trim().max(2000).optional().nullable(),
+  }),
+});

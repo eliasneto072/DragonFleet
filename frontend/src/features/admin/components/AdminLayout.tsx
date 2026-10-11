@@ -28,7 +28,7 @@ import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
   ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
-  Wrench, Boxes, Lock, AlertTriangle,
+  Wrench, Boxes, Lock, AlertTriangle, Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AppShell, type NavItem } from '@/app/components/AppShell';
@@ -80,6 +80,10 @@ interface Entrada {
   funcionalidade?: string;
   /** Só a frota da casa vê esta entrada. Investimentos, investidores, projetos. */
   soDaCasa?: true;
+  /** O contrário: só as frotas CLIENTES. A casa não compra planos a ninguém. */
+  soClientes?: true;
+  /** Só o administrador da frota, e não toda a equipa. Quem paga é quem decide. */
+  soAdmin?: true;
   /**
    * As pendências que pertencem a ESTA entrada.
    *
@@ -164,6 +168,16 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       { to: '/app/admin/support',       icon: MessageCircle, label: 'Suporte',       area: 'SUPPORT', funcionalidade: 'SUPPORT' },
       { to: '/app/admin/settings',      icon: Settings,      label: 'Configurações', area: 'SETTINGS', funcionalidade: 'SETTINGS' },
       { to: '/app/admin/team',          icon: ShieldCheck,   label: 'Equipa',        area: 'TEAM', funcionalidade: 'TEAM' },
+      // ── O meu plano ──
+      //
+      // Sem `funcionalidade`: nunca leva cadeado, e é o ponto. Esta é a loja,
+      // e não se vende o acesso à loja — é para aqui que os cadeados mandam a
+      // pessoa. Só o administrador da frota a vê (é quem paga), e a frota da
+      // casa não, porque não compra nada a ninguém.
+      {
+        to: '/app/admin/meu-plano', icon: Package, label: 'O meu plano',
+        area: 'DASHBOARD', soAdmin: true, soClientes: true, fontes: [],
+      },
     ],
   },
 ];
@@ -186,7 +200,7 @@ export function primeiraTelaPermitida(
       // Uma tela com cadeado não serve de destino: mandava a pessoa para a
       // página a dizer que não pode entrar, como primeira coisa que vê.
       if (e.funcionalidade && !tem(e.funcionalidade)) continue;
-      if (e.soDaCasa) continue;
+      if (e.soDaCasa || e.soClientes) continue;
       return e.to;
     }
   }
@@ -334,6 +348,8 @@ export function AdminLayout() {
         // vendem e por isso não levam cadeado: desaparecem. Um cadeado ali
         // era uma montra de uma coisa que não está à venda.
         .filter((e) => !e.soDaCasa || frota?.daCasa !== false)
+        .filter((e) => !e.soClientes || frota?.daCasa === false)
+        .filter((e) => !e.soAdmin || user?.role === 'ADMIN')
         .map((e): NavItem => {
           // ── O cadeado ──
           //

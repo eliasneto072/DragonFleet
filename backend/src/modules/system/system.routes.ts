@@ -26,6 +26,10 @@ export function systemRouter(): Router {
   router.post('/frotas/:id/renovar', c.renovar);
   router.get('/frotas/:id/contas', c.contas);
 
+  // ── Pedidos de plano ──
+  router.get('/pedidos', c.pedidos);
+  router.post('/pedidos/:id/fechar', c.fecharPedido);
+
   // ── Planos ──
   //
   // O catálogo ANTES de `/planos/:id`: sem isto, "catalogo" era apanhado como

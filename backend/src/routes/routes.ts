@@ -29,6 +29,7 @@ import { remindersRouter } from '../modules/reminders/reminders.routes';
 import { pendingRouter } from '../modules/pending/pending.routes';
 import { systemRouter } from '../modules/system/system.routes';
 import { invitesRouter } from '../modules/invites/invites.routes';
+import { meuPlanoRouter } from '../modules/plan-requests/meu-plano.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
 import { escopoDaFrota } from '../middlewares/escopo.middleware';
@@ -59,6 +60,16 @@ router.use(lerSessaoSeHouver, escopoDaFrota);
 router.use('/auth', authRouter())
 // O portal do investidor E a gestão deles. Da casa: ver `soDaCasa`.
 router.use('/investors', soDaCasa, investorsRouter())
+
+// ─── O plano desta frota, visto pelo cliente ───────────────────────────────
+//
+// ACIMA do bloqueio da assinatura expirada, e é o ponto todo: uma frota
+// expirada é precisamente quem precisa de poder pedir. Fechar esta porta a
+// quem está trancado era fechar a porta de quem quer pagar.
+//
+// Sem `requireArea`: isto não é uma área do painel, é a conta da empresa. A
+// guarda está lá dentro e é `requireAdmin` — quem muda de plano é quem paga.
+router.use('/meu-plano', meuPlanoRouter())
 
 // ─── Assinatura expirada: daqui para baixo, só se lê ───────────────────────
 //

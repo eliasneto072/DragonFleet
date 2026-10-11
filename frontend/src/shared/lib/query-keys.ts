@@ -219,6 +219,12 @@ export const queryKeys = {
     all: ['pending'] as const,
   },
 
+  // O plano desta frota, visto pelo cliente.
+  meuPlano: {
+    all: ['meu-plano'] as const,
+    detail: ['meu-plano', 'detail'] as const,
+  },
+
   // Os convites de uma frota — os links por onde os motoristas entram.
   invites: {
     all: ['invites'] as const,
@@ -236,6 +242,7 @@ export const queryKeys = {
     // O catálogo das funcionalidades muda quando o código muda, não quando
     // alguém mexe num plano: fica fora do prefixo que se invalida.
     catalogo: ['sistema', 'catalogo'] as const,
+    pedidos: (todos: boolean) => ['sistema', 'pedidos', todos] as const,
     contas: (fleetId: string) => ['sistema', 'contas', fleetId] as const,
   },
 };

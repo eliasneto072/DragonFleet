@@ -333,21 +333,52 @@ export class InvestmentsService {
     }
 
     const today = lisbonDay();
-    const plan = await prisma.investmentPlan.create({
-      data: {
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        type: input.type,
-        annualRate: input.annualRate,
-        // Os campos que só fazem sentido nos fixos ficam nulos nos flexíveis,
-        // para não haver um "prazo" guardado que ninguém aplica.
-        termDays: fixed ? input.termDays : null,
-        earlyWithdrawalPenalty: fixed ? (input.earlyWithdrawalPenalty ?? 0) : null,
-        minAmount: input.minAmount ?? 0,
-        minRank: input.minRank ?? null,
-        active: input.active ?? true,
-        rates: { create: { annualRate: input.annualRate, effectiveFrom: dayToDate(today), createdBy: actor.id } },
-      },
+
+    // ─── DUAS ESCRITAS, E NÃO UMA COM A TAXA LÁ DENTRO ──────────────────
+    //
+    // Isto era `rates: { create: … }` — uma criação aninhada dentro do
+    // `data` do plano. Parecia mais limpo e estava partido desde que as
+    // frotas existem: a camada do âmbito (`config/escopo.ts`) carimba a
+    // frota no `data` de topo, e NÃO desce às relações lá dentro. A taxa
+    // nascia com `fleet_id` vazio, a chave estrangeira recusava, e o
+    // resultado era "internal server error" ao criar um plano.
+    //
+    // Foi exactamente para isto que o `fleet_id` tem '' por omissão em vez
+    // de um valor plausível: uma escrita que escape à camada rebenta em vez
+    // de aterrar em silêncio na frota errada. Rebentou, e é assim que se
+    // descobre.
+    //
+    // Escritas à parte, as duas passam pela camada e as duas levam a frota.
+    // Numa transação porque um plano sem a primeira taxa não é um plano:
+    // a listagem lê a taxa do histórico, e um plano sem histórico aparecia
+    // sem taxa nenhuma.
+    const plan = await prisma.$transaction(async (tx) => {
+      const criado = await tx.investmentPlan.create({
+        data: {
+          name: input.name.trim(),
+          description: input.description?.trim() || null,
+          type: input.type,
+          annualRate: input.annualRate,
+          // Os campos que só fazem sentido nos fixos ficam nulos nos flexíveis,
+          // para não haver um "prazo" guardado que ninguém aplica.
+          termDays: fixed ? input.termDays : null,
+          earlyWithdrawalPenalty: fixed ? (input.earlyWithdrawalPenalty ?? 0) : null,
+          minAmount: input.minAmount ?? 0,
+          minRank: input.minRank ?? null,
+          active: input.active ?? true,
+        },
+      });
+
+      await tx.investmentPlanRate.create({
+        data: {
+          planId: criado.id,
+          annualRate: input.annualRate,
+          effectiveFrom: dayToDate(today),
+          createdBy: actor.id,
+        },
+      });
+
+      return criado;
     });
     logger.info(`[investments] ${actor.id} criou o plano ${plan.id} (${plan.name}, ${plan.type}, ${input.annualRate}%)`);
     return plan;

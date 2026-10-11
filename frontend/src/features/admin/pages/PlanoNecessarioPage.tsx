@@ -14,7 +14,7 @@
 // Mais do que isso irrita ao segundo clique.
 
 import { useParams, Link } from 'react-router-dom';
-import { Lock, ArrowLeft } from 'lucide-react';
+import { Lock, ArrowLeft, Package } from 'lucide-react';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { FUNCIONALIDADES_DO_MENU } from '@/features/admin/components/AdminLayout';
@@ -41,16 +41,26 @@ export function PlanoNecessarioPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            O plano da sua frota não inclui esta secção. Fale com quem gere a
-            vossa conta para a acrescentar.
+            O plano da sua frota não inclui esta secção.
           </p>
 
-          <Button variant="outline" asChild>
-            <Link to="/app/admin/dashboard">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar ao painel
-            </Link>
-          </Button>
+          {/* O caminho a seguir, e não só a porta fechada: quem chega aqui
+              quer saber o que lhe falta e quanto custa, e é isso que está do
+              outro lado deste botão. */}
+          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+            <Button asChild>
+              <Link to="/app/admin/meu-plano">
+                <Package className="h-4 w-4 mr-2" />
+                Ver planos
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/app/admin/dashboard">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar ao painel
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

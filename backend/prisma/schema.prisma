@@ -2273,9 +2273,10 @@ model Fleet {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  plan    Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
-  users   User[]
-  invites Invite[]
+  plan     Plan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  users    User[]
+  invites  Invite[]
+  requests PlanRequest[]
 
   @@index([active])
   @@map("fleets")
@@ -2320,7 +2321,8 @@ model Plan {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
-  fleets Fleet[]
+  fleets   Fleet[]
+  requests PlanRequest[]
 
   @@index([active])
   @@map("plans")
@@ -2394,4 +2396,64 @@ model Invite {
   @@index([fleetId])
 
   @@map("invites")
+}
+
+/// Em que pé está um pedido de plano.
+enum PlanRequestStatus {
+  OPEN      // à espera de resposta tua
+  DONE      // resolvido: o plano foi mudado, ou combinou-se outra coisa
+  DISMISSED // não avançou
+}
+
+/// Um cliente a pedir um plano melhor.
+///
+/// ─── PORQUE É QUE NÃO SÃO TICKETS DE SUPORTE ────────────────────────────────
+///
+/// Porque os tickets são por frota: um ticket aberto na frota do cliente cai na
+/// caixa de suporte DELE, que é precisamente quem não o pode resolver. Isto tem
+/// de chegar ao dono da plataforma, que está fora daquela frota — e por isso é
+/// uma tabela própria, lida em modo de dono.
+///
+/// ─── PORQUE É QUE NÃO SE APAGA UM PEDIDO ────────────────────────────────────
+///
+/// Porque é o histórico comercial de uma conta: quem pediu o quê e quando, e o
+/// que se combinou. Fecha-se com uma nota e fica. Daqui a um ano, a pergunta
+/// "porque é que este cliente está neste preço" tem resposta.
+model PlanRequest {
+  id String @id @default(cuid())
+
+  /// A frota que pediu. Ver `escopo.ts`.
+  fleetId String @default("") @map("fleet_id")
+
+  /// O plano pedido. NULO quer dizer "personalizado": o cliente não quer
+  /// nenhum dos que estão à venda e escreveu o que precisa.
+  planId String? @map("plan_id")
+
+  /// O que o cliente escreveu, pelas palavras dele.
+  message String?
+
+  status PlanRequestStatus @default(OPEN)
+
+  /// Quem pediu, dentro da frota. Texto e não relação: serve para saber com
+  /// quem falar, e uma conta apagada não deve levar o pedido atrás.
+  requestedBy     String? @map("requested_by")
+  requestedByName String? @map("requested_by_name")
+
+  /// A tua nota ao fechar. É isto que responde, daqui a um ano, à pergunta
+  /// "o que é que ficou combinado com este cliente".
+  resolution String?
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  /// Declaradas porque a lista do teu painel mostra as duas: de que frota é o
+  /// pedido e que plano pediram. Sem elas eram duas consultas a seguir a esta,
+  /// e a lista é a primeira coisa que se abre.
+  fleet Fleet @relation(fields: [fleetId], references: [id])
+  plan  Plan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([fleetId])
+  @@index([status])
+
+  @@map("plan_requests")
 }

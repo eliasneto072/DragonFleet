@@ -41,6 +41,21 @@ export interface ResumoDoSistema {
   activas: number;
   aExpirar: number;
   expiradas: number;
+  /** Pedidos de plano à espera de resposta. */
+  pedidos: number;
+}
+
+export interface PedidoDePlano {
+  id: string;
+  estado: 'OPEN' | 'DONE' | 'DISMISSED';
+  frota: { id: string; nome: string; slug: string };
+  /** `null` quer dizer "à medida": nenhum dos planos à venda servia. */
+  plano: { id: string; nome: string; preco: string; duracaoDias: number } | null;
+  mensagem: string | null;
+  pedidoPor: string | null;
+  resolucao: string | null;
+  criadoEm: string;
+  fechadoEm: string | null;
 }
 
 export interface Plano {
@@ -119,6 +134,17 @@ export const systemService = {
 
   contas(id: string): Promise<{ contas: ContaDaFrota[] }> {
     return apiClient.get(`/system/frotas/${id}/contas`);
+  },
+
+  /** `todos` inclui os já fechados, para o histórico de uma conta. */
+  pedidos(todos = false): Promise<{ pedidos: PedidoDePlano[] }> {
+    return apiClient.get(`/system/pedidos${todos ? '?todos=1' : ''}`);
+  },
+
+  fecharPedido(
+    id: string, estado: 'DONE' | 'DISMISSED', nota?: string | null,
+  ): Promise<{ ok: boolean }> {
+    return apiClient.post(`/system/pedidos/${id}/fechar`, { estado, nota });
   },
 
   planos(): Promise<{ planos: Plano[] }> {

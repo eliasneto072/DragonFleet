@@ -51,6 +51,8 @@ import { SystemLayout } from '@/features/system/components/SystemLayout';
 import { FleetsPage } from '@/features/system/pages/FleetsPage';
 import { PlansPage } from '@/features/system/pages/PlansPage';
 import { PlanoNecessarioPage } from '@/features/admin/pages/PlanoNecessarioPage';
+import { MeuPlanoPage } from '@/features/admin/pages/MeuPlanoPage';
+import { RequestsPage } from '@/features/system/pages/RequestsPage';
 
 export const router = createBrowserRouter([
 
@@ -117,6 +119,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="frotas" replace /> },
           { path: 'frotas', element: <FleetsPage /> },
           { path: 'planos', element: <PlansPage /> },
+          { path: 'pedidos', element: <RequestsPage /> },
         ],
       },
 
@@ -174,6 +177,10 @@ export const router = createBrowserRouter([
           // é porque uma guarda o mandou para cá, e é aqui que se explica
           // porquê. Pô-la atrás de uma guarda dava um salto infinito.
           { path: 'plano/:codigo',  element: <PlanoNecessarioPage /> },
+
+          // A loja. Sem `funcionalidade` de propósito — é para aqui que os
+          // cadeados mandam, e um cadeado na loja não deixava ninguém comprar.
+          { path: 'meu-plano',      element: <AdminOnly><MeuPlanoPage /></AdminOnly> },
         ],
       },
     ],

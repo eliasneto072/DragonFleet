@@ -6,7 +6,7 @@ import { ok } from '../../shared/http/response';
 import { systemService } from './system.service';
 import {
   idParamSchema, criarFrotaSchema, actualizarFrotaSchema, renovarSchema,
-  criarPlanoSchema, actualizarPlanoSchema,
+  criarPlanoSchema, actualizarPlanoSchema, fecharPedidoSchema,
 } from './system.schemas';
 
 export class SystemController {
@@ -40,6 +40,19 @@ export class SystemController {
   contas = async (req: PedidoComFrota, res: Response) => {
     const { params } = idParamSchema.parse({ params: req.params });
     return ok(res, { contas: await systemService.contasDaFrota(params.id) });
+  };
+
+  pedidos = async (req: PedidoComFrota, res: Response) => {
+    // `?todos=1` traz também os fechados, para o histórico de uma conta.
+    const todos = String((req.query as Record<string, unknown>)?.todos ?? '') === '1';
+    return ok(res, { pedidos: await systemService.listarPedidos(todos) });
+  };
+
+  fecharPedido = async (req: PedidoComFrota, res: Response) => {
+    const { params, body } = fecharPedidoSchema.parse({
+      params: req.params, body: req.body,
+    });
+    return ok(res, await systemService.fecharPedido(params.id, body.estado, body.nota));
   };
 
   planos = async (_req: PedidoComFrota, res: Response) => {

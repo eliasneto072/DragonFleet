@@ -505,6 +505,79 @@ export class SystemService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Pedidos de plano
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Os clientes que pediram mais do que têm.
+   *
+   * Os que estão à espera primeiro, e dentro desses os mais antigos à frente:
+   * quem pediu há três dias e ainda não teve resposta é quem está mais perto
+   * de desistir.
+   */
+  async listarPedidos(incluirFechados = false) {
+    const pedidos = await prisma.planRequest.findMany({
+      where: incluirFechados ? {} : { status: 'OPEN' },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        fleet: { select: { id: true, name: true, slug: true } },
+        plan: { select: { id: true, name: true, price: true, durationDays: true } },
+      },
+      take: 200,
+    });
+
+    return pedidos.map((p) => ({
+      id: p.id,
+      estado: p.status,
+      frota: { id: p.fleet.id, nome: p.fleet.name, slug: p.fleet.slug },
+      // Nulo quer dizer "personalizado": não quis nenhum dos que estão à venda.
+      plano: p.plan
+        ? {
+          id: p.plan.id,
+          nome: p.plan.name,
+          preco: p.plan.price.toString(),
+          duracaoDias: p.plan.durationDays,
+        }
+        : null,
+      mensagem: p.message,
+      pedidoPor: p.requestedByName,
+      resolucao: p.resolution,
+      criadoEm: p.createdAt,
+      fechadoEm: p.resolvedAt,
+    }));
+  }
+
+  /**
+   * Fecha um pedido, com uma nota.
+   *
+   * Não apaga: é o histórico comercial da conta. Daqui a um ano, a pergunta
+   * "porque é que este cliente está neste preço" tem resposta escrita.
+   *
+   * Mudar o plano da frota NÃO acontece aqui. É um passo à parte, na tela das
+   * Frotas, e de propósito: fechar o pedido é dizer que a conversa acabou;
+   * mudar o plano é cobrar a alguém. Juntá-los dava um clique a fazer as duas
+   * coisas, e uma delas sem querer.
+   */
+  async fecharPedido(id: string, estado: 'DONE' | 'DISMISSED', nota?: string | null) {
+    const { count } = await prisma.planRequest.updateMany({
+      where: { id, status: 'OPEN' },
+      data: {
+        status: estado,
+        resolution: nota?.trim() || null,
+        resolvedAt: new Date(),
+      },
+    });
+
+    if (count === 0) {
+      throw new AppError(
+        'Pedido não encontrado, ou já estava fechado.',
+        404, 'PEDIDO_NAO_ENCONTRADO',
+      );
+    }
+    return { ok: true };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   // O resto
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -524,9 +597,10 @@ export class SystemService {
    * prazo: um cliente expirado é um cliente trancado à espera de telefonar.
    */
   async resumo() {
-    const frotas = await prisma.fleet.findMany({
-      select: { active: true, subscriptionEndsOn: true },
-    });
+    const [frotas, pedidos] = await Promise.all([
+      prisma.fleet.findMany({ select: { active: true, subscriptionEndsOn: true } }),
+      prisma.planRequest.count({ where: { status: 'OPEN' } }),
+    ]);
 
     let aExpirar = 0;
     let expiradas = 0;
@@ -541,6 +615,7 @@ export class SystemService {
       activas: frotas.filter((f) => f.active).length,
       aExpirar,
       expiradas,
+      pedidos,
     };
   }
 }
