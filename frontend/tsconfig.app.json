@@ -19,5 +19,21 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+
+  // Os testes não entram no build.
+  //
+  // ─── PORQUE É QUE ISTO FOI PRECISO ──────────────────────────────────────
+  //
+  // O `npm run build` corre `tsc -b`, que verifica TUDO o que está em `src`.
+  // O vitest está no backend e não aqui, por isso um ficheiro `.test.ts`
+  // neste projeto falha a compilar com "Cannot find module 'vitest'" — e o
+  // build do site inteiro morre numa linha que nem vai para o browser.
+  //
+  // Aconteceu a sério, com a calculadora de ganhos: o backend publicou e o
+  // site ficou na versão anterior.
+  //
+  // O mesmo que o `tsconfig.json` do backend já fazia, e pela mesma razão: o
+  // que não serve o utilizador não tem de travar o que serve.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
