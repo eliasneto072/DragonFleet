@@ -42,6 +42,16 @@ export const companiesService = {
    * Os dois campos ausentes significam "Nenhum", que é uma escolha e não uma
    * omissão: o servidor grava a data e é ela que os distingue.
    */
+  /**
+   * A tabela cruzada: quanto cada motorista passou a cada sociedade, num ano.
+   *
+   * Uma consulta por ano. Somar anos diferentes num número só dá um valor que
+   * não serve nem para a declaração de um nem para a do outro.
+   */
+  porMotorista(ano: number): Promise<MatrizPorMotorista> {
+    return apiClient.get(`/companies/por-motorista?ano=${ano}`);
+  },
+
   setWithdrawalCompany(
     withdrawalId: string,
     input: { companyId?: string | null; companyOther?: string | null },
@@ -66,4 +76,35 @@ export function describeCompany(w: {
   if (w.companyOther) return { label: w.companyOther, classified: true };
   if (w.companySetAt) return { label: 'Nenhum', classified: true };
   return { label: 'Por classificar', classified: false };
+}
+
+/**
+ * Uma coluna da tabela cruzada.
+ *
+ * `tipo` existe para a tela poder tratar as quatro naturezas de forma
+ * diferente: uma sociedade da lista é uma venda arrumada, "por classificar" é
+ * trabalho por fazer, e pintá-las igual escondia o segundo dentro do primeiro.
+ */
+export interface Coluna {
+  chave: string;
+  nome: string;
+  tipo: 'sociedade' | 'outra' | 'nenhum' | 'porClassificar';
+}
+
+export interface LinhaPorMotorista {
+  userId: string;
+  nome: string;
+  /** Em euros, por chave de coluna. Só as colunas com valor. */
+  valores: Record<string, number>;
+  total: number;
+}
+
+export interface MatrizPorMotorista {
+  ano: number;
+  /** Os anos que têm recibos, para o seletor. */
+  anos: number[];
+  colunas: Coluna[];
+  linhas: LinhaPorMotorista[];
+  totaisPorColuna: Record<string, number>;
+  total: number;
 }

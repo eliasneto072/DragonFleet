@@ -48,6 +48,7 @@ import type { ApiWithdrawal, ApiCompany } from '@/shared/types/api';
 import { useListState } from '@/shared/hooks/use-list-state';
 import { Pagination } from '@/app/components/ui/list-toolbar';
 import { saveBlob } from '@/shared/lib/api-client';
+import { ReceiptsMatrix } from '@/app/components/admin/receipts-matrix';
 import { reportsService } from '@/features/admin/services/reports.service';
 
 const ALL = '__all__';
@@ -555,6 +556,12 @@ export function GreenReceipts() {
       />
 
       <CompaniesCard onSelect={(v) => lista.setFilter('sociedade', v)} />
+
+      {/* A mesma informação pelo outro lado.
+          O cartão de cima diz quanto cada sociedade recebeu de toda a gente;
+          este diz quanto cada motorista passou a cada uma. É a segunda que
+          traz alguém a esta tela — ver a nota no topo de `receipts-matrix`. */}
+      <ReceiptsMatrix />
 
       {unclassified > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">

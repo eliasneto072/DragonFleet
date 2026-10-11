@@ -14,6 +14,11 @@ export function companiesRouter(): Router {
   // lista de sociedades do grupo não lhe diz respeito.
   router.get('/', requireStaff, companiesController.list);
 
+  // ANTES de qualquer rota com `:id`, para "por-motorista" não ser lido como
+  // o id de uma sociedade. Aqui ainda não há nenhuma, mas o dia em que houver
+  // é o dia em que isto deixava de funcionar sem nada a explicar porquê.
+  router.get('/por-motorista', requireStaff, companiesController.porMotorista);
+
   // Mexer na lista é de administrador: renomear uma sociedade muda o nome que
   // aparece em todos os recibos já emitidos a ela.
   router.post('/', requireAdmin, companiesController.create);

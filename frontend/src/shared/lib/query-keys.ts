@@ -173,6 +173,9 @@ export const queryKeys = {
     root: ['companies'] as const,
     active: ['companies', 'active'] as const,
     all: ['companies', 'all'] as const,
+    // Uma chave por ano: mudar de ano não deita fora o que já foi carregado,
+    // e voltar ao ano anterior é instantâneo.
+    porMotorista: (ano: number) => ['companies', 'por-motorista', ano] as const,
   },
 
   // Analytics (admin)

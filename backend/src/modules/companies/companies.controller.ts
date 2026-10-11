@@ -20,6 +20,23 @@ export class CompaniesController {
     return ok(res, { companies });
   };
 
+  /**
+   * A tabela cruzada: motoristas nas linhas, sociedades nas colunas.
+   *
+   * O ano vem na query. Sem ele, o actual — é o que se quer ver em nove de
+   * cada dez vezes, e obrigar a escolher antes de mostrar o que quer que seja
+   * é um clique a mais todos os dias.
+   */
+  porMotorista = async (req: AuthRequest, res: Response) => {
+    const bruto = (req.query as Record<string, unknown>)?.ano;
+    const pedido = Number(bruto);
+    const ano = Number.isInteger(pedido) && pedido >= 2000 && pedido <= 2100
+      ? pedido
+      : new Date().getFullYear();
+
+    return ok(res, await companiesService.matrizPorMotorista(ano));
+  };
+
   create = async (req: AuthRequest, res: Response) => {
     const parsed = createCompanySchema.parse({ body: req.body });
     const company = await companiesService.create(parsed.body.name);

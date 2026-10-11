@@ -17,9 +17,11 @@
 // registo mostra e o que a base tem ligado — e por isso a soma é feita em SQL.
 
 import { prisma } from '../../config/prisma';
+import { frotaObrigatoria } from '../../config/escopo';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
-import { WithdrawalStatus } from '../../shared/types/enums';
+import { UserRole, WithdrawalStatus } from '../../shared/types/enums';
+import { montarMatriz, type LinhaCrua, type Matriz } from './matriz';
 
 /**
  * Os estados que produzem recibo — o mesmo universo da tela de Recibos Verdes.
@@ -116,6 +118,90 @@ class CompaniesService {
       receiptTotal: receiptsById.get(c.id)?.total ?? 0,
       linkedCount: linkedById.get(c.id) ?? 0,
     }));
+  }
+
+  /**
+   * Quanto é que cada motorista passou a cada sociedade, num ano.
+   *
+   * ─── PORQUE É QUE ISTO É SQL ESCRITO À MÃO ────────────────────────────────
+   *
+   * Por causa da data. Um recibo conta no ano em que foi APROVADO — é quando
+   * passou a existir e quando a sociedade lhe foi atribuída. Mas o
+   * `processed_at` é nulo nas retiradas antigas, e aí vale a data do pedido.
+   * Esse `COALESCE` entre duas colunas não se escreve num `groupBy` do Prisma
+   * sem trazer as linhas todas para memória e agrupá-las aqui — que, num ano
+   * com milhares de recibos, é trazer milhares de linhas para somar três
+   * números.
+   *
+   * Uma consulta, três colunas de agrupamento, uma soma. O filtro da frota vai
+   * escrito à mão porque a camada do âmbito não vê SQL — ver `escopo.ts`, e a
+   * guarda em `scripts/verificar-escopo.mjs` que o exige.
+   *
+   * ─── E PORQUE É QUE A SOMA VEM EM TEXTO ───────────────────────────────────
+   *
+   * `CAST(… AS TEXT)` e não `AS FLOAT`. O valor é `Decimal(12,2)` e um FLOAT
+   * perde cêntimos por arredondamento binário. Em texto chega exacto, e quem
+   * soma é `matriz.ts`, em cêntimos inteiros.
+   */
+  async matrizPorMotorista(ano: number): Promise<Matriz & { ano: number; anos: number[] }> {
+    const frota = frotaObrigatoria();
+    const inicio = new Date(Date.UTC(ano, 0, 1));
+    const fim = new Date(Date.UTC(ano + 1, 0, 1));
+
+    const [cruas, motoristas, sociedades, anos] = await Promise.all([
+      prisma.$queryRaw<LinhaCrua[]>`
+        SELECT
+          w.user_id                           AS "userId",
+          u.name                              AS "userName",
+          w.company_id                        AS "companyId",
+          w.company_other                     AS "companyOther",
+          (w.company_set_at IS NOT NULL)      AS "classificado",
+          CAST(SUM(w.amount) AS TEXT)         AS "total"
+        FROM withdrawals w
+        JOIN users u ON u.id = w.user_id
+        WHERE w.fleet_id = ${frota}
+          AND w.status IN ('APPROVED', 'PAID')
+          AND COALESCE(w.processed_at, w.requested_at) >= ${inicio}
+          AND COALESCE(w.processed_at, w.requested_at) <  ${fim}
+        GROUP BY w.user_id, u.name, w.company_id, w.company_other, (w.company_set_at IS NOT NULL)
+      `,
+
+      // Todos os motoristas, e não só os que passaram alguma coisa. Um
+      // motorista ausente lê-se como "não existe"; com zeros lê-se como "não
+      // passou nada", que é outra coisa e é a verdade.
+      prisma.user.findMany({
+        where: { role: UserRole.DRIVER },
+        select: { id: true, name: true },
+      }),
+
+      prisma.company.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true },
+      }),
+
+      // Os anos que têm alguma coisa, para o seletor não oferecer anos vazios.
+      prisma.$queryRaw<{ ano: number }[]>`
+        SELECT DISTINCT
+          CAST(EXTRACT(YEAR FROM COALESCE(w.processed_at, w.requested_at)) AS INTEGER) AS ano
+        FROM withdrawals w
+        WHERE w.fleet_id = ${frota}
+          AND w.status IN ('APPROVED', 'PAID')
+        ORDER BY ano DESC
+      `,
+    ]);
+
+    const matriz = montarMatriz(
+      cruas,
+      motoristas.map((m) => ({ id: m.id, nome: m.name })),
+      sociedades.map((c) => ({ id: c.id, nome: c.name })),
+    );
+
+    // O ano actual entra sempre, mesmo sem recibos: é o que a tela abre, e um
+    // seletor sem o ano que está a mostrar parece avariado.
+    const lista = [...new Set([...anos.map((a) => Number(a.ano)), ano])]
+      .sort((a, b) => b - a);
+
+    return { ...matriz, ano, anos: lista };
   }
 
   async create(name: string): Promise<CompanyPublic> {
