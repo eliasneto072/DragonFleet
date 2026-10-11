@@ -43,6 +43,23 @@ export interface ResumoDoSistema {
   expiradas: number;
   /** Pedidos de plano à espera de resposta. */
   pedidos: number;
+  /** Contactos do site ainda por responder. */
+  contactos: number;
+}
+
+export type EstadoDoContacto = 'NOVO' | 'FALADO' | 'GANHO' | 'PERDIDO';
+
+export interface Contacto {
+  id: string;
+  tipo: 'MOTORISTA' | 'GESTOR';
+  estado: EstadoDoContacto;
+  nome: string;
+  telefone: string;
+  email: string | null;
+  mensagem: string | null;
+  notas: string | null;
+  criadoEm: string;
+  fechadoEm: string | null;
 }
 
 export interface PedidoDePlano {
@@ -134,6 +151,17 @@ export const systemService = {
 
   contas(id: string): Promise<{ contas: ContaDaFrota[] }> {
     return apiClient.get(`/system/frotas/${id}/contas`);
+  },
+
+  /** `todos` inclui os ganhos e perdidos, e não só os que faltam responder. */
+  contactos(todos = false): Promise<{ contactos: Contacto[] }> {
+    return apiClient.get(`/system/contactos${todos ? '?todos=1' : ''}`);
+  },
+
+  actualizarContacto(
+    id: string, estado: EstadoDoContacto, notas?: string | null,
+  ): Promise<{ ok: boolean }> {
+    return apiClient.post(`/system/contactos/${id}`, { estado, notas });
   },
 
   /** `todos` inclui os já fechados, para o histórico de uma conta. */

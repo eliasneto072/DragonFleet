@@ -2457,3 +2457,56 @@ model PlanRequest {
 
   @@map("plan_requests")
 }
+
+/// De onde veio um contacto, e em que pé está.
+enum LeadStatus {
+  NOVO
+  FALADO    // já houve conversa
+  GANHO     // virou motorista ou frota cliente
+  PERDIDO
+}
+
+enum LeadTipo {
+  MOTORISTA
+  GESTOR
+}
+
+/// Alguém que deixou o contacto no site.
+///
+/// ─── PORQUE É QUE ISTO NÃO TEM FROTA ────────────────────────────────────────
+///
+/// Porque ainda não é de nenhuma. É uma pessoa que abriu dragonfleet.pt e
+/// deixou o número — não tem conta, não tem sessão, e no caso de um gestor a
+/// frota dele ainda não existe. Por isso está em `MODELOS_GLOBAIS` (ver
+/// `config/escopo.ts`): é da plataforma, como os planos.
+///
+/// ─── O QUE ISTO GUARDA, E PORQUE É TÃO POUCO ────────────────────────────────
+///
+/// Nome, contacto e uma frase. É um formulário público: tudo o que se pedir a
+/// mais é uma razão a mais para a pessoa desistir a meio, e é dado pessoal de
+/// alguém que ainda não é cliente de ninguém.
+model Lead {
+  id String @id @default(cuid())
+
+  /// Por que porta entrou: o botão "sou motorista" ou "sou gestor de frota".
+  /// Guardado porque muda tudo o que se diz a seguir ao telefone.
+  tipo LeadTipo
+
+  name    String
+  phone   String
+  email   String?
+  message String?
+
+  status LeadStatus @default(NOVO)
+
+  /// A tua nota: o que ficou combinado, ou porque não avançou.
+  notes String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  closedAt  DateTime? @map("closed_at")
+
+  @@index([status])
+  @@index([createdAt])
+
+  @@map("leads")
+}

@@ -4,9 +4,11 @@ import type { Response } from 'express';
 import type { PedidoComFrota } from '../../middlewares/escopo.middleware';
 import { ok } from '../../shared/http/response';
 import { systemService } from './system.service';
+import { leadsService } from '../leads/leads.service';
 import {
   idParamSchema, criarFrotaSchema, actualizarFrotaSchema, renovarSchema,
   criarPlanoSchema, actualizarPlanoSchema, fecharPedidoSchema,
+  actualizarContactoSchema,
 } from './system.schemas';
 
 export class SystemController {
@@ -40,6 +42,18 @@ export class SystemController {
   contas = async (req: PedidoComFrota, res: Response) => {
     const { params } = idParamSchema.parse({ params: req.params });
     return ok(res, { contas: await systemService.contasDaFrota(params.id) });
+  };
+
+  contactos = async (req: PedidoComFrota, res: Response) => {
+    const todos = String((req.query as Record<string, unknown>)?.todos ?? '') === '1';
+    return ok(res, { contactos: await leadsService.listar(todos) });
+  };
+
+  actualizarContacto = async (req: PedidoComFrota, res: Response) => {
+    const { params, body } = actualizarContactoSchema.parse({
+      params: req.params, body: req.body,
+    });
+    return ok(res, await leadsService.actualizar(params.id, body.estado, body.notas));
   };
 
   pedidos = async (req: PedidoComFrota, res: Response) => {

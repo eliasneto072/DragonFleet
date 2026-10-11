@@ -246,6 +246,7 @@ export const queryKeys = {
     // alguém mexe num plano: fica fora do prefixo que se invalida.
     catalogo: ['sistema', 'catalogo'] as const,
     pedidos: (todos: boolean) => ['sistema', 'pedidos', todos] as const,
+    contactos: (todos: boolean) => ['sistema', 'contactos', todos] as const,
     contas: (fleetId: string) => ['sistema', 'contas', fleetId] as const,
   },
 };

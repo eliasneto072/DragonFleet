@@ -3,6 +3,8 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RootLayout } from '@/app/providers/RootLayout';
 import { LandingPage } from '@/features/landing/pages/LandingPage';
+import { MotoristasPage } from '@/features/landing/pages/MotoristasPage';
+import { GestoresPage } from '@/features/landing/pages/GestoresPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 
@@ -53,12 +55,16 @@ import { PlansPage } from '@/features/system/pages/PlansPage';
 import { PlanoNecessarioPage } from '@/features/admin/pages/PlanoNecessarioPage';
 import { MeuPlanoPage } from '@/features/admin/pages/MeuPlanoPage';
 import { RequestsPage } from '@/features/system/pages/RequestsPage';
+import { LeadsPage } from '@/features/system/pages/LeadsPage';
 
 export const router = createBrowserRouter([
 
   // ── Rotas públicas ───────────────────────────────────────────────────────
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
+  // As duas portas da página inicial. Páginas públicas, sem guarda nenhuma.
+  { path: '/motoristas', element: <MotoristasPage /> },
+  { path: '/gestores', element: <GestoresPage /> },
   { path: '/register', element: <RegisterPage /> },
   // O link do convite. A mesma página: ela lê o código e decide o que mostrar.
   //
@@ -120,6 +126,7 @@ export const router = createBrowserRouter([
           { path: 'frotas', element: <FleetsPage /> },
           { path: 'planos', element: <PlansPage /> },
           { path: 'pedidos', element: <RequestsPage /> },
+          { path: 'contactos', element: <LeadsPage /> },
         ],
       },
 

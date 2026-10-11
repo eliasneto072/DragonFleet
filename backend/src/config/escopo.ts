@@ -158,11 +158,16 @@ export function frotaObrigatoria(): string {
 /**
  * As tabelas que NÃO pertencem a nenhuma frota.
  *
- * Lista curta e fechada: as frotas e os planos são da plataforma. Tudo o resto
- * é de alguém. Acrescentar um nome aqui é abrir uma tabela a toda a gente, e é
- * por isso que esta lista é o primeiro sítio a olhar numa revisão.
+ * Lista curta e fechada: as frotas, os planos e os contactos do site são da
+ * plataforma. Tudo o resto é de alguém. Acrescentar um nome aqui é abrir uma
+ * tabela a toda a gente, e é por isso que esta lista é o primeiro sítio a
+ * olhar numa revisão.
+ *
+ * `Lead` está aqui porque quem deixa o contacto no site ainda não é de frota
+ * nenhuma: não tem conta, não tem sessão, e se for um gestor a frota dele
+ * ainda não existe.
  */
-export const MODELOS_GLOBAIS = new Set<string>(['Fleet', 'Plan']);
+export const MODELOS_GLOBAIS = new Set<string>(['Fleet', 'Plan', 'Lead']);
 
 /** Operações que leem. O filtro entra no `where`. */
 const LEITURAS = new Set([

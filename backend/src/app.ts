@@ -109,6 +109,23 @@ app.use('/users', (req, res, next) =>
     : next(),
 );
 
+// O formulário de contacto do site é a única escrita aberta à internet
+// inteira: sem sessão e sem convite. Um orçamento próprio, mais largo que o
+// do login (ninguém erra um formulário de contacto dez vezes, mas uma casa
+// com vários a preencherem do mesmo IP é possível) e muito mais apertado do
+// que nenhum.
+app.use('/leads', rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Demasiados envios. Tente novamente dentro de uma hora.',
+  },
+}));
+
 app.use(router);
 
 app.use(errorMiddleware);

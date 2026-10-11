@@ -111,3 +111,11 @@ export const fecharPedidoSchema = z.object({
     nota: z.string().trim().max(2000).optional().nullable(),
   }),
 });
+
+export const actualizarContactoSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z.object({
+    estado: z.enum(['NOVO', 'FALADO', 'GANHO', 'PERDIDO']),
+    notas: z.string().trim().max(2000).optional().nullable(),
+  }),
+});

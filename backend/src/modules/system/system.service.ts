@@ -597,9 +597,10 @@ export class SystemService {
    * prazo: um cliente expirado é um cliente trancado à espera de telefonar.
    */
   async resumo() {
-    const [frotas, pedidos] = await Promise.all([
+    const [frotas, pedidos, contactos] = await Promise.all([
       prisma.fleet.findMany({ select: { active: true, subscriptionEndsOn: true } }),
       prisma.planRequest.count({ where: { status: 'OPEN' } }),
+      prisma.lead.count({ where: { status: 'NOVO' } }),
     ]);
 
     let aExpirar = 0;
@@ -616,6 +617,7 @@ export class SystemService {
       aExpirar,
       expiradas,
       pedidos,
+      contactos,
     };
   }
 }

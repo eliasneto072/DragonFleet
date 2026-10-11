@@ -14,7 +14,7 @@
 
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, Package, Inbox } from 'lucide-react';
+import { Building2, Package, Inbox, PhoneCall } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -34,6 +34,7 @@ export function SystemLayout() {
     staleTime: 60_000,
   });
   const porResponder = painelQ.data?.resumo.pedidos ?? 0;
+  const contactosNovos = painelQ.data?.resumo.contactos ?? 0;
 
   const navGroups: readonly NavGroup[] = [
     {
@@ -45,6 +46,15 @@ export function SystemLayout() {
           // Laranja: está à espera de ti, e isso é normal — não está atrasado.
           ...(porResponder > 0
             ? { badge: porResponder, badgeTone: 'waiting' as const }
+            : {}),
+        },
+        {
+          to: '/app/sistema/contactos', icon: PhoneCall, label: 'Contactos',
+          // Vermelho, ao contrário dos pedidos: um contacto do site é alguém
+          // que ainda não é cliente de ninguém e está à procura. Cada dia que
+          // passa é um dia em que pode ligar a outra frota.
+          ...(contactosNovos > 0
+            ? { badge: contactosNovos, badgeTone: 'late' as const }
             : {}),
         },
       ],

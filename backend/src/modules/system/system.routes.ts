@@ -26,6 +26,12 @@ export function systemRouter(): Router {
   router.post('/frotas/:id/renovar', c.renovar);
   router.get('/frotas/:id/contas', c.contas);
 
+  // ── Contactos do site ──
+  //
+  // Escrevem-se em `/leads`, que é público. Leem-se aqui, que não é.
+  router.get('/contactos', c.contactos);
+  router.post('/contactos/:id', c.actualizarContacto);
+
   // ── Pedidos de plano ──
   router.get('/pedidos', c.pedidos);
   router.post('/pedidos/:id/fechar', c.fecharPedido);

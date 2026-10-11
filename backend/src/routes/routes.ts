@@ -30,6 +30,7 @@ import { pendingRouter } from '../modules/pending/pending.routes';
 import { systemRouter } from '../modules/system/system.routes';
 import { invitesRouter } from '../modules/invites/invites.routes';
 import { meuPlanoRouter } from '../modules/plan-requests/meu-plano.routes';
+import { leadsRouter, publicoRouter } from '../modules/leads/leads.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
 import { escopoDaFrota } from '../middlewares/escopo.middleware';
@@ -53,6 +54,19 @@ const router = Router();
 // `authMiddleware` de cada router. Isto só lê o token, se existir, para saber
 // a frota antes de o resto correr.
 router.use(lerSessaoSeHouver, escopoDaFrota);
+
+// ─── O formulário de contacto do site ──────────────────────────────────────
+//
+// Público, e tem de ser: quem o preenche não tem conta nenhuma. Fica aqui em
+// cima, antes de qualquer muro — e antes do bloqueio da assinatura expirada,
+// que nem se aplica, porque isto não pertence a frota nenhuma.
+//
+// O limite por IP está em `app.ts`. Sem ele, uma rota aberta sem limite
+// enche-se numa noite.
+router.use('/leads', leadsRouter())
+// Os preços, para a página pública. Leitura e mais nada — e por isso fora do
+// limite por IP do formulário, que é para a escrita.
+router.use('/publico', publicoRouter())
 
 // ─── As duas rotas abertas a uma conta de investidor ───────────────────────
 //
