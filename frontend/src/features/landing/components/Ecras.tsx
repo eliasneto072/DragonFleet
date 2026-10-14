@@ -62,7 +62,7 @@ function PorPreencher({ ficheiro }: { ficheiro: string }) {
 }
 
 function UmEcra({ ecra, invertido }: { ecra: Ecra; invertido: boolean }) {
-  const [falhou, setFalhou] = useState(false);
+  const [carregou, setCarregou] = useState(false);
 
   return (
     <div className="grid items-center gap-8 lg:grid-cols-5 lg:gap-12">
@@ -70,17 +70,35 @@ function UmEcra({ ecra, invertido }: { ecra: Ecra; invertido: boolean }) {
           lado para explicar e não para competir. */}
       <div className={`lg:col-span-3 ${invertido ? 'lg:order-2' : ''}`}>
         <Moldura>
-          {falhou ? (
-            <PorPreencher ficheiro={ecra.ficheiro} />
-          ) : (
+          {/* ─── O AVISO É O ESTADO INICIAL, E NÃO O ESTADO DE ERRO ─────────
+              A primeira versão fazia ao contrário: mostrava a imagem e só
+              trocava pelo aviso quando o `onError` disparasse. Vi o
+              resultado no site: com `loading="lazy"`, uma imagem que ainda
+              não foi pedida não dá erro nenhum — e durante esse tempo a
+              moldura ficava com a barra de cima e NADA por baixo. Um
+              rectângulo vazio, exactamente o espaço em branco calado que
+              esta secção foi escrita para evitar.
+
+              Assim o aviso está lá desde o início e só sai quando a imagem
+              chegar de facto. Os três estados — por carregar, falhada e
+              carregada — ficam cobertos pela mesma linha, e não há instante
+              nenhum em que a moldura esteja vazia.
+
+              A imagem fica por cima, invisível e a ocupar a caixa toda, em
+              vez de `hidden`: precisa de ter um sítio no ecrã para o
+              carregamento preguiçoso saber quando a pedir. */}
+          <div className="relative">
+            {!carregou && <PorPreencher ficheiro={ecra.ficheiro} />}
             <img
               src={`/ecras/${ecra.ficheiro}`}
               alt={ecra.titulo}
               loading="lazy"
-              onError={() => setFalhou(true)}
-              className="block w-full"
+              onLoad={() => setCarregou(true)}
+              className={carregou
+                ? 'block w-full'
+                : 'absolute inset-0 h-full w-full opacity-0'}
             />
-          )}
+          </div>
         </Moldura>
       </div>
 

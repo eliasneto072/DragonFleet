@@ -373,7 +373,22 @@ export function GestoresPage() {
         )}
 
         {planos.length > 0 && (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          /* ─── UM PLANO SÓ NÃO PODE FICAR NUMA GRELHA DE TRÊS ──────────────
+             Com três colunas fixas e um plano activo, o cartão ficava
+             encostado à esquerda com dois terços de preto ao lado: lia-se
+             como se faltasse alguma coisa, mesmo estando tudo lá. Vi-o
+             assim no site.
+
+             Um plano fica centrado e estreito; dois ficam centrados a par;
+             três ou mais enchem a grelha. */
+          <div className={`grid gap-5 ${
+            planos.length >= 3
+              ? 'md:grid-cols-2 lg:grid-cols-3'
+              : planos.length === 2
+                ? 'mx-auto max-w-3xl md:grid-cols-2'
+                : 'mx-auto max-w-sm'
+          }`}
+          >
             {planos.map((p, i) => {
               // O do meio em destaque quando são três — é onde o olho cai, e
               // é onde costuma estar o plano que se quer vender. Com um ou
