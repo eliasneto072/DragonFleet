@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Wallet, FileText, User, Bell, MessageCircle, Car, PiggyBank,
-  Wrench,
+  Wrench, Coins,
 } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -186,6 +186,19 @@ export function DriverLayout() {
           label: 'Oficina',
           badge: marcacoesPorResponder > 0 ? marcacoesPorResponder : marcacoesAbertas,
           badgeTone: marcacoesPorResponder > 0 ? ('late' as const) : ('waiting' as const),
+        }] : []),
+        // ── As finanças pessoais ──
+        //
+        // Só aparece a quem tem a marca ligada na conta. Não depende do plano
+        // nem de uma área: não se vende e não é da frota — é de uma pessoa.
+        //
+        // Esconder o menu não guarda nada e não é para isso que aqui está: é
+        // para não pôr no caminho de toda a gente uma entrada que lhes
+        // responderia 404. Quem recusa é o servidor.
+        ...(user?.personalFinance ? [{
+          to: '/app/driver/pessoal',
+          icon: Coins,
+          label: 'Pessoal',
         }] : []),
         { to: '/app/driver/profile', icon: User, label: 'Perfil' },
       ],

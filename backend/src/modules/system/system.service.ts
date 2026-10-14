@@ -620,6 +620,81 @@ export class SystemService {
       contactos,
     };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  FINANÇAS PESSOAIS
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Ligar e desligar a marca que dá a uma conta o diário de trading e as
+  // despesas pessoais.
+  //
+  // ─── PORQUE É QUE ISTO VIVE NO PAINEL DO DONO ─────────────────────────────
+  //
+  // Porque não é da frota. Um administrador de uma frota cliente não tem nada
+  // que dar a si próprio, nem a um motorista dele, uma gaveta privada dentro
+  // do sistema — e, posta no painel da frota, era exactamente isso que ficava
+  // ao alcance de qualquer um deles.
+  //
+  // Aqui, só o dono da plataforma. E é também o que torna desnecessário
+  // escrever o email de alguém no código: a lista de quem tem isto ligado é
+  // dados, muda-se com dois cliques, e não obriga a um deploy.
+
+  /** As contas com a marca ligada, de todas as frotas. */
+  async contasComFinancasPessoais() {
+    const linhas = await prisma.user.findMany({
+      where: { personalFinance: true },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true, name: true, email: true, role: true,
+        fleet: { select: { name: true } },
+      },
+    });
+
+    return linhas.map((u) => ({
+      id: u.id,
+      nome: u.name,
+      email: u.email,
+      papel: u.role,
+      frota: u.fleet?.name ?? '—',
+    }));
+  }
+
+  /**
+   * Liga ou desliga a marca numa conta, pelo email.
+   *
+   * Pelo EMAIL e não pelo id: é o que tu sabes de cor e o que escreves sem ir
+   * procurar. O email é único em todo o sistema, por isso não há ambiguidade —
+   * e esta consulta atravessa frotas de propósito, porque está em modo de dono.
+   */
+  async definirFinancasPessoais(email: string, ligar: boolean) {
+    const limpo = email.trim().toLowerCase();
+    if (!limpo) {
+      throw new AppError('Indique o email da conta.', 400, 'EMAIL_REQUIRED');
+    }
+
+    const conta = await prisma.user.findUnique({
+      where: { email: limpo },
+      select: { id: true, name: true, email: true, personalFinance: true },
+    });
+    if (!conta) {
+      throw new AppError('Não existe nenhuma conta com esse email.', 404, 'USER_NOT_FOUND');
+    }
+
+    // Já está como se pede: responde sem escrever. Não é um erro — é o
+    // resultado que se queria — e uma escrita a mais num registo de pessoa
+    // só suja o histórico sem mudar nada.
+    if (conta.personalFinance === ligar) {
+      return { ...conta, alterado: false };
+    }
+
+    const actualizada = await prisma.user.update({
+      where: { id: conta.id },
+      data: { personalFinance: ligar },
+      select: { id: true, name: true, email: true, personalFinance: true },
+    });
+
+    return { ...actualizada, alterado: true };
+  }
 }
 
 export const systemService = new SystemService();

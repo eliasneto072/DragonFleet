@@ -223,6 +223,20 @@ model User {
   /// isto serve para ligar a alguém por causa de uma multa ou de um acidente.
   phone     String?
 
+  /// Tem a página de finanças pessoais: o diário de trading e as despesas.
+  ///
+  /// ─── PORQUE É UMA MARCA E NÃO UM EMAIL NO CÓDIGO ──────────────────────────
+  ///
+  /// Porque um email escrito numa condição fica publicado no repositório,
+  /// deixa de funcionar no dia em que a pessoa o mudar — sem dizer nada, que é
+  /// o pior modo de avariar — e obriga a mexer no programa para ligar a mesma
+  /// coisa noutra conta.
+  ///
+  /// Desligada em toda a gente, incluindo em quem for criado a seguir. Só o
+  /// dono da plataforma a liga, e liga-a conta a conta. É a mesma escolha do
+  /// `isOwner` logo acima, pelas mesmas razões.
+  personalFinance Boolean @default(false) @map("personal_finance")
+
   /// Este motorista É a empresa (o dono, que também conduz).
   ///
   /// Muda como as estatísticas o contam: o aluguer da viatura que lhe é
@@ -276,6 +290,9 @@ model User {
   rankEvents         RankEvent[]
   investorAccount    InvestorAccount?
   permissions        StaffPermission[]
+  trades             TradeEntry[]
+  personalExpenses   PersonalExpense[]
+  expenseCategories  PersonalExpenseCategory[]
 
   @@index([fleetId])
 
@@ -617,6 +634,14 @@ model BalanceAdjustment {
   user   User  @relation("adjustmentsReceived", fields: [userId], references: [id], onDelete: Cascade)
   admin  User? @relation("adjustmentsMade", fields: [createdBy], references: [id], onDelete: SetNull)
   editor User? @relation("adjustmentsEdited", fields: [editedBy], references: [id], onDelete: SetNull)
+
+  /// A despesa pessoal que escreveu este débito, quando foi uma.
+  ///
+  /// A esmagadora maioria dos ajustes não tem nenhuma: são lançamentos da
+  /// administração. Isto existe para a despesa e o seu débito poderem ser
+  /// alterados juntos — e para ninguém ter de adivinhar, olhando para o
+  /// extrato, de onde veio uma linha que diz só «Despesa pessoal».
+  personalExpense PersonalExpense?
 
   @@index([userId])
   @@index([fleetId])
@@ -2509,4 +2534,132 @@ model Lead {
   @@index([createdAt])
 
   @@map("leads")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FINANÇAS PESSOAIS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Só para contas com `personalFinance` ligado. Ver a nota desse campo no
+// `User`: é uma marca e não um email escrito numa condição.
+//
+// ─── O QUE MEXE NO SALDO ────────────────────────────────────────────────────
+//
+// As despesas saem do saldo, mas não por uma porta nova: cada uma escreve um
+// débito em `BalanceAdjustment`, que é a porta que já existe, e é essa linha
+// que a vista `driver_balances` desconta. A fórmula do saldo não é tocada —
+// já esteve copiada em quatro sítios e uma correção foi aplicada numa cópia e
+// esquecida noutra.
+//
+// O trading não mexe em nada: é estatística e fica isolado.
+
+enum TradeDirection {
+  LONG
+  SHORT
+}
+
+/// Uma operação de trading. Não toca no saldo: existe para dar contas.
+model TradeEntry {
+  id      String @id @default(cuid())
+
+  /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
+  /// daqui sem esta coluna preenchida.
+  fleetId String @default("") @map("fleet_id")
+  userId  String @map("user_id")
+
+  /// Texto livre: um par de divisas, uma cripto, uma ação, um índice. Uma
+  /// lista fechada ficava desactualizada na primeira coisa nova.
+  asset     String
+  broker    String?
+  direction TradeDirection
+
+  openedAt DateTime  @map("opened_at") @db.Date
+  /// Nulo enquanto a posição está aberta — que é diferente de ter fechado no
+  /// mesmo dia, e um zero não sabe dizer qual das duas.
+  closedAt DateTime? @map("closed_at") @db.Date
+
+  /// Contexto da operação, todo opcional. Um formulário que obrigue a oito
+  /// campos deixa de ser preenchido ao fim de uma semana, e um diário por
+  /// preencher não serve para nada.
+  size       Decimal? @db.Decimal(18, 8)
+  entryPrice Decimal? @map("entry_price") @db.Decimal(18, 8)
+  exitPrice  Decimal? @map("exit_price")  @db.Decimal(18, 8)
+
+  /// O resultado BRUTO em euros, positivo ou negativo. Obrigatório: é o único
+  /// campo de que todas as estatísticas dependem.
+  ///
+  /// Bruto e não líquido, com as comissões à parte, para elas entrarem na
+  /// conta em vez de ficarem a enfeitar. E porque o engano possível joga
+  /// contra quem escreve — pôr aqui o líquido faz as contas aparecerem mais
+  /// baixas do que a realidade, e isso nota-se; o contrário passava despercebido.
+  result Decimal @db.Decimal(12, 2)
+  fees   Decimal @default(0) @db.Decimal(12, 2)
+
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([fleetId])
+  @@index([userId, openedAt])
+  @@map("trade_entries")
+}
+
+/// As gavetas das despesas. São de cada pessoa, e não um catálogo da frota.
+model PersonalExpenseCategory {
+  id      String @id @default(cuid())
+  fleetId String @default("") @map("fleet_id")
+  userId  String @map("user_id")
+
+  name      String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses PersonalExpense[]
+
+  /// Duas gavetas com o mesmo nome na mesma pessoa tornam os totais por
+  /// categoria impossíveis de ler.
+  @@unique([userId, name])
+  @@index([fleetId])
+  @@index([userId])
+  @@map("personal_expense_categories")
+}
+
+/// Uma despesa pessoal. Sai do saldo, pela porta dos ajustes.
+model PersonalExpense {
+  id         String  @id @default(cuid())
+  fleetId    String  @default("") @map("fleet_id")
+  userId     String  @map("user_id")
+  categoryId String? @map("category_id")
+
+  /// Sempre positivo. É uma despesa: um valor negativo aqui seria uma receita
+  /// disfarçada a somar ao saldo.
+  amount  Decimal  @db.Decimal(12, 2)
+  spentOn DateTime @map("spent_on") @db.Date
+  notes   String?
+
+  /// Opcional, e pode chegar depois do lançamento.
+  receiptUrl String? @map("receipt_url")
+  receiptKey String? @map("receipt_key")
+
+  /// O débito que esta despesa escreveu no extrato.
+  ///
+  /// Fica nulo se o ajuste for apagado, em vez de levar a despesa atrás: o
+  /// registo pessoal não desaparece porque alguém mexeu no extrato.
+  adjustmentId String? @unique @map("adjustment_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   PersonalExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  adjustment BalanceAdjustment?       @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
+
+  @@index([fleetId])
+  @@index([userId, spentOn])
+  @@index([categoryId])
+  @@map("personal_expenses")
 }

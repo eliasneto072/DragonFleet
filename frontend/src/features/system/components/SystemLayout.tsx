@@ -14,7 +14,7 @@
 
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, Package, Inbox, PhoneCall } from 'lucide-react';
+import { Building2, Package, Inbox, PhoneCall, Coins } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/app/components/AppShell';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { queryKeys } from '@/shared/lib/query-keys';
@@ -57,6 +57,12 @@ export function SystemLayout() {
             ? { badge: contactosNovos, badgeTone: 'late' as const }
             : {}),
         },
+        // ── Finanças pessoais ──
+        //
+        // Sem contador: não é trabalho à espera, é uma lista que se consulta
+        // de meses a meses. Um número aqui competia com os contactos do site,
+        // que são os que não podem ficar à espera.
+        { to: '/app/sistema/pessoais', icon: Coins, label: 'Finanças pessoais' },
       ],
     },
   ];

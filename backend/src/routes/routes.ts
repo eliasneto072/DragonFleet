@@ -30,6 +30,7 @@ import { pendingRouter } from '../modules/pending/pending.routes';
 import { systemRouter } from '../modules/system/system.routes';
 import { invitesRouter } from '../modules/invites/invites.routes';
 import { meuPlanoRouter } from '../modules/plan-requests/meu-plano.routes';
+import { personalRouter } from '../modules/personal/personal.routes';
 import { leadsRouter, publicoRouter } from '../modules/leads/leads.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
@@ -122,6 +123,29 @@ router.use(denyMechanic)
 // tudo tem de continuar a poder perguntar o que pode, senão o painel não sabe
 // sequer que menu desenhar.
 router.use('/permissions', permissionsRouter())
+
+// ─── As finanças pessoais de uma conta ─────────────────────────────────────
+//
+// O diário de trading e as despesas pessoais de quem tiver a marca
+// `personalFinance` ligada. Para todos os outros — incluindo administradores —
+// isto responde 404: não existe.
+//
+// SEM `requireArea` e SEM `exigeFuncionalidade`, e nenhuma das duas é
+// esquecimento:
+//
+//  · as áreas são permissões que um gestor da frota distribui pela equipa
+//    dele, e isto não é da frota: é de uma pessoa. Um gestor não tem nada que
+//    dar nem tirar acesso às despesas pessoais de ninguém.
+//  · e não é uma funcionalidade porque não se vende. Não está no catálogo
+//    (`funcionalidades.ts`) e nenhum plano a pode incluir, tal como os
+//    investidores e os projetos ficaram de fora.
+//
+// ABAIXO do muro da assinatura expirada, de propósito. Uma despesa escreve um
+// débito no extrato da frota, e isso é operar: numa frota expirada fica a
+// ler-se o que já lá está, e não a lançar mais. A leitura continua aberta
+// porque o muro só trava o que não é GET — ninguém fica fechado fora do
+// histórico que é seu.
+router.use('/pessoal', personalRouter())
 
 // ─── O painel do dono da plataforma ────────────────────────────────────────
 //

@@ -15,6 +15,7 @@ import { WorkshopLayout } from '@/features/workshop/components/WorkshopLayout';
 
 import DriverDashboardPage from '@/features/driver/pages/DriverDashboardPage';
 import WithdrawalsPage from '@/features/driver/pages/WithdrawalsPage';
+import PessoalPage from '@/features/driver/pages/PessoalPage';
 import DocumentsPage from '@/features/driver/pages/DocumentsPage';
 import VehiclesPage from '@/features/driver/pages/VehiclesPage';
 import ProfilePage from '@/features/driver/pages/ProfilePage';
@@ -56,6 +57,7 @@ import { PlanoNecessarioPage } from '@/features/admin/pages/PlanoNecessarioPage'
 import { MeuPlanoPage } from '@/features/admin/pages/MeuPlanoPage';
 import { RequestsPage } from '@/features/system/pages/RequestsPage';
 import { LeadsPage } from '@/features/system/pages/LeadsPage';
+import { PessoaisPage } from '@/features/system/pages/PessoaisPage';
 
 export const router = createBrowserRouter([
 
@@ -105,6 +107,11 @@ export const router = createBrowserRouter([
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'vehicles', element: <VehiclesPage /> },
           { path: 'oficina', element: <DriverBookingsPage /> },
+          // As finanças pessoais. A rota existe para toda a gente — esconder
+          // uma rota nunca guardou nada — e é a própria página que manda de
+          // volta ao painel quem não tiver a marca. A guarda que conta está
+          // no servidor, que responde 404 a estas chamadas.
+          { path: 'pessoal', element: <PessoalPage /> },
           { path: 'profile', element: <ProfilePage /> },
           { path: 'notifications', element: <NotificationsPage /> },
           { path: 'support', element: <SupportPage /> },
@@ -127,6 +134,7 @@ export const router = createBrowserRouter([
           { path: 'planos', element: <PlansPage /> },
           { path: 'pedidos', element: <RequestsPage /> },
           { path: 'contactos', element: <LeadsPage /> },
+          { path: 'pessoais', element: <PessoaisPage /> },
         ],
       },
 

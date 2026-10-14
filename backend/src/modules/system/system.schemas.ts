@@ -119,3 +119,18 @@ export const actualizarContactoSchema = z.object({
     notas: z.string().trim().max(2000).optional().nullable(),
   }),
 });
+
+
+/**
+ * Ligar ou desligar as finanças pessoais numa conta.
+ *
+ * Pelo email, que é o que se sabe de cor. O `ligar` é obrigatório e não tem
+ * valor por omissão de propósito: um corpo sem ele seria interpretado como
+ * «desligar», e desligar por omissão é como se apaga uma coisa sem querer.
+ */
+export const financasPessoaisSchema = z.object({
+  body: z.object({
+    email: z.string().trim().toLowerCase().email('Email inválido.'),
+    ligar: z.boolean(),
+  }),
+});

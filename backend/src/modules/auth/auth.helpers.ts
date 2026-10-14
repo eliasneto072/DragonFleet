@@ -20,6 +20,16 @@ type AuthUser = {
   // pode falhar por causa dela. Em falta vale `false`, que é o caso de toda a
   // gente menos uma pessoa.
   isOwner?: boolean;
+  // A marca das finanças pessoais. Opcional pela mesma razão das de cima, e
+  // em falta vale `false` — que é o caso de toda a gente menos de quem a
+  // tiver ligada à mão.
+  //
+  // Vai na SESSÃO e não no token: o token dura dias, e uma marca lá dentro
+  // ficava a valer até ao próximo início de sessão. Aqui é relida a cada
+  // `/auth/me`, e o servidor confirma-a outra vez a cada pedido às rotas
+  // pessoais (ver `pessoal.middleware.ts`). Isto serve só para o painel saber
+  // se desenha o menu.
+  personalFinance?: boolean;
   createdAt: Date; updatedAt: Date;
 };
 
@@ -62,6 +72,7 @@ export function toPublicUser(user: AuthUser): IUserPublic {
     // empresa, e é isso que o tipo público promete.
     isCompany: user.isCompany ?? false,
     isOwner: user.isOwner ?? false,
+    personalFinance: user.personalFinance ?? false,
     createdAt: user.createdAt, updatedAt: user.updatedAt,
   };
 }

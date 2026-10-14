@@ -70,6 +70,18 @@ export interface AuthUser {
   isOwner?: boolean;
 
   /**
+   * Tem a página de finanças pessoais: o diário de trading e as despesas.
+   *
+   * Opcional pela mesma razão do `isOwner`: as respostas antigas em cache não
+   * a trazem, e aí a resposta certa é "não tem" — o menu não aparece.
+   *
+   * Também não dá acesso a nada. Quem decide é a guarda do servidor, que relê
+   * a marca da base de dados a cada pedido; forjá-la no navegador dá um menu
+   * cujas páginas respondem 404.
+   */
+  personalFinance?: boolean;
+
+  /**
    * A frota desta sessão. Ausente nas respostas antigas em cache — quem lê
    * trata isso como "sem restrições", que é o que era verdade antes dos
    * planos existirem.

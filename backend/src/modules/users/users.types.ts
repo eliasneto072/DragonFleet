@@ -40,6 +40,16 @@ export interface IUser {
    * (`dono.middleware.ts`), que a lê da base de dados a cada pedido.
    */
   isOwner: boolean;
+  /**
+   * Tem a página de finanças pessoais: o diário de trading e as despesas.
+   *
+   * Vem no tipo público pela mesma razão que o `isOwner`: é o painel que
+   * precisa dela para saber se desenha o menu. Não dá acesso nenhum por si
+   * só — quem decide é a guarda do servidor (`pessoal.middleware.ts`), que a
+   * relê da base de dados a cada pedido. Alguém que a forjasse no navegador
+   * ganhava um menu que não abre nada.
+   */
+  personalFinance: boolean;
   // relacionamentos removidos — cada módulo gere os seus próprios dados
 }
 

@@ -21,6 +21,9 @@ export class UsersRepository  implements IUserRepository{
         // O painel precisa dela para desenhar o botão que troca para o painel
         // de sistema. Não dá acesso a nada: quem decide é a guarda do servidor.
         isOwner: true,
+        // Idem: serve só para o painel saber se desenha o menu das finanças
+        // pessoais. A guarda do servidor relê-a a cada pedido.
+        personalFinance: true,
         role: true,
         status: true,
         createdAt: true,

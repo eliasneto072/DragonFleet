@@ -46,5 +46,14 @@ export function systemRouter(): Router {
   router.patch('/planos/:id', c.actualizarPlano);
   router.post('/planos/:id/arquivar', c.arquivarPlano);
 
+  // ── Finanças pessoais ──
+  //
+  // Ligar a marca numa conta é o que lhe dá o diário de trading e as despesas
+  // pessoais. Vive no painel do dono e não no de uma frota: um administrador
+  // de uma frota cliente não tem nada que abrir uma gaveta privada dentro do
+  // sistema, nem para ele nem para um motorista dele.
+  router.get('/pessoais', c.contasPessoais);
+  router.post('/pessoais', c.definirPessoais);
+
   return router;
 }

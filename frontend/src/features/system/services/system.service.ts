@@ -125,6 +125,14 @@ export interface ContaDaFrota {
   createdAt: string;
 }
 
+export interface ContaPessoal {
+  id: string;
+  nome: string;
+  email: string;
+  papel: string;
+  frota: string;
+}
+
 export const systemService = {
   /** GET /system/painel — os números do topo e a lista, num pedido só. */
   painel(): Promise<{ resumo: ResumoDoSistema; frotas: FrotaNaLista[] }> {
@@ -151,6 +159,27 @@ export const systemService = {
 
   contas(id: string): Promise<{ contas: ContaDaFrota[] }> {
     return apiClient.get(`/system/frotas/${id}/contas`);
+  },
+
+  // ── Finanças pessoais ──
+  //
+  // Ligar esta marca numa conta dá-lhe o diário de trading e as despesas
+  // pessoais. Vive aqui, no painel da plataforma, e não no de uma frota: não
+  // é da frota, é de uma pessoa — e um administrador de uma frota cliente não
+  // tem nada que abrir uma gaveta privada dentro do sistema.
+  //
+  // É também o que evita ter um email escrito dentro do programa: a lista de
+  // quem tem isto ligado são dados, mudam-se com dois cliques, e não obrigam
+  // a um deploy.
+
+  contasPessoais(): Promise<{ contas: ContaPessoal[] }> {
+    return apiClient.get('/system/pessoais');
+  },
+
+  definirPessoais(email: string, ligar: boolean): Promise<{
+    id: string; name: string; email: string; personalFinance: boolean; alterado: boolean;
+  }> {
+    return apiClient.post('/system/pessoais', { email, ligar });
   },
 
   /** `todos` inclui os ganhos e perdidos, e não só os que faltam responder. */

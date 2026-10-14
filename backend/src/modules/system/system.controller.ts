@@ -8,7 +8,7 @@ import { leadsService } from '../leads/leads.service';
 import {
   idParamSchema, criarFrotaSchema, actualizarFrotaSchema, renovarSchema,
   criarPlanoSchema, actualizarPlanoSchema, fecharPedidoSchema,
-  actualizarContactoSchema,
+  actualizarContactoSchema, financasPessoaisSchema,
 } from './system.schemas';
 
 export class SystemController {
@@ -93,6 +93,21 @@ export class SystemController {
   /** As caixas do editor de planos. Ver `funcionalidades.ts`. */
   catalogo = async (_req: PedidoComFrota, res: Response) => {
     return ok(res, systemService.catalogo());
+  };
+
+  // ── Finanças pessoais ──
+  //
+  // Ver a nota no serviço: isto vive aqui, e não no painel de uma frota,
+  // porque não é da frota — e porque é o que evita ter o email de alguém
+  // escrito dentro do programa.
+
+  contasPessoais = async (_req: PedidoComFrota, res: Response) => {
+    return ok(res, { contas: await systemService.contasComFinancasPessoais() });
+  };
+
+  definirPessoais = async (req: PedidoComFrota, res: Response) => {
+    const { body } = financasPessoaisSchema.parse({ body: req.body });
+    return ok(res, await systemService.definirFinancasPessoais(body.email, body.ligar));
   };
 }
 
