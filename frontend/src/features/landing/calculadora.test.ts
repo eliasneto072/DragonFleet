@@ -10,10 +10,15 @@ import {
 } from './calculadora';
 
 describe('as condições', () => {
-  it('são as que ele pratica: 6% e 50 € de slot', () => {
+  it('são as que ele pratica: 6% de imposto e 50 € de slot', () => {
     // Se isto mudar, muda aqui E no site. O teste existe para a alteração ser
     // deliberada e não um engano de dedo.
-    expect(CARRO_PROPRIO.comissao).toBe(6);
+    //
+    // O nome do campo importa: chamou-se `comissao` e a tela dizia «Comissão
+    // DragonFleet». São 6% de IMPOSTO sobre o bruto — os mesmos que o fecho
+    // semanal aplica. A comissão da empresa é um campo à parte, que cada
+    // frota define, e nestes motoristas está a zero.
+    expect(CARRO_PROPRIO.imposto).toBe(6);
     expect(CARRO_PROPRIO.slotSemanal).toBe(50);
   });
 });
@@ -21,9 +26,9 @@ describe('as condições', () => {
 describe('carro próprio', () => {
   it('o caso normal', () => {
     const c = contaCarroProprio(1000);
-    expect(c.comissao).toBe(60);
+    expect(c.imposto).toBe(60);
     expect(c.slot).toBe(50);
-    expect(c.totalCobrado).toBe(110);
+    expect(c.totalDescontado).toBe(110);
     expect(c.liquido).toBe(890);
     expect(c.abaixoDoMinimo).toBe(false);
   });
@@ -32,7 +37,7 @@ describe('carro próprio', () => {
     // 6% de 1234,56 são 74,0736 — tem de ficar 74,07, e não 74,08 nem
     // 74,07360000000001.
     const c = contaCarroProprio(1234.56);
-    expect(c.comissao).toBe(74.07);
+    expect(c.imposto).toBe(74.07);
     expect(c.liquido).toBe(1110.49);
   });
 
@@ -65,7 +70,7 @@ describe('carro próprio', () => {
     for (const v of [NaN, Infinity, -500]) {
       const c = contaCarroProprio(v);
       expect(c.liquido).toBe(0);
-      expect(Number.isFinite(c.totalCobrado)).toBe(true);
+      expect(Number.isFinite(c.totalDescontado)).toBe(true);
     }
   });
 });
@@ -73,8 +78,8 @@ describe('carro próprio', () => {
 describe('carro da frota', () => {
   it('só o aluguer, sem percentagem', () => {
     const c = contaCarroDaFrota(1000, 250);
-    expect(c.comissao).toBe(0);
-    expect(c.totalCobrado).toBe(250);
+    expect(c.imposto).toBe(0);
+    expect(c.totalDescontado).toBe(250);
     expect(c.liquido).toBe(750);
   });
 

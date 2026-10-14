@@ -23,7 +23,14 @@
 // ║  COMO SE CORRE                                                           ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 //
-//   DEMO_PASSWORD='uma-password-tua' node dist/scripts/seed-frota-exemplo.js
+//   DEMO_PASSWORD=... node dist/scripts/seed-frota-exemplo.js
+//
+// Os três pontos são para substituir por uma password tua. Escritos
+// assim, e não como uma palavra com cara de valor: a primeira versão
+// destas instruções dizia `DEMO_PASSWORD='escolhe-uma-password'` e foi
+// colada tal e qual, deixando uma conta de administrador com a password
+// que estava no manual. Há uma lista de recusa mais abaixo, mas o melhor
+// exemplo é o que não se consegue colar.
 //
 // Em `src/` e não em `prisma/` pela mesma razão que o `seed-admin`: o
 // tsconfig compila `src/**` para `dist/`, a imagem de produção leva o `dist/`
@@ -76,6 +83,10 @@ import { prisma } from '../config/prisma';
 import { comFrota, comoDono } from '../config/escopo';
 import { systemService } from '../modules/system/system.service';
 import { computeTotals } from '../modules/settlements/settlements.types';
+import bcrypt from 'bcrypt';
+
+/** As mesmas voltas que o `system.service` usa ao criar um gestor. */
+const VOLTAS = 10;
 
 // ─── AS PESSOAS E AS COISAS INVENTADAS ──────────────────────────────────────
 //
@@ -165,17 +176,54 @@ function exigir(nome: string): string {
   if (!v || !v.trim()) {
     console.error(
       `\n[frota-exemplo] Falta a variável ${nome}.\n\n`
-      + `  DEMO_PASSWORD='a-tua-password' node dist/scripts/seed-frota-exemplo.js\n`,
+      + `  DEMO_PASSWORD=... node dist/scripts/seed-frota-exemplo.js\n`,
     );
     process.exit(1);
   }
   return v.trim();
 }
 
+/**
+ * Passwords que são o exemplo e não uma escolha.
+ *
+ * ─── PORQUE É QUE ISTO EXISTE ───────────────────────────────────────────────
+ *
+ * Porque aconteceu. As instruções deste script traziam a linha
+ *
+ *   DEMO_PASSWORD='escolhe-uma-password' node dist/scripts/...
+ *
+ * e ela foi colada tal e qual, sem ninguém reparar que aquilo era para
+ * substituir. Ficou uma conta de ADMINISTRADOR em produção com uma password
+ * que estava escrita numas instruções.
+ *
+ * A culpa foi de quem escreveu o exemplo com cara de valor. A correção não é
+ * escrever o exemplo melhor — é o script recusar-se a aceitá-lo. Um aviso
+ * depende de alguém o ler; isto não.
+ */
+const PASSWORDS_DE_EXEMPLO = [
+  'escolhe-uma-password',
+  'a-tua-password',
+  'uma-password-tua',
+  'password',
+  'palavra-passe',
+  '12345678',
+  '123456789',
+  'demo1234',
+  'changeme',
+];
+
 async function main() {
   const password = exigir('DEMO_PASSWORD');
   if (password.length < 8) {
     console.error('[frota-exemplo] DEMO_PASSWORD tem de ter pelo menos 8 caracteres.');
+    process.exit(1);
+  }
+  if (PASSWORDS_DE_EXEMPLO.includes(password.toLowerCase())) {
+    console.error(
+      `\n[frota-exemplo] "${password}" é a password do exemplo, não uma password.\n\n`
+      + '  Escolhe uma tua. Esta conta é ADMINISTRADOR de uma frota no teu\n'
+      + '  sistema a sério, e esta palavra está escrita nas instruções.\n',
+    );
     process.exit(1);
   }
 
@@ -206,8 +254,34 @@ async function main() {
   }));
 
   let frotaId: string;
+  let aRetomar = false;
+
   if (existente) {
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║  NUNCA, EM CIRCUNSTÂNCIA NENHUMA, A FROTA DA CASA                    ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
+    //
+    // A retomar, este script escreve passwords novas nas contas da frota que
+    // encontrar. Basta correr com DEMO_NOME a apontar para a frota a sério —
+    // por engano, por distração, por o nome ser parecido — para ficares
+    // trancado fora da tua própria empresa com os teus motoristas todos.
+    //
+    // A frota da casa é a mais antiga da plataforma. É a mesma regra que o
+    // `ehDaCasa` do `system.service` usa, e pela mesma razão: um id escrito
+    // no código deixa de ser verdade na primeira vez que a base muda.
+    const daCasa = await comoDono(async () => prisma.fleet.findFirst({
+      orderBy: { createdAt: 'asc' }, select: { id: true, name: true },
+    }));
+    if (daCasa && daCasa.id === existente.id) {
+      console.error(
+        `\n[frota-exemplo] "${existente.name}" é a tua frota, a primeira da plataforma.\n\n`
+        + '  Este script escreve dados de mentira e repõe passwords. Não corre aí.\n',
+      );
+      process.exit(1);
+    }
+
     frotaId = existente.id;
+    aRetomar = true;
     console.log(`[frota-exemplo] A retomar a frota "${existente.name}" (${existente.slug}).`);
   } else {
     // Sem plano, de propósito: sem plano o sistema abre tudo (ver
@@ -246,6 +320,24 @@ async function main() {
       select: { id: true, password: true, email: true },
     });
     if (!gestor) throw new Error('[frota-exemplo] a frota não tem administrador');
+
+    // ── A password desta corrida passa a valer para a frota toda ──
+    //
+    // A retomar, o gestor já existe com a password da primeira vez — que pode
+    // ter sido um engano (foi, da primeira vez que isto correu a sério: o
+    // exemplo das instruções foi colado tal e qual). Sem isto, a única saída
+    // era abandonar a frota e criar outra.
+    //
+    // O `updateMany` não consegue sair daqui: está dentro de `comFrota`, e a
+    // camada do âmbito põe-lhe o filtro da frota no `where` (ver `ALTERACOES`
+    // em `escopo.ts`). Mesmo assim há a guarda lá em cima a recusar a frota da
+    // casa — uma protecção que depende de uma só camada não é protecção.
+    let cifra = gestor.password;
+    if (aRetomar) {
+      cifra = await bcrypt.hash(password, VOLTAS);
+      const { count } = await prisma.user.updateMany({ data: { password: cifra } });
+      console.log(`[frota-exemplo]   password reposta em ${count} conta(s) desta frota`);
+    }
 
     // ── Sociedades ──
     let sociedades = await prisma.company.findMany({ orderBy: { sortOrder: 'asc' } });
@@ -292,7 +384,7 @@ async function main() {
         data: {
           name: m.nome,
           email,
-          password: gestor.password,
+          password: cifra,
           role: 'DRIVER',
           status: 'ACTIVE',
           phone: '+351910000000',

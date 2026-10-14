@@ -1,37 +1,55 @@
 AS CAPTURAS DE ECRÃ DA PÁGINA DOS GESTORES
 ==========================================
 
-Põe aqui seis imagens, com estes nomes exactos (minúsculas, com os hífenes):
+ESTADO: cinco estão feitas. Falta uma.
 
-  fecho-semanal.png      O ecrã do fecho da semana
-  documentos.png         Os documentos a expirar
-  retiradas.png          Os pedidos de retirada de dinheiro
-  recibos-verdes.png     A tabela de quanto cada motorista passou a cada sociedade
-  oficina.png            As marcações e o stock de peças
-  motorista.png          O que o motorista vê na app dele
+  fecho-semanal.jpg    ✓  Faturação, com o detalhe de um fecho aberto por cima
+  documentos.jpg       ✓  Documentos, com os cinco a expirar
+  retiradas.jpg        ✓  Financeiro, com os pedidos à espera de decisão
+  recibos-verdes.jpg   ✓  A tabela cruzada por motorista e sociedade
+  motorista.jpg        ✓  O portal do motorista, a pedir uma retirada
+  oficina.jpg          ✗  FALTA — Oficina, com as marcações
 
-Enquanto um ficheiro não estiver aqui, a página mostra no lugar dele uma caixa
-cinzenta a dizer qual é que falta. É de propósito: um espaço em branco calado
+Enquanto a da oficina não estiver aqui, a página mostra no lugar dela uma
+caixa cinzenta a dizer qual falta. É de propósito: um espaço em branco calado
 ficava publicado sem ninguém reparar.
 
 
-COMO TIRAR AS CAPTURAS
+DE ONDE VIERAM
+--------------
+
+Da frota de exemplo, criada por backend/src/scripts/seed-frota-exemplo.ts.
+Os motoristas, as matrículas, os IBAN e os valores são todos inventados — é
+por isso que estas imagens podem estar numa página pública.
+
+Não fotografes a frota verdadeira. Nunca.
+
+
+COMO TIRAR A QUE FALTA
 ----------------------
 
-1. No computador, não no telemóvel. A janela larga (maximizada) e o painel em
-   modo ESCURO, que é o da página — uma captura em modo claro fica a brilhar no
-   meio de uma página preta.
+1. Entra como gestor@frota-exemplo.invalid e vai a OFICINA.
 
-2. ANTES DE FOTOGRAFAR, INVENTA OS DADOS. Isto vai para uma página pública e
-   os nomes, matrículas, IBAN e valores dos teus motoristas não podem ir lá.
-   Cria dois ou três motoristas de mentira, com matrículas que não existem, e
-   fotografa esses.
+2. Abre uma marcação, para a janela do detalhe ficar por cima da lista —
+   como na da Faturação. Mostra as duas coisas de uma vez.
 
-3. Mostra o ecrã com coisas lá dentro. Uma tabela vazia não vende nada: o que
-   convence é ver linhas, saldos e avisos.
+3. UMA imagem, com a JANELA TODA. Não cortes a janela e não juntes várias
+   capturas lado a lado num ficheiro só: ao tamanho a que aparecem no site,
+   três capturas coladas ficam ilegíveis.
 
-4. .png de preferência. Se as imagens ficarem muito pesadas (mais de 1 MB
-   cada), diz-me e eu comprimo-as — uma página lenta perde visitas.
+4. Computador, janela maximizada, painel em modo ESCURO. Uma captura clara
+   no meio de uma página preta fica a brilhar.
 
-5. Não precisas de cortar nem de arranjar nada. A página já põe uma moldura
-   por cima, com a barra e os três círculos.
+5. Manda-ma como está. Não cortes nem endireites: a página põe a moldura com
+   a barra e os três círculos por cima, e eu trato do tamanho e do peso.
+
+
+PORQUE É QUE SÃO .jpg
+---------------------
+
+Uma captura de ecrã em PNG passa facilmente o megabyte, e são seis. Em JPEG
+de qualidade alta ficam em cerca de 120 KB cada, sem diferença visível ao
+tamanho a que aparecem. Uma página lenta perde visitas antes de as mostrar.
+
+Se trocares uma imagem, mantém o nome do ficheiro — é por ele que a página
+as vai buscar (ver `ecras` em src/features/landing/conteudo.ts).

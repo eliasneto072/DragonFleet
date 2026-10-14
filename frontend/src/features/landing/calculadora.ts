@@ -17,15 +17,37 @@
 // em que zona, em que época — e inventar esse número era a única parte desta
 // página que podia virar-se contra ti.
 //
-// Também não desconta combustível, portagens, nem os impostos dela. Só mostra
-// o que a DragonFleet cobra. Pôr lá um valor de combustível inventado dava um
-// líquido falso com ar de exacto.
+// Também não desconta combustível nem portagens. Mostra o que sai do bruto no
+// fecho semanal — o imposto e o slot — e mais nada. Pôr lá um valor de
+// combustível inventado dava um líquido falso com ar de exacto.
 
-/** O que se cobra a quem traz carro próprio. */
+/**
+ * O que se desconta a quem traz carro próprio.
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  OS 6% SÃO IMPOSTO, E NÃO COMISSÃO. A DIFERENÇA IMPORTA.                 ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Isto esteve escrito como `comissao` e a tela chamava-lhe «Comissão
+ * DragonFleet». Estava errado, e errado nos dois sentidos ao mesmo tempo:
+ *
+ *  · fazia a frota parecer quase o dobro mais cara do que é, afastando
+ *    motoristas por um número que não era verdade;
+ *  · e chamava «nosso» a dinheiro que é imposto sobre a faturação — o género
+ *    de coisa que, descoberta depois de alguém assinar, leva atrás a
+ *    confiança em tudo o resto.
+ *
+ * É a mesma taxa de 6% que o fecho semanal aplica, na mesma base: o bruto da
+ * Uber e da Bolt. Ver o campo `taxRate` em `WeeklySettlement`.
+ *
+ * A comissão da empresa é OUTRA COISA, e existe à parte: é um campo do fecho
+ * que cada frota define como quiser. Para estes motoristas está a zero, e por
+ * isso não aparece aqui.
+ */
 export const CARRO_PROPRIO = {
-  /** Percentagem sobre o bruto. */
-  comissao: 6,
-  /** Slot semanal, em euros. */
+  /** Imposto, em percentagem sobre o bruto. */
+  imposto: 6,
+  /** Slot semanal, em euros. Este fica mesmo para a frota. */
   slotSemanal: 50,
 };
 
@@ -42,12 +64,12 @@ export const SEMANAS_POR_MES = 52 / 12;
 export interface Conta {
   /** O que a pessoa escreveu. */
   bruto: number;
-  /** A comissão, em euros. */
-  comissao: number;
+  /** O imposto sobre o bruto, em euros. Ver `CARRO_PROPRIO`. */
+  imposto: number;
   /** O slot semanal, em euros. */
   slot: number;
-  /** O que cobramos, somado. */
-  totalCobrado: number;
+  /** Tudo o que sai do bruto, somado: imposto mais slot ou aluguer. */
+  totalDescontado: number;
   /** O que lhe fica, antes dos custos dela. Nunca negativo — ver abaixo. */
   liquido: number;
   /**
@@ -76,16 +98,16 @@ function aCentimos(v: number): number {
 export function contaCarroProprio(bruto: number): Conta {
   const b = Number.isFinite(bruto) && bruto > 0 ? bruto : 0;
 
-  const comissao = aCentimos(b * (CARRO_PROPRIO.comissao / 100));
+  const imposto = aCentimos(b * (CARRO_PROPRIO.imposto / 100));
   const slot = CARRO_PROPRIO.slotSemanal;
-  const totalCobrado = aCentimos(comissao + slot);
-  const bruto_liquido = aCentimos(b - totalCobrado);
+  const totalDescontado = aCentimos(imposto + slot);
+  const bruto_liquido = aCentimos(b - totalDescontado);
 
   return {
     bruto: b,
-    comissao,
+    imposto,
     slot,
-    totalCobrado,
+    totalDescontado,
     // Travado a zero: um líquido negativo numa página de vendas lê-se como
     // "ainda tens de pagar para trabalhar", e o que acontece de facto é que a
     // diferença fica em dívida e sai da semana seguinte. Isso explica-se ao
@@ -110,9 +132,11 @@ export function contaCarroDaFrota(bruto: number, aluguerSemanal: number): Conta 
 
   return {
     bruto: b,
-    comissao: 0,
+    // Sem imposto nesta coluna: quem leva carro da frota paga aluguer e mais
+    // nada sai aqui. Se um dia passar a haver, é aqui que entra.
+    imposto: 0,
     slot: aCentimos(a),
-    totalCobrado: aCentimos(a),
+    totalDescontado: aCentimos(a),
     liquido: Math.max(0, liquido),
     abaixoDoMinimo: b > 0 && liquido < 0,
   };

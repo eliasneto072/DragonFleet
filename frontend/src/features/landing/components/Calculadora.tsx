@@ -168,9 +168,15 @@ export function Calculadora() {
 
         {modo === 'proprio' ? (
           <>
+            {/* IMPOSTO, e não comissão. Esta linha dizia «Comissão
+                DragonFleet» e entrava no que fica para a frota — o que fazia
+                a frota parecer quase o dobro mais cara do que é, e chamava
+                nosso a dinheiro que é imposto sobre a faturação. São os
+                mesmos 6% que o fecho semanal aplica, na mesma base. */}
             <Linha
-              rotulo={`Comissão DragonFleet (${CARRO_PROPRIO.comissao}%)`}
-              valor={`− ${eur(c.comissao)}`}
+              rotulo={`Imposto (${CARRO_PROPRIO.imposto}% sobre o bruto)`}
+              valor={`− ${eur(c.imposto)}`}
+              nota="O mesmo que sai no teu fecho semanal."
             />
             <Linha
               rotulo="Slot semanal"
@@ -182,7 +188,11 @@ export function Calculadora() {
           <Linha rotulo="Aluguer do carro" valor={`− ${eur(c.slot)}`} />
         )}
 
-        <Linha rotulo="Fica para a frota" valor={eur(c.totalCobrado)} destaque="nos" />
+        {/* «Total descontado» e não «fica para a frota»: das duas parcelas,
+            só o slot (ou o aluguer) fica mesmo com a frota. Somá-las debaixo
+            de um rótulo que diz «frota» era a mesma afirmação errada noutro
+            sítio. O que sai do bolso do motorista é o mesmo número. */}
+        <Linha rotulo="Total descontado" valor={eur(c.totalDescontado)} destaque="nos" />
       </div>
 
       {/* ── O resultado, por semana e por mês ──

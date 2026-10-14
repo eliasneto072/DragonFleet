@@ -64,8 +64,13 @@ export const MOTORISTAS = {
         'Uber e Bolt ligados à mesma conta',
         // Os números vivem em `calculadora.ts`, que é onde são conta. Aqui
         // são texto — ver a nota no topo deste ficheiro.
-        '6% sobre o que faturas, mais 50 € por semana de slot',
-        'Mais nada. Sem surpresas no fim do mês',
+        //
+        // «De imposto» não é um detalhe: esta linha dizia só «6% sobre o que
+        // faturas», a seguir ao nome da frota, e lia-se como se os 6% fossem
+        // a nossa comissão. Fazia-nos parecer quase o dobro mais caros do que
+        // somos — e chamava nosso a dinheiro que não é.
+        '6% de imposto sobre o que faturas, mais 50 € por semana de slot',
+        'Sem comissão por cima disso. Sem surpresas no fim do mês',
       ],
     },
   ],
@@ -226,46 +231,50 @@ export const GESTORES = {
    * Os ecrãs do painel.
    *
    * ╔════════════════════════════════════════════════════════════════════════╗
-   * ║  AS IMAGENS AINDA NÃO EXISTEM. Falta-te pôr os ficheiros abaixo em    ║
-   * ║  frontend/public/ecras/ — com estes nomes exactos.                     ║
+   * ║  CINCO JÁ LÁ ESTÃO. FALTA A DA OFICINA.                                ║
    * ╚════════════════════════════════════════════════════════════════════════╝
    *
-   * Enquanto não estiverem lá, a página mostra um aviso visível a dizer que
-   * ficheiro falta. É de propósito: um espaço em branco calado passava
-   * despercebido e ficava publicado assim.
+   * Os ficheiros vivem em `frontend/public/ecras/`. São capturas da frota de
+   * exemplo (ver `backend/src/scripts/seed-frota-exemplo.ts`): motoristas,
+   * matrículas e valores são todos inventados, e por isso podem estar numa
+   * página pública.
    *
-   * Conselhos para as capturas: ecrã de computador em modo escuro (combina
-   * com a página), janela larga, e sem nomes nem matrículas verdadeiras —
-   * inventa dois ou três motoristas antes de fotografar, porque isto vai para
-   * uma página pública e os dados dos teus motoristas não.
+   * Enquanto um ficheiro não estiver lá, a página mostra no lugar dele um
+   * aviso a dizer qual falta. É de propósito: um espaço em branco calado
+   * passava despercebido e ficava publicado assim.
+   *
+   * São `.jpg` e não `.png`: uma captura de ecrã em PNG passa facilmente o
+   * megabyte e são seis delas. Em JPEG de qualidade alta ficam em cerca de
+   * 120 KB cada, sem diferença visível ao tamanho a que aparecem — e uma
+   * página lenta perde visitas antes de as mostrar.
    */
   ecras: [
     {
-      ficheiro: 'fecho-semanal.png',
+      ficheiro: 'fecho-semanal.jpg',
       titulo: 'O fecho da semana',
       texto: 'Lanças o que entrou e o que saiu por motorista. A comissão e o imposto '
         + 'aplicam-se sozinhos, e o saldo de cada um actualiza na hora.',
     },
     {
-      ficheiro: 'documentos.png',
+      ficheiro: 'documentos.jpg',
       titulo: 'O que está a expirar',
       texto: 'Cartas, seguros e inspeções com data. O menu diz-te quantos estão a '
         + 'chegar ao fim — antes de alguém ser parado na estrada.',
     },
     {
-      ficheiro: 'retiradas.png',
+      ficheiro: 'retiradas.jpg',
       titulo: 'Os pedidos de dinheiro',
       texto: 'O motorista pede na app com o recibo já anexado. Aprovas, e fica '
         + 'registado quem pediu, quanto, quando e para que IBAN foi.',
     },
     {
-      ficheiro: 'recibos-verdes.png',
+      ficheiro: 'recibos-verdes.jpg',
       titulo: 'Quem passou quanto a cada sociedade',
       texto: 'Uma tabela por ano: motoristas nas linhas, as tuas sociedades nas '
         + 'colunas. A conta que se fazia à mão em Janeiro está feita todo o ano.',
     },
     {
-      ficheiro: 'oficina.png',
+      ficheiro: 'oficina.jpg',
       titulo: 'A oficina e as peças',
       texto: 'Marcações, mecânicos e stock com os preços de compra. Cada reparação '
         + 'com a fatura e o comprovativo de pagamento anexados.',
@@ -273,7 +282,7 @@ export const GESTORES = {
     {
       // Mostrar a app do motorista a quem compra responde, sem uma palavra, à
       // pergunta "e eles vão usar isto?".
-      ficheiro: 'motorista.png',
+      ficheiro: 'motorista.jpg',
       titulo: 'E o que o motorista vê',
       texto: 'O saldo dele, movimento a movimento, e o botão para pedir o dinheiro. '
         + 'É por isto que eles usam — não é por tu mandares.',
