@@ -110,46 +110,314 @@ export const MOTORISTAS = {
   ],
 };
 
+// ─── A CONTA DE DEMONSTRAÇÃO ────────────────────────────────────────────────
+
+/**
+ * A frota de exemplo onde qualquer pessoa pode entrar e clicar.
+ *
+ * Está DESLIGADA, e é de propósito: ainda não existe. Um botão a prometer
+ * "entrar e experimentar" que leva a um ecrã de login é pior do que não ter
+ * botão — é a primeira coisa que a pessoa experimenta de nós e já não
+ * funcionou.
+ *
+ * Quando a conta estiver montada, põe-se `activa: true` e as duas páginas
+ * passam a mostrar o botão. Mais nada.
+ */
+export const DEMONSTRACAO = {
+  activa: false,
+  url: '',
+  /** Mostrado por baixo do botão, para a pessoa saber onde está a entrar. */
+  nota: 'Frota de exemplo, dados inventados. Podes mexer em tudo.',
+};
+
 // ─── GESTORES DE FROTA ──────────────────────────────────────────────────────
 
 export const GESTORES = {
   /**
-   * As dores. Escritas a partir do que o próprio sistema resolve — cada uma
-   * corresponde a um ecrã que existe.
+   * ╔════════════════════════════════════════════════════════════════════════╗
+   * ║  LÊ ISTO ANTES DE PUBLICAR. É a única parte da página que fala de ti.  ║
+   * ╚════════════════════════════════════════════════════════════════════════╝
+   *
+   * É o argumento mais forte que tens, e é o único que nenhum concorrente
+   * consegue copiar: eles podem fazer o mesmo software, não podem ter uma
+   * frota. Mas só funciona enquanto for verdade ao pé da letra — se um
+   * comprador descobrir uma exageração aqui, perde a confiança em tudo o
+   * resto da página, e com razão.
+   *
+   * Duas coisas para decidires:
+   *
+   *  1. O VERBO. Está «fiz um». Tu dirigiste o trabalho e decidiste tudo o
+   *     que o sistema faz, por isso defende-se — mas se preferires «mandei
+   *     fazer um», que é mais literal, muda. É uma palavra e é tua.
+   *
+   *  2. O NÚMERO DE CARROS. Não está escrito, de propósito. Um número ajuda
+   *     a credibilidade com quem tem uma frota do teu tamanho e tira-a com
+   *     quem tem o triplo. Se quiseres pô-lo, acrescenta-o ao `texto`.
    */
-  dores: [
+  operador: {
+    titulo: 'Não sou uma empresa de software',
+    texto: 'Sou gestor de frota TVDE em Portugal. Passava os sábados a fechar contas '
+      + 'no Excel, andava com os recibos dos motoristas no WhatsApp e descobri mais '
+      + 'do que um seguro a expirar pelo pior caminho: com o carro já parado. '
+      + 'Como não encontrei nenhum sistema feito para isto, fiz um. '
+      + 'É este, e é o que uso todas as semanas na minha frota.',
+    /**
+     * As três consequências de o construtor ser o utilizador. Não são
+     * promessas de funcionalidades — são promessas sobre a relação, e é
+     * nisso que uma empresa de uma pessoa ganha a uma de duzentas.
+     */
+    pontos: [
+      {
+        titulo: 'Nada aqui é teoria',
+        texto: 'Cada ecrã existe porque me faltou a mim numa semana concreta. '
+          + 'Não foi desenhado numa reunião a partir de um estudo de mercado.',
+      },
+      {
+        titulo: 'Falas comigo',
+        texto: 'Não abres um bilhete à espera que uma empresa noutro país decida '
+          + 'se o teu caso interessa. Tens o meu número e eu percebo o problema '
+          + 'antes de o explicares.',
+      },
+      {
+        titulo: 'Não vou abandonar isto',
+        texto: 'Se eu parasse de desenvolver o sistema, a primeira frota a ficar '
+          + 'sem ferramenta era a minha. É a garantia mais sólida que te posso dar.',
+      },
+    ],
+  },
+
+  /**
+   * Os dois tamanhos de comprador.
+   *
+   * Escolheste falar aos dois, e isso só funciona se cada um se reconhecer
+   * depressa — por isso a primeira linha de cada cartão é o tamanho da frota
+   * e não uma vantagem. Quem tem 5 carros e quem tem 25 não têm o mesmo
+   * problema: o primeiro não tem tempo, o segundo não tem visibilidade. Dizer
+   * a mesma coisa aos dois era não dizer nada a nenhum.
+   */
+  casos: [
     {
-      problema: 'O fecho semanal é um sábado inteiro no Excel',
-      solucao: 'Lanças o que entrou e o que saiu por motorista, a comissão e o imposto '
-        + 'são aplicados sozinhos, e o saldo de cada um actualiza na hora.',
+      tamanho: 'De 1 a 10 carros',
+      titulo: 'Fazes tudo tu',
+      resumo: 'O fecho é teu, a oficina é tua, e as mensagens dos motoristas '
+        + 'chegam todas ao teu telefone — incluindo ao domingo.',
+      pontos: [
+        'Lanças o que entrou e o que saiu, e a comissão e o imposto aplicam-se sozinhos',
+        'Os motoristas deixam de te perguntar quanto têm a receber — está na app deles',
+        'Não precisas de contratar ninguém para o escritório para deixares de perder sábados',
+      ],
+      ganho: 'Ganhas o teu tempo de volta',
     },
     {
-      problema: 'Nunca sabes que documentos estão a expirar',
-      solucao: 'Cartas, seguros e inspeções com data. O painel avisa antes, '
-        + 'e diz-te quantos são logo no menu.',
+      tamanho: 'De 10 a 30 carros',
+      titulo: 'Já tens quem trate disto',
+      resumo: 'O problema deixou de ser o tempo. É não saberes, num dado momento, '
+        + 'onde está o dinheiro, que papéis estão a expirar e que carro está parado.',
+      pontos: [
+        'A frota inteira num ecrã: saldos, documentos, carros parados e pedidos à espera',
+        'Cada pessoa da equipa só mexe no que é dela, por níveis de permissão',
+        'A tabela anual de quanto cada motorista passou a cada sociedade, pronta para a contabilidade',
+      ],
+      ganho: 'Ganhas o controlo',
+    },
+  ],
+
+  /**
+   * Os ecrãs do painel.
+   *
+   * ╔════════════════════════════════════════════════════════════════════════╗
+   * ║  AS IMAGENS AINDA NÃO EXISTEM. Falta-te pôr os ficheiros abaixo em    ║
+   * ║  frontend/public/ecras/ — com estes nomes exactos.                     ║
+   * ╚════════════════════════════════════════════════════════════════════════╝
+   *
+   * Enquanto não estiverem lá, a página mostra um aviso visível a dizer que
+   * ficheiro falta. É de propósito: um espaço em branco calado passava
+   * despercebido e ficava publicado assim.
+   *
+   * Conselhos para as capturas: ecrã de computador em modo escuro (combina
+   * com a página), janela larga, e sem nomes nem matrículas verdadeiras —
+   * inventa dois ou três motoristas antes de fotografar, porque isto vai para
+   * uma página pública e os dados dos teus motoristas não.
+   */
+  ecras: [
+    {
+      ficheiro: 'fecho-semanal.png',
+      titulo: 'O fecho da semana',
+      texto: 'Lanças o que entrou e o que saiu por motorista. A comissão e o imposto '
+        + 'aplicam-se sozinhos, e o saldo de cada um actualiza na hora.',
     },
     {
-      problema: 'As retiradas andam perdidas no WhatsApp',
-      solucao: 'O motorista pede na app com o recibo anexado. Tu aprovas, '
-        + 'e fica registado quem pediu, quanto, e para que IBAN foi.',
+      ficheiro: 'documentos.png',
+      titulo: 'O que está a expirar',
+      texto: 'Cartas, seguros e inspeções com data. O menu diz-te quantos estão a '
+        + 'chegar ao fim — antes de alguém ser parado na estrada.',
     },
     {
-      problema: 'Não sabes quanto cada motorista passou a cada sociedade',
-      solucao: 'Uma tabela por ano, com os motoristas nas linhas e as tuas sociedades '
-        + 'nas colunas. Para a contabilidade, está feito.',
+      ficheiro: 'retiradas.png',
+      titulo: 'Os pedidos de dinheiro',
+      texto: 'O motorista pede na app com o recibo já anexado. Aprovas, e fica '
+        + 'registado quem pediu, quanto, quando e para que IBAN foi.',
     },
     {
-      problema: 'A oficina é um grupo de WhatsApp e um caderno',
-      solucao: 'Marcações, oficinas, mecânicos e o stock de peças com os preços de compra. '
-        + 'Cada reparação com a fatura e o comprovativo anexados.',
+      ficheiro: 'recibos-verdes.png',
+      titulo: 'Quem passou quanto a cada sociedade',
+      texto: 'Uma tabela por ano: motoristas nas linhas, as tuas sociedades nas '
+        + 'colunas. A conta que se fazia à mão em Janeiro está feita todo o ano.',
+    },
+    {
+      ficheiro: 'oficina.png',
+      titulo: 'A oficina e as peças',
+      texto: 'Marcações, mecânicos e stock com os preços de compra. Cada reparação '
+        + 'com a fatura e o comprovativo de pagamento anexados.',
+    },
+    {
+      // Mostrar a app do motorista a quem compra responde, sem uma palavra, à
+      // pergunta "e eles vão usar isto?".
+      ficheiro: 'motorista.png',
+      titulo: 'E o que o motorista vê',
+      texto: 'O saldo dele, movimento a movimento, e o botão para pedir o dinheiro. '
+        + 'É por isto que eles usam — não é por tu mandares.',
+    },
+  ],
+
+  /**
+   * A comparação lado a lado.
+   *
+   * ─── ISTO SUBSTITUIU A LISTA DE «DORES» ───────────────────────────────────
+   *
+   * A página tinha uma secção de cinco pares problema/solução e esta tabela
+   * dizia-lhe a mesma coisa logo a seguir. Duas secções com o mesmo argumento
+   * em sequência é metade do que fazia a página antiga parecer um bloco só:
+   * nada se destacava porque tudo tinha o mesmo peso.
+   *
+   * Ficou a tabela, porque se lê de relance e a outra obrigava a ler.
+   *
+   * É a secção que se lê de relance, e por isso cada linha tem de caber numa
+   * linha. O «hoje» é escrito sem desprezo: o Excel não é estupidez, é o que
+   * funciona até deixar de funcionar — e quem o usa sabe-o melhor do que nós.
+   */
+  comparacao: [
+    {
+      assunto: 'Fechar a semana',
+      hoje: 'Um sábado inteiro, com três ficheiros abertos',
+      agora: 'Lanças os valores e está fechado',
+    },
+    {
+      assunto: '«Quanto tenho a receber?»',
+      hoje: 'Mensagem do motorista, e tu vais ver',
+      agora: 'Está na app dele, ao cêntimo, sem te perguntar',
+    },
+    {
+      assunto: 'Seguros e inspeções',
+      hoje: 'Descobres no dia em que o carro é parado',
+      agora: 'O painel avisa com antecedência e diz quantos faltam',
+    },
+    {
+      assunto: 'Pedidos de dinheiro',
+      hoje: 'Perdidos no WhatsApp, sem recibo',
+      agora: 'Pedido com recibo anexado, aprovado e registado',
+    },
+    {
+      assunto: 'Reparações',
+      hoje: 'Um caderno e a memória do mecânico',
+      agora: 'Marcação, fatura e comprovativo no mesmo sítio',
+    },
+    {
+      assunto: 'Recibos verdes por sociedade',
+      hoje: 'Contas à mão em Janeiro, se der',
+      agora: 'Tabela por ano, sempre feita',
+    },
+    {
+      assunto: 'Duas folhas a dizer coisas diferentes',
+      hoje: 'Acontece, e descobres tarde',
+      agora: 'Há um sítio só, e é esse que manda',
+    },
+  ],
+
+  /**
+   * As perguntas que o comprador faz calado.
+   *
+   * Esta secção não é um apêndice: é onde a venda se ganha. Quem chega aqui
+   * já quer — o que o trava é uma destas sete dúvidas, e uma página que as
+   * deixa sem resposta perde-o sem nunca saber porquê.
+   *
+   * ─── DUAS RESPOSTAS QUE SÃO COMPROMISSOS TEUS ─────────────────────────────
+   *
+   * A da exportação e a do acompanhamento na primeira semana prometem
+   * trabalho TEU, não do sistema. Deixei-as escritas porque são o que faz a
+   * diferença contra uma empresa grande — mas lê-as e confirma que as
+   * cumpres com dez clientes, não só com um. Se não, dizes-me e eu abrando-as.
+   */
+  perguntas: [
+    {
+      pergunta: 'Tenho de passar para lá tudo o que já tenho?',
+      resposta: 'Não. Criam-se os carros e os motoristas — isso faz-se numa tarde — e '
+        + 'começas a fechar as semanas no sistema a partir daí. O histórico antigo pode '
+        + 'ficar onde está; não precisas de o importar para começar a usar.',
+    },
+    {
+      pergunta: 'Os meus motoristas vão mesmo usar?',
+      resposta: 'Usam, porque é lá que vêem o saldo e é lá que pedem o dinheiro. Entram '
+        + 'por um link de convite teu, funciona no telemóvel sem instalar nada, e na '
+        + 'prática dá-lhes menos trabalho do que mandar-te mensagem.',
+    },
+    {
+      pergunta: 'E se eu quiser sair? Levo os meus dados?',
+      resposta: 'Levas. Pedes, e eu exporto-te tudo — motoristas, fechos, movimentos e '
+        + 'documentos — em folhas de Excel. Não há letra pequena sobre isto e não tens '
+        + 'de dar justificação nenhuma.',
+    },
+    {
+      pergunta: 'Quem és tu, e isto existe no ano que vem?',
+      resposta: 'Sou o Diogo, da Chromatic Dragon. Tenho uma frota TVDE em Portugal e '
+        + 'este sistema é o que uso para a gerir. Enquanto eu tiver frota, isto é '
+        + 'mantido — se o abandonasse, a operação que parava primeiro era a minha.',
+    },
+    {
+      // A resposta que ele pediu para tirar do lugar onde estava: aqui é uma
+      // resposta a quem perguntou, e não um cartaz a levantar a dúvida.
+      pergunta: 'Os meus dados ficam misturados com os de outras frotas?',
+      resposta: 'Não. Cada frota só vê o que é dela, e isso não depende de ninguém se '
+        + 'lembrar de o garantir — é como o sistema está construído por dentro.',
+    },
+    {
+      pergunta: 'Quanto custa, e o que acontece se não gostar?',
+      resposta: 'Os preços estão aqui em cima, à vista. O primeiro mês é grátis e usas '
+        + 'com a tua frota verdadeira, não com uma demonstração. Se não te resolver o '
+        + 'problema, não pagas — e não tens nada a cancelar nem a justificar.',
+    },
+    {
+      pergunta: 'E se precisar de uma coisa que o sistema não faz?',
+      resposta: 'Dizes-me. É a vantagem de falares com quem o constrói em vez de uma '
+        + 'empresa com mil clientes: se fizer sentido para mais frotas que a tua, faz-se, '
+        + 'e sabes quando. Se não fizer, digo-te isso também em vez de te deixar à espera.',
+    },
+  ],
+
+  /** Os três passos até começar. */
+  passos: [
+    {
+      titulo: 'Falamos quinze minutos',
+      texto: 'Vejo como trabalhas hoje e digo-te sem rodeios se isto te serve. '
+        + 'Se não servir, digo-o.',
+    },
+    {
+      titulo: 'Monta-se a tua frota',
+      texto: 'Carros, motoristas e as tuas regras de comissão. Numa tarde, '
+        + 'e com o primeiro mês já a contar como grátis.',
+    },
+    {
+      titulo: 'Fechas a primeira semana',
+      texto: 'Essa fazemo-la juntos. Daí para a frente fazes sozinho, '
+        + 'em minutos em vez de um sábado.',
     },
   ],
 
   /** O que está incluído em qualquer plano. */
   base: [
-    'Os teus dados são só teus — cada frota está isolada das outras',
+    'Primeiro mês grátis, com a tua frota verdadeira',
     'Painel na web e no telemóvel, sem instalar nada',
     'Os teus motoristas entram por um link de convite teu',
-    'Suporte em português, falas comigo',
+    'Falas comigo, e não com um formulário de suporte',
   ],
 };

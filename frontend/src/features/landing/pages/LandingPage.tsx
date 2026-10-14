@@ -145,8 +145,13 @@ export function LandingPage() {
               to="/gestores"
               icone={Building2}
               titulo="Sou gestor de frota"
+              // A oferta dita já aqui, e não só na página seguinte: quem lê
+              // «primeiro mês grátis» antes de clicar entra decidido a
+              // experimentar, e não a avaliar. Não há oferta equivalente do
+              // lado do motorista, por isso a simetria quebra-se — de
+              // propósito.
               texto="Tem motoristas e carros, e passa sábados a fechar contas no Excel.
-                Há uma forma melhor."
+                Primeiro mês grátis."
               verbo="Ver a plataforma"
             />
           </div>

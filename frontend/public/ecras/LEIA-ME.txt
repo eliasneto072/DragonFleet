@@ -1,0 +1,37 @@
+AS CAPTURAS DE ECRÃ DA PÁGINA DOS GESTORES
+==========================================
+
+Põe aqui seis imagens, com estes nomes exactos (minúsculas, com os hífenes):
+
+  fecho-semanal.png      O ecrã do fecho da semana
+  documentos.png         Os documentos a expirar
+  retiradas.png          Os pedidos de retirada de dinheiro
+  recibos-verdes.png     A tabela de quanto cada motorista passou a cada sociedade
+  oficina.png            As marcações e o stock de peças
+  motorista.png          O que o motorista vê na app dele
+
+Enquanto um ficheiro não estiver aqui, a página mostra no lugar dele uma caixa
+cinzenta a dizer qual é que falta. É de propósito: um espaço em branco calado
+ficava publicado sem ninguém reparar.
+
+
+COMO TIRAR AS CAPTURAS
+----------------------
+
+1. No computador, não no telemóvel. A janela larga (maximizada) e o painel em
+   modo ESCURO, que é o da página — uma captura em modo claro fica a brilhar no
+   meio de uma página preta.
+
+2. ANTES DE FOTOGRAFAR, INVENTA OS DADOS. Isto vai para uma página pública e
+   os nomes, matrículas, IBAN e valores dos teus motoristas não podem ir lá.
+   Cria dois ou três motoristas de mentira, com matrículas que não existem, e
+   fotografa esses.
+
+3. Mostra o ecrã com coisas lá dentro. Uma tabela vazia não vende nada: o que
+   convence é ver linhas, saldos e avisos.
+
+4. .png de preferência. Se as imagens ficarem muito pesadas (mais de 1 MB
+   cada), diz-me e eu comprimo-as — uma página lenta perde visitas.
+
+5. Não precisas de cortar nem de arranjar nada. A página já põe uma moldura
+   por cima, com a barra e os três círculos.

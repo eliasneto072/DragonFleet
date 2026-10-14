@@ -120,6 +120,18 @@ export function TituloDaSeccao({
   );
 }
 
+/**
+ * Uma âncora na própria página (`#planos`) não é um link para fora.
+ *
+ * Os botões abaixo abriam TUDO com `target="_blank"`, incluindo o «Ver planos
+ * e preços». Resultado: clicar nele abria uma aba nova da mesma página em vez
+ * de descer até aos preços — num botão que é dos mais clicados da página, e
+ * nas duas páginas públicas.
+ */
+function ehAncora(href?: string): boolean {
+  return !!href && href.startsWith('#');
+}
+
 /** O botão principal. Verde cheio, e só há um por dobra. */
 export function BotaoPrincipal({
   href, to, children, className = '',
@@ -130,8 +142,10 @@ export function BotaoPrincipal({
   const estilo = { background: `linear-gradient(135deg, ${VERDE} 0%, ${VERDE_ESCURO} 100%)` };
 
   if (to) return <Link to={to} className={classes} style={estilo}>{children}</Link>;
+
+  const fora = ehAncora(href) ? {} : { target: '_blank', rel: 'noreferrer' };
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={classes} style={estilo}>
+    <a href={href} {...fora} className={classes} style={estilo}>
       {children}
     </a>
   );
@@ -146,5 +160,26 @@ export function BotaoSecundario({
     + 'hover:border-white/40 hover:bg-white/5 active:scale-[0.98]';
 
   if (to) return <Link to={to} className={classes}>{children}</Link>;
-  return <a href={href} target="_blank" rel="noreferrer" className={classes}>{children}</a>;
+
+  const fora = ehAncora(href) ? {} : { target: '_blank', rel: 'noreferrer' };
+  return <a href={href} {...fora} className={classes}>{children}</a>;
+}
+
+/**
+ * O selo da oferta.
+ *
+ * Verde cheio e em cima do título, porque «primeiro mês grátis» é a frase que
+ * tira o risco de cima do comprador — e um argumento desses escondido no meio
+ * de um parágrafo não faz o trabalho que tem para fazer.
+ */
+export function Selo({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full px-4 py-1.5
+        text-sm font-semibold text-white"
+      style={{ background: VERDE }}
+    >
+      {children}
+    </span>
+  );
 }
