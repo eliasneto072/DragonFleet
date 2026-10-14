@@ -6,6 +6,23 @@
 // 404 — e é de propósito: para quem não a tem, isto não existe.
 
 import { apiClient } from '@/shared/lib/api-client';
+import type { Periodo } from '@/features/driver/periodo';
+
+/**
+ * O período, como pedaço de endereço.
+ *
+ * O filtro é aplicado no SERVIDOR e não aqui: a lista e o total têm de vir da
+ * mesma condição. Filtrados em sítios diferentes, bastava um deles tratar o
+ * último dia do mês de outra maneira para o total deixar de bater com as
+ * linhas à vista.
+ */
+function query(p?: Periodo): string {
+  if (!p?.de && !p?.ate) return '';
+  const partes: string[] = [];
+  if (p?.de) partes.push(`de=${p.de}`);
+  if (p?.ate) partes.push(`ate=${p.ate}`);
+  return `?${partes.join('&')}`;
+}
 
 export type Direccao = 'LONG' | 'SHORT';
 
@@ -88,6 +105,85 @@ export interface CorpoDaOperacao {
   notes?: string | null;
 }
 
+// ─── CRÉDITOS ───────────────────────────────────────────────────────────────
+
+export interface EstadoDoCredito {
+  pagas: number;
+  prestacoes: number;
+  /** De 0 a 100. É a barra. */
+  percentagemPaga: number;
+  capitalPago: number;
+  emDivida: number;
+  jurosPagos: number;
+  jurosPorPagar: number;
+  jurosTotais: number;
+  totalAPagar: number;
+  ultimoPagamento: { n: number; quando: string; prestacao: number } | null;
+  proximoPagamento: { n: number; quando: string; prestacao: number } | null;
+  fim: string | null;
+  terminado: boolean;
+}
+
+export interface AnoDeJuros {
+  ano: number;
+  pago: number;
+  juro: number;
+  capital: number;
+  percentagemEmJuros: number;
+}
+
+export interface Credito {
+  id: string;
+  nome: string;
+  credor: string | null;
+  capital: number;
+  inicio: string;
+  prestacoes: number;
+  prestacaoDoContrato: number | null;
+  prestacaoEmVigor: number;
+  tan: number;
+  taeg: number | null;
+  mtic: number | null;
+  notas: string | null;
+  liquidado: boolean;
+  liquidadoEm: string | null;
+  estado: EstadoDoCredito;
+  porAno: AnoDeJuros[];
+  /**
+   * A prestação do contrato bate certo com as contas?
+   *
+   * `null` quando não foi escrita. Quando foi e não bate, há um engano a
+   * copiar o contrato — e o quadro inteiro está errado sem nada no ecrã a
+   * denunciá-lo.
+   */
+  conferencia: { bate: boolean; calculada: number; diferenca: number } | null;
+}
+
+export interface ResumoDeCreditos {
+  aCorrer: number;
+  total: number;
+  emDivida: number;
+  prestacaoMensal: number;
+  jurosPagos: number;
+  jurosPorPagar: number;
+  jurosTotais: number;
+  porAno: AnoDeJuros[];
+}
+
+export interface CorpoDeCredito {
+  name: string;
+  lender?: string | null;
+  principal: string | number;
+  startedOn: string;
+  installments: string | number;
+  monthlyPayment?: string | number | null;
+  tan?: string | number | null;
+  taeg?: string | number | null;
+  mtic?: string | number | null;
+  notes?: string | null;
+  closedOn?: string | null;
+}
+
 export interface CorpoDaDespesa {
   categoryId?: string | null;
   amount: string | number;
@@ -106,11 +202,13 @@ export interface CorpoDaDespesa {
 
 export const pessoalService = {
   // ── Trading ──
-  listarOperacoes: () =>
-    apiClient.get<{ operacoes: Operacao[] }>('/pessoal/trading'),
+  listarOperacoes: (p?: Periodo) =>
+    apiClient.get<{ operacoes: Operacao[] }>(`/pessoal/trading${query(p)}`),
 
-  resumoDeTrading: () =>
-    apiClient.get<{ resumo: ResumoDeTrading; porMes: LinhaDeMes[] }>('/pessoal/trading/resumo'),
+  resumoDeTrading: (p?: Periodo) =>
+    apiClient.get<{ resumo: ResumoDeTrading; porMes: LinhaDeMes[] }>(
+      `/pessoal/trading/resumo${query(p)}`,
+    ),
 
   criarOperacao: (corpo: CorpoDaOperacao) =>
     apiClient.post<Operacao>('/pessoal/trading', corpo),
@@ -131,12 +229,28 @@ export const pessoalService = {
   apagarCategoria: (id: string) =>
     apiClient.delete<void>(`/pessoal/categorias/${id}`),
 
-  // ── Despesas ──
-  listarDespesas: () =>
-    apiClient.get<{ despesas: Despesa[] }>('/pessoal/despesas'),
+  // ── Créditos ──
+  listarCreditos: () =>
+    apiClient.get<{ creditos: Credito[] }>('/pessoal/creditos'),
 
-  resumoDeDespesas: () =>
-    apiClient.get<ResumoDeDespesas>('/pessoal/despesas/resumo'),
+  resumoDeCreditos: () =>
+    apiClient.get<ResumoDeCreditos>('/pessoal/creditos/resumo'),
+
+  criarCredito: (corpo: CorpoDeCredito) =>
+    apiClient.post<Credito>('/pessoal/creditos', corpo),
+
+  actualizarCredito: (id: string, corpo: CorpoDeCredito) =>
+    apiClient.put<Credito>(`/pessoal/creditos/${id}`, corpo),
+
+  apagarCredito: (id: string) =>
+    apiClient.delete<void>(`/pessoal/creditos/${id}`),
+
+  // ── Despesas ──
+  listarDespesas: (p?: Periodo) =>
+    apiClient.get<{ despesas: Despesa[] }>(`/pessoal/despesas${query(p)}`),
+
+  resumoDeDespesas: (p?: Periodo) =>
+    apiClient.get<ResumoDeDespesas>(`/pessoal/despesas/resumo${query(p)}`),
 
   criarDespesa: (corpo: CorpoDaDespesa) =>
     apiClient.post<Despesa>('/pessoal/despesas', corpo),

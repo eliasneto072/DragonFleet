@@ -104,6 +104,58 @@ export const actualizarDespesaSchema = z.object({
   body: corpoDaDespesa,
 });
 
+const corpoDoCredito = z.object({
+  name: z.string().trim().min(1, 'Dê um nome ao crédito.').max(80),
+  lender: z.string().trim().max(80).nullish(),
+  principal: numero.refine((n) => n > 0, 'O capital tem de ser maior que zero.'),
+  startedOn: dataDoDia,
+  /**
+   * Pelo menos uma. Zero dava uma divisão por zero na percentagem paga — e a
+   * base de dados também o recusa, porque uma guarda que depende de alguém se
+   * lembrar não é uma guarda.
+   */
+  installments: z.coerce.number().int().min(1, 'Tem de ter pelo menos uma prestação.').max(600),
+  monthlyPayment: numeroOpcional,
+  /** Em pontos percentuais: 5.4 é 5,4%. */
+  tan: numeroOpcional,
+  taeg: numeroOpcional,
+  mtic: numeroOpcional,
+  notes: z.string().trim().max(1000).nullish(),
+  /** Liquidado antes do fim. Nulo é o caso normal. */
+  closedOn: dataOpcional,
+});
+
+export const criarCreditoSchema = z.object({ body: corpoDoCredito });
+export const actualizarCreditoSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: corpoDoCredito,
+});
+export const creditoIdSchema = z.object({ params: z.object({ id: z.string().min(1) }) });
+
 export const criarCategoriaSchema = z.object({
   body: z.object({ nome: z.string().trim().min(1, 'Dê um nome à categoria.').max(40) }),
 });
+
+
+/**
+ * O período, lido da barra de endereço: `?de=2026-10-01&ate=2026-10-31`.
+ *
+ * Os dois são opcionais e os dois são INCLUSIVOS. O fim é ancorado ao fim do
+ * dia, e não ao meio-dia como as outras datas deste ficheiro: um `lte` ao
+ * meio-dia cortava fora tudo o que tivesse hora depois disso, e as despesas
+ * do último dia do período desapareciam da conta.
+ */
+export const periodoSchema = z.object({
+  query: z.object({
+    de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }),
+});
+
+export function periodoDaQuery(query: unknown): { de: Date | null; ate: Date | null } {
+  const { query: q } = periodoSchema.parse({ query: query ?? {} });
+  return {
+    de: q.de ? new Date(`${q.de}T00:00:00.000Z`) : null,
+    ate: q.ate ? new Date(`${q.ate}T23:59:59.999Z`) : null,
+  };
+}

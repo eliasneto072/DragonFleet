@@ -44,6 +44,17 @@ export function personalRouter(): Router {
   router.post('/categorias', c.criarCategoria);
   router.delete('/categorias/:id', c.apagarCategoria);
 
+  // Créditos
+  //
+  // O «resumo» ANTES de «:id»: sem isto, "resumo" era apanhado como o id de
+  // um crédito e a resposta era «crédito não encontrado».
+  router.get('/creditos', c.listarCreditos);
+  router.get('/creditos/resumo', c.resumoDeCreditos);
+  router.get('/creditos/:id', c.verCredito);
+  router.post('/creditos', c.criarCredito);
+  router.put('/creditos/:id', c.actualizarCredito);
+  router.delete('/creditos/:id', c.apagarCredito);
+
   // Despesas
   router.get('/despesas', c.listarDespesas);
   router.get('/despesas/resumo', c.resumoDeDespesas);

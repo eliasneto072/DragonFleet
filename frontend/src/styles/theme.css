@@ -54,6 +54,20 @@
 
   --chart-1: #108865;
   --chart-2: #2aa37c;
+
+  /* ── O par juro / capital ──────────────────────────────────────────────
+     Para os gráficos de crédito, onde as duas séries aparecem empilhadas na
+     mesma barra. Não se usou o --chart-1 com o --chart-2: são dois verdes a
+     8,3 de distância, e abaixo de 15 nem com visão normal se distinguem —
+     muito menos empilhados um em cima do outro.
+     Âmbar para o juro também por significado: é o dinheiro que se perde. */
+  --grafico-capital: #108865;
+  --grafico-juro: #c77f1a;
+
+  /* O lucro, no gráfico de receita/despesa/lucro. Azul e não um terceiro
+     verde: três séries na mesma tela precisam de se distinguir entre si, e
+     o par foi validado com as duas de cima para daltonismo e visão normal. */
+  --grafico-lucro: #2563eb;
   --chart-3: #5dbf9c;
   --chart-4: #1D1D1D;
   --chart-5: #8fd4ba;
@@ -114,6 +128,12 @@
 
   --chart-1: #2aa37c;
   --chart-2: #5dbf9c;
+
+  /* Passos próprios para o escuro, e não os claros clareados: um âmbar que
+     funciona sobre branco fica fora da banda de luminosidade sobre preto. */
+  --grafico-capital: #2aa37c;
+  --grafico-juro: #bd8226;
+  --grafico-lucro: #5b8def;
   --chart-3: #8fd4ba;
   --chart-4: #e4e6e4;
   --chart-5: #108865;

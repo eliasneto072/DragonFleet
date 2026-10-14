@@ -26,6 +26,8 @@ import {
   operacaoIdSchema, criarOperacaoSchema, actualizarOperacaoSchema,
   categoriaIdSchema, criarCategoriaSchema,
   despesaIdSchema, criarDespesaSchema, actualizarDespesaSchema,
+  periodoDaQuery,
+  criarCreditoSchema, actualizarCreditoSchema, creditoIdSchema,
 } from './personal.schemas';
 
 /** O actor, a partir da sessão e de mais nada. */
@@ -38,10 +40,10 @@ export class PersonalController {
   // ── Trading ──
 
   listarOperacoes = async (req: AuthRequest, res: Response) =>
-    ok(res, { operacoes: await s.listarOperacoes(quem(req)) });
+    ok(res, { operacoes: await s.listarOperacoes(quem(req), periodoDaQuery(req.query)) });
 
   resumoDeTrading = async (req: AuthRequest, res: Response) =>
-    ok(res, await s.resumoDeTrading(quem(req)));
+    ok(res, await s.resumoDeTrading(quem(req), periodoDaQuery(req.query)));
 
   criarOperacao = async (req: AuthRequest, res: Response) => {
     const { body } = criarOperacaoSchema.parse({ body: req.body });
@@ -82,10 +84,10 @@ export class PersonalController {
   // ── Despesas ──
 
   listarDespesas = async (req: AuthRequest, res: Response) =>
-    ok(res, { despesas: await s.listarDespesas(quem(req)) });
+    ok(res, { despesas: await s.listarDespesas(quem(req), periodoDaQuery(req.query)) });
 
   resumoDeDespesas = async (req: AuthRequest, res: Response) =>
-    ok(res, await s.resumoDeDespesas(quem(req)));
+    ok(res, await s.resumoDeDespesas(quem(req), periodoDaQuery(req.query)));
 
   criarDespesa = async (req: AuthRequest, res: Response) => {
     const { body } = criarDespesaSchema.parse({ body: req.body });
@@ -102,6 +104,37 @@ export class PersonalController {
   apagarDespesa = async (req: AuthRequest, res: Response) => {
     const { params } = despesaIdSchema.parse({ params: req.params });
     await s.apagarDespesa(quem(req), params.id);
+    return res.status(204).send();
+  };
+
+  // ── Créditos ──
+
+  listarCreditos = async (req: AuthRequest, res: Response) =>
+    ok(res, { creditos: await s.listarCreditos(quem(req)) });
+
+  resumoDeCreditos = async (req: AuthRequest, res: Response) =>
+    ok(res, await s.resumoDeCreditos(quem(req)));
+
+  verCredito = async (req: AuthRequest, res: Response) => {
+    const { params } = creditoIdSchema.parse({ params: req.params });
+    return ok(res, await s.verCredito(quem(req), params.id));
+  };
+
+  criarCredito = async (req: AuthRequest, res: Response) => {
+    const { body } = criarCreditoSchema.parse({ body: req.body });
+    return res.status(201).json({ ok: true, data: await s.criarCredito(quem(req), body) });
+  };
+
+  actualizarCredito = async (req: AuthRequest, res: Response) => {
+    const { params, body } = actualizarCreditoSchema.parse({
+      params: req.params, body: req.body,
+    });
+    return ok(res, await s.actualizarCredito(quem(req), params.id, body));
+  };
+
+  apagarCredito = async (req: AuthRequest, res: Response) => {
+    const { params } = creditoIdSchema.parse({ params: req.params });
+    await s.apagarCredito(quem(req), params.id);
     return res.status(204).send();
   };
 }

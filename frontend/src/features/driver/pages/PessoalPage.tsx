@@ -25,10 +25,12 @@
 
 import { Navigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Wallet, LineChart } from 'lucide-react';
+import { Wallet, LineChart, Tags, Landmark } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { PessoalTrading } from '@/app/components/driver/pessoal-trading';
 import { PessoalDespesas } from '@/app/components/driver/pessoal-despesas';
+import { PessoalCategorias } from '@/app/components/driver/pessoal-categorias';
+import { PessoalCreditos } from '@/app/components/driver/pessoal-creditos';
 
 export default function PessoalPage() {
   const { user } = useAuth();
@@ -56,6 +58,20 @@ export default function PessoalPage() {
             <LineChart className="h-4 w-4" />
             Trading
           </TabsTrigger>
+          {/* Os créditos ANTES das categorias, como ele pediu. E a seguir ao
+              trading por uma razão: é a página que se abre para decidir, não
+              para lançar — não é trabalho de todos os dias. */}
+          <TabsTrigger value="creditos" className="gap-1.5">
+            <Landmark className="h-4 w-4" />
+            Créditos
+          </TabsTrigger>
+          {/* As categorias no fim: arrumam-se uma vez por mês, e vão ser
+              muitas. Em cima da lista de despesas empurravam para fora do
+              ecrã aquilo a que se vem. */}
+          <TabsTrigger value="categorias" className="gap-1.5">
+            <Tags className="h-4 w-4" />
+            Categorias
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="despesas" className="mt-6">
@@ -63,6 +79,12 @@ export default function PessoalPage() {
         </TabsContent>
         <TabsContent value="trading" className="mt-6">
           <PessoalTrading />
+        </TabsContent>
+        <TabsContent value="creditos" className="mt-6">
+          <PessoalCreditos />
+        </TabsContent>
+        <TabsContent value="categorias" className="mt-6">
+          <PessoalCategorias />
         </TabsContent>
       </Tabs>
     </div>

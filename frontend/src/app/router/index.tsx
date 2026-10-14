@@ -33,6 +33,7 @@ import { FinancialPage } from '@/features/admin/pages/FinancialPage';
 import { ScheduledPaymentsPage } from '@/features/admin/pages/ScheduledPaymentsPage';
 import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
 import { FleetPage } from '@/features/admin/pages/FleetPage';
+import { EmpresaPage } from '@/features/admin/pages/EmpresaPage';
 import { BookingsPage } from '@/features/admin/pages/BookingsPage';
 import { MaterialsPage } from '@/features/admin/pages/MaterialsPage';
 import { VehicleDetailPage } from '@/features/admin/pages/VehicleDetailPage';
@@ -152,6 +153,11 @@ export const router = createBrowserRouter([
           { path: 'drivers',        element: <RequireArea area="DRIVERS" funcionalidade="DRIVERS"><DriversPage /></RequireArea> },
           { path: 'drivers/:id',    element: <RequireArea area="DRIVERS" funcionalidade="DRIVERS"><DriverDetailPage /></RequireArea> },
           { path: 'documents',      element: <RequireArea area="DOCUMENTS" funcionalidade="DOCUMENTS"><DocumentsAdminPage /></RequireArea> },
+          // As contas da empresa. Sem `RequireArea` e sem funcionalidade: não
+          // é uma área do painel nem se vende — é a contabilidade de UMA
+          // empresa, a da casa. A guarda está no servidor (`soDaCasa` mais
+          // `requireAdmin`), que é onde as guardas contam.
+          { path: 'empresa', element: <EmpresaPage /> },
           { path: 'fleet',          element: <RequireArea area="FLEET" funcionalidade="FLEET"><FleetPage /></RequireArea> },
           // Antes de 'fleet/:id' por legibilidade — o React Router já dá
           // prioridade ao segmento estático, mas quem lê o ficheiro não tem

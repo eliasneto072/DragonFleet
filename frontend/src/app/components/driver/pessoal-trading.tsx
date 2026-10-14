@@ -41,6 +41,9 @@ import {
   pessoalService, type Operacao, type CorpoDaOperacao,
 } from '@/features/driver/services/pessoal.service';
 import { formatCurrency } from '@/shared/lib/format';
+import {
+  FiltroDePeriodo, filtroInicial, type EstadoDoFiltro,
+} from '@/app/components/driver/filtro-periodo';
 
 function hoje(): string {
   return new Date().toISOString().slice(0, 10);
@@ -87,14 +90,18 @@ export function PessoalTrading() {
   const [aEditar, setAEditar] = useState<Operacao | null>(null);
   const [form, setForm] = useState<CorpoDaOperacao>(VAZIO);
   const [erro, setErro] = useState<string | null>(null);
+  // «Ano» por omissão, ao contrário das despesas: uma taxa de acerto de uma
+  // semana é ruído — podem ser três operações — e o que se vem aqui ver é a
+  // tendência, não o que aconteceu desde segunda.
+  const [filtro, setFiltro] = useState<EstadoDoFiltro>(() => filtroInicial('ano'));
 
   const operacoes = useQuery({
-    queryKey: ['pessoal', 'trading'],
-    queryFn: () => pessoalService.listarOperacoes(),
+    queryKey: ['pessoal', 'trading', filtro.periodo],
+    queryFn: () => pessoalService.listarOperacoes(filtro.periodo),
   });
   const resumo = useQuery({
-    queryKey: ['pessoal', 'trading', 'resumo'],
-    queryFn: () => pessoalService.resumoDeTrading(),
+    queryKey: ['pessoal', 'trading', 'resumo', filtro.periodo],
+    queryFn: () => pessoalService.resumoDeTrading(filtro.periodo),
   });
 
   const recarregar = () => qc.invalidateQueries({ queryKey: ['pessoal', 'trading'] });
@@ -151,6 +158,8 @@ export function PessoalTrading() {
           saldo</strong> nem entra em nenhuma conta da frota.
         </p>
       </div>
+
+      <FiltroDePeriodo valor={filtro} aoMudar={setFiltro} />
 
       {/* ── Os números ── */}
       <Card>

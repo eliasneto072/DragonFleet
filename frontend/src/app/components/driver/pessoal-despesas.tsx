@@ -32,11 +32,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
-import { Plus, Trash2, Pencil, Tag, Info } from 'lucide-react';
+import { Plus, Trash2, Pencil, Info } from 'lucide-react';
 import {
   pessoalService, type Despesa, type CorpoDaDespesa,
 } from '@/features/driver/services/pessoal.service';
 import { formatCurrency } from '@/shared/lib/format';
+import {
+  FiltroDePeriodo, filtroInicial, type EstadoDoFiltro,
+} from '@/app/components/driver/filtro-periodo';
 
 /** Hoje em "AAAA-MM-DD", que é o que o campo de data e o servidor esperam. */
 function hoje(): string {
@@ -59,16 +62,19 @@ export function PessoalDespesas() {
   const [aberto, setAberto] = useState(false);
   const [aEditar, setAEditar] = useState<Despesa | null>(null);
   const [form, setForm] = useState<CorpoDaDespesa>(VAZIO);
-  const [novaCategoria, setNovaCategoria] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<EstadoDoFiltro>(() => filtroInicial('mes'));
 
+  // O período entra na CHAVE e não só no pedido: sem ele, o React Query
+  // servia a resposta guardada do período anterior ao trocar de filtro, e a
+  // tela ficava a mostrar números de outro mês com o filtro novo aceso.
   const despesas = useQuery({
-    queryKey: ['pessoal', 'despesas'],
-    queryFn: () => pessoalService.listarDespesas(),
+    queryKey: ['pessoal', 'despesas', filtro.periodo],
+    queryFn: () => pessoalService.listarDespesas(filtro.periodo),
   });
   const resumo = useQuery({
-    queryKey: ['pessoal', 'despesas', 'resumo'],
-    queryFn: () => pessoalService.resumoDeDespesas(),
+    queryKey: ['pessoal', 'despesas', 'resumo', filtro.periodo],
+    queryFn: () => pessoalService.resumoDeDespesas(filtro.periodo),
   });
   const categorias = useQuery({
     queryKey: ['pessoal', 'categorias'],
@@ -97,19 +103,6 @@ export function PessoalDespesas() {
   const apagar = useMutation({
     mutationFn: (id: string) => pessoalService.apagarDespesa(id),
     onSuccess: recarregar,
-  });
-
-  const criarCategoria = useMutation({
-    mutationFn: (nome: string) => pessoalService.criarCategoria(nome),
-    onSuccess: () => {
-      setNovaCategoria('');
-      qc.invalidateQueries({ queryKey: ['pessoal', 'categorias'] });
-    },
-  });
-
-  const apagarCategoria = useMutation({
-    mutationFn: (id: string) => pessoalService.apagarCategoria(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pessoal'] }),
   });
 
   function abrirNova() {
@@ -154,12 +147,17 @@ export function PessoalDespesas() {
         </p>
       </div>
 
+      {/* ── O período ──
+          Antes dos totais, porque é o que lhes dá sentido: um número sem
+          período é um número que não se sabe comparar com nada. */}
+      <FiltroDePeriodo valor={filtro} aoMudar={setFiltro} />
+
       {/* ── Os totais ── */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total registado
+              Total do período
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -191,65 +189,6 @@ export function PessoalDespesas() {
           </CardContent>
         </Card>
       </div>
-
-      {/* ── As gavetas ── */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Tag className="h-4 w-4" aria-hidden="true" />
-            Categorias
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {cats.map((c) => (
-              <span
-                key={c.id}
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
-              >
-                {c.name}
-                <button
-                  type="button"
-                  onClick={() => apagarCategoria.mutate(c.id)}
-                  className="text-muted-foreground transition hover:text-destructive"
-                  // Dito ao passar o rato: apagar uma gaveta não é apagar o
-                  // que estava lá dentro, e sem o dizer ninguém carrega.
-                  title="Apagar a categoria. As despesas ficam sem categoria, e não se perdem."
-                  aria-label={`Apagar a categoria ${c.name}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            ))}
-            {cats.length === 0 && !categorias.isLoading && (
-              <p className="text-sm text-muted-foreground">
-                Ainda não tens categorias. Cria as tuas aqui ao lado.
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <Input
-              value={novaCategoria}
-              onChange={(e) => setNovaCategoria(e.target.value)}
-              placeholder="Combustível, casa, comida…"
-              maxLength={40}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && novaCategoria.trim()) {
-                  criarCategoria.mutate(novaCategoria.trim());
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              disabled={!novaCategoria.trim() || criarCategoria.isPending}
-              onClick={() => criarCategoria.mutate(novaCategoria.trim())}
-            >
-              Acrescentar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* ── A lista ── */}
       <Card>

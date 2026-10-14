@@ -293,6 +293,9 @@ model User {
   trades             TradeEntry[]
   personalExpenses   PersonalExpense[]
   expenseCategories  PersonalExpenseCategory[]
+  credits            Credit[]
+  companyExpenses    CompanyExpense[]  @relation("companyExpensesCreated")
+  cashMarks          CompanyCashMark[] @relation("cashMarksCreated")
 
   @@index([fleetId])
 
@@ -2662,4 +2665,144 @@ model PersonalExpense {
   @@index([userId, spentOn])
   @@index([categoryId])
   @@map("personal_expenses")
+}
+
+/// Um crédito. Guarda-se o contrato; tudo o resto calcula-se — ver `creditos.ts`.
+model Credit {
+  id      String @id @default(cuid())
+  fleetId String @default("") @map("fleet_id")
+  userId  String @map("user_id")
+
+  name   String
+  /// A quem se deve. Texto livre: há créditos que não são de bancos.
+  lender String?
+
+  principal Decimal @db.Decimal(12, 2)
+
+  /// A primeira prestação. As seguintes andam de mês a mês a partir daqui —
+  /// a data do fim NÃO se guarda, calcula-se, e assim nunca pode ficar em
+  /// desacordo com o número de prestações.
+  startedOn    DateTime @map("started_on") @db.Date
+  installments Int
+
+  /// A prestação que sai de facto todos os meses.
+  ///
+  /// Guardada apesar de se poder calcular: é o número que ele sabe de cor, e
+  /// é com ele que se confere se o resto foi bem copiado do contrato. Um
+  /// dígito trocado no capital dá um quadro inteiro errado, bonito e coerente
+  /// consigo próprio — e esta é a única coisa que o denuncia.
+  monthlyPayment Decimal? @map("monthly_payment") @db.Decimal(12, 2)
+
+  /// Corre sobre o capital em dívida. A ÚNICA que entra no quadro.
+  tan  Decimal  @default(0) @db.Decimal(6, 3)
+  /// Inclui comissões, seguros e imposto de selo. Para comparar propostas.
+  taeg Decimal? @db.Decimal(6, 3)
+  /// O total que se acaba por entregar, lido do contrato. Não se calcula.
+  mtic Decimal? @db.Decimal(12, 2)
+
+  notes String?
+
+  /// Liquidado antes do fim. Nulo é o caso normal: ainda está a correr.
+  closedOn DateTime? @map("closed_on") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([fleetId])
+  @@index([userId, startedOn])
+  @@map("credits")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AS CONTAS DA EMPRESA
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// O que falta ao sistema para responder a duas perguntas diferentes:
+//
+//   «O negócio dá dinheiro?»   → lucro = receita da frota − despesas daqui
+//   «Tenho dinheiro na conta?» → caixa = saldo declarado − o que é dos motoristas
+//
+// O pagamento a um motorista NÃO se lança aqui: o que é dele nunca foi receita
+// da empresa, e descontá-lo outra vez contava-o duas vezes. Ver a nota longa
+// em `src/modules/company/lucro.ts`.
+
+/// O plano de contas da empresa. Da frota, e não de uma pessoa.
+model CompanyExpenseCategory {
+  id      String @id @default(cuid())
+  fleetId String @default("") @map("fleet_id")
+
+  name      String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  expenses CompanyExpense[]
+
+  @@unique([fleetId, name])
+  @@index([fleetId])
+  @@map("company_expense_categories")
+}
+
+/// Uma despesa da empresa. Desconta ao lucro, não ao saldo de ninguém.
+model CompanyExpense {
+  id         String  @id @default(cuid())
+  fleetId    String  @default("") @map("fleet_id")
+  categoryId String? @map("category_id")
+
+  /// Sempre positivo. Um valor negativo seria uma receita disfarçada a somar
+  /// ao lucro — e a base recusa-o.
+  amount   Decimal  @db.Decimal(12, 2)
+  spentOn  DateTime @map("spent_on") @db.Date
+  supplier String?
+  notes    String?
+
+  /// Opcional, e pode chegar depois do lançamento.
+  receiptUrl String? @map("receipt_url")
+  receiptKey String? @map("receipt_key")
+
+  createdById String? @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  category  CompanyExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy User?                   @relation("companyExpensesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([fleetId, spentOn])
+  @@index([categoryId])
+  @@map("company_expenses")
+}
+
+/// O saldo da conta bancária, declarado num dia.
+///
+/// Declarado e não calculado: a aplicação não vê o banco. As prestações dos
+/// créditos saem por débito direto e as despesas pagas com o cartão pessoal
+/// entram por outro lado — um saldo calculado só com o que a aplicação
+/// conhece estaria sempre errado, e errado para MAIS.
+///
+/// Guarda-se o histórico e não só o último: com histórico vê-se a evolução da
+/// conta e apanha-se uma declaração enganada; com um valor só, um engano apaga
+/// o anterior e não há a que voltar.
+model CompanyCashMark {
+  id      String @id @default(cuid())
+  fleetId String @default("") @map("fleet_id")
+
+  /// Pode ser negativo: uma conta a descoberto é um estado possível, e travá-lo
+  /// a zero escondia precisamente a situação que é preciso ver.
+  balance    Decimal  @db.Decimal(12, 2)
+  observedOn DateTime @map("observed_on") @db.Date
+  notes      String?
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  createdBy User? @relation("cashMarksCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Uma declaração por dia: duas no mesmo dia e deixa de haver resposta para
+  /// «qual era o saldo nesse dia».
+  @@unique([fleetId, observedOn])
+  @@index([fleetId, observedOn])
+  @@map("company_cash_marks")
 }

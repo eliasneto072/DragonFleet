@@ -28,6 +28,7 @@ import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
   ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
+  Briefcase,
   Wrench, Boxes, Lock, AlertTriangle, Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -156,6 +157,10 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
   {
     titulo: 'Investimento',
     entradas: [
+      // As contas da empresa: caixa, lucro e despesas. `soDaCasa` como os
+      // investimentos, e pela mesma razão — é a contabilidade de UMA empresa,
+      // a da casa, e não uma funcionalidade que se venda a frotas clientes.
+      { to: '/app/admin/empresa', icon: Briefcase, label: 'Empresa', area: 'FINANCIAL', soDaCasa: true },
       { to: '/app/admin/investments', icon: PiggyBank, label: 'Investimentos', area: 'INVESTMENTS', soDaCasa: true },
       { to: '/app/admin/investors',   icon: Landmark,  label: 'Investidores',  area: 'INVESTORS', soDaCasa: true },
       { to: '/app/admin/projects',    icon: Handshake, label: 'Projetos',      area: 'PROJECTS', soDaCasa: true },

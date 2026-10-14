@@ -31,6 +31,7 @@ import { systemRouter } from '../modules/system/system.routes';
 import { invitesRouter } from '../modules/invites/invites.routes';
 import { meuPlanoRouter } from '../modules/plan-requests/meu-plano.routes';
 import { personalRouter } from '../modules/personal/personal.routes';
+import { companyRouter } from '../modules/company/company.routes';
 import { leadsRouter, publicoRouter } from '../modules/leads/leads.routes';
 import { requireArea } from '../middlewares/area.middleware';
 import { lerSessaoSeHouver } from '../middlewares/auth.middleware';
@@ -146,6 +147,18 @@ router.use('/permissions', permissionsRouter())
 // porque o muro só trava o que não é GET — ninguém fica fechado fora do
 // histórico que é seu.
 router.use('/pessoal', personalRouter())
+
+// ─── As contas da empresa ──────────────────────────────────────────────────
+//
+// Lucro, caixa e despesas. `soDaCasa` porque isto é a contabilidade de UMA
+// empresa — a tua — e não uma funcionalidade que se venda: não está no
+// catálogo e nenhum plano a pode incluir, tal como os investidores e os
+// projetos. A guarda olha para a FROTA e não para a pessoa, por isso uma
+// conta de investidor da casa também não entra (fica barrada acima).
+//
+// O `requireAdmin` está lá dentro: dentro da frota da casa, um gestor de
+// faturação não tem nada que ver o lucro nem o saldo do banco.
+router.use('/empresa', soDaCasa, companyRouter())
 
 // ─── O painel do dono da plataforma ────────────────────────────────────────
 //
