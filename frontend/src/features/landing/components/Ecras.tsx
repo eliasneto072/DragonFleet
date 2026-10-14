@@ -49,9 +49,22 @@ function Moldura({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Enquanto a imagem vem.
+ *
+ * Neutro de propósito: uma caixa escura com um brilho a passar. NÃO diz que
+ * falta nada, porque nesse instante não falta — está a caminho.
+ */
+function ACarregar() {
+  return (
+    <div className="absolute inset-0 animate-pulse bg-white/[0.04]" aria-hidden="true" />
+  );
+}
+
+/** Quando a imagem não existe mesmo. Só depois de o navegador desistir. */
 function PorPreencher({ ficheiro }: { ficheiro: string }) {
   return (
-    <div className="flex min-h-[14rem] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
       <ImageOff className="h-7 w-7 text-white/25" aria-hidden="true" />
       <p className="text-sm font-medium text-white/50">Falta esta captura de ecrã</p>
       <code className="rounded-md bg-black/50 px-2.5 py-1 text-xs text-white/40">
@@ -61,8 +74,12 @@ function PorPreencher({ ficheiro }: { ficheiro: string }) {
   );
 }
 
-function UmEcra({ ecra, invertido }: { ecra: Ecra; invertido: boolean }) {
-  const [carregou, setCarregou] = useState(false);
+type Estado = 'a-carregar' | 'pronta' | 'falhou';
+
+function UmEcra({ ecra, invertido, primeira }: {
+  ecra: Ecra; invertido: boolean; primeira: boolean;
+}) {
+  const [estado, setEstado] = useState<Estado>('a-carregar');
 
   return (
     <div className="grid items-center gap-8 lg:grid-cols-5 lg:gap-12">
@@ -70,33 +87,50 @@ function UmEcra({ ecra, invertido }: { ecra: Ecra; invertido: boolean }) {
           lado para explicar e não para competir. */}
       <div className={`lg:col-span-3 ${invertido ? 'lg:order-2' : ''}`}>
         <Moldura>
-          {/* ─── O AVISO É O ESTADO INICIAL, E NÃO O ESTADO DE ERRO ─────────
-              A primeira versão fazia ao contrário: mostrava a imagem e só
-              trocava pelo aviso quando o `onError` disparasse. Vi o
-              resultado no site: com `loading="lazy"`, uma imagem que ainda
-              não foi pedida não dá erro nenhum — e durante esse tempo a
-              moldura ficava com a barra de cima e NADA por baixo. Um
-              rectângulo vazio, exactamente o espaço em branco calado que
-              esta secção foi escrita para evitar.
+          {/* ╔══════════════════════════════════════════════════════════════╗
+              ║  TRÊS ESTADOS, TRÊS COISAS DIFERENTES NO ECRÃ                ║
+              ╚══════════════════════════════════════════════════════════════╝
 
-              Assim o aviso está lá desde o início e só sai quando a imagem
-              chegar de facto. Os três estados — por carregar, falhada e
-              carregada — ficam cobertos pela mesma linha, e não há instante
-              nenhum em que a moldura esteja vazia.
+              Esta parte esteve errada duas vezes, e das duas o erro foi o
+              mesmo: tratar «ainda não chegou» e «não existe» como se fossem
+              a mesma coisa.
 
-              A imagem fica por cima, invisível e a ocupar a caixa toda, em
-              vez de `hidden`: precisa de ter um sítio no ecrã para o
-              carregamento preguiçoso saber quando a pedir. */}
-          <div className="relative">
-            {!carregou && <PorPreencher ficheiro={ecra.ficheiro} />}
+              Na primeira versão, o aviso aparecia só no `onError`. Mas uma
+              imagem com `loading="lazy"` que ainda não foi pedida não dá
+              erro nenhum — e nesse tempo a moldura ficava vazia.
+
+              Na segunda, pus o aviso como estado inicial. Pior: as seis
+              imagens estavam publicadas e a funcionar, e a página dizia a
+              quem a visse «falta esta captura de ecrã» durante todo o tempo
+              em que a imagem estava a descarregar. Uma página a acusar-se de
+              estar incompleta, sem estar.
+
+              Agora são três estados a sério: um brilho neutro enquanto vem,
+              a imagem quando chega, e o aviso SÓ quando o navegador desiste.
+
+              ─── E A CAIXA TEM O TAMANHO CERTO DESDE O INÍCIO ──────────────
+
+              O `aspect-[1562/915]` é a proporção das capturas. Antes a caixa
+              tinha 210px de altura à espera e saltava para 420 quando a
+              imagem entrava: a página inteira dava um pulo a cada uma, e —
+              pior — o carregamento preguiçoso calculava as distâncias com a
+              página encolhida a metade, por isso as imagens só começavam a
+              vir muito depois de já se estar a olhar para elas.
+
+              A primeira não é preguiçosa: é a que se vê sem descer nada, e
+              esperar por ela é esperar à frente de toda a gente. */}
+          <div className="relative aspect-[1562/915] bg-black/20">
+            {estado === 'a-carregar' && <ACarregar />}
+            {estado === 'falhou' && <PorPreencher ficheiro={ecra.ficheiro} />}
             <img
               src={`/ecras/${ecra.ficheiro}`}
               alt={ecra.titulo}
-              loading="lazy"
-              onLoad={() => setCarregou(true)}
-              className={carregou
-                ? 'block w-full'
-                : 'absolute inset-0 h-full w-full opacity-0'}
+              loading={primeira ? 'eager' : 'lazy'}
+              decoding="async"
+              onLoad={() => setEstado('pronta')}
+              onError={() => setEstado('falhou')}
+              className={`absolute inset-0 h-full w-full object-contain transition-opacity
+                duration-300 ${estado === 'pronta' ? 'opacity-100' : 'opacity-0'}`}
             />
           </div>
         </Moldura>
@@ -120,7 +154,7 @@ export function Ecras({ ecras }: { ecras: Ecra[] }) {
         // Alternado: o olho desce em ziguezague em vez de cair a pique por
         // seis blocos iguais, que é o que fazia a página antiga parecer uma
         // lista sem fim.
-        <UmEcra key={e.ficheiro} ecra={e} invertido={i % 2 === 1} />
+        <UmEcra key={e.ficheiro} ecra={e} invertido={i % 2 === 1} primeira={i === 0} />
       ))}
     </div>
   );
