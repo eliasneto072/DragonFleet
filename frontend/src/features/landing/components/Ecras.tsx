@@ -81,6 +81,32 @@ function UmEcra({ ecra, invertido, primeira }: {
 }) {
   const [estado, setEstado] = useState<Estado>('a-carregar');
 
+  /**
+   * Uma segunda tentativa, a saltar a cache do navegador.
+   *
+   * ─── O CASO QUE ISTO RESOLVE ────────────────────────────────────────────
+   *
+   * As imagens não vão todas para o site ao mesmo tempo. Quem abrir a página
+   * no intervalo em que falta uma recebe um «não existe» — e o navegador
+   * guarda essa resposta durante quatro horas. A partir daí, mesmo depois de
+   * a imagem estar publicada e a funcionar, aquela pessoa continua a ver o
+   * aviso de que falta, porque nem chega a perguntar outra vez.
+   *
+   * Aconteceu, e a seguir deu uma hora de procura num problema que não
+   * existia: o ficheiro estava no sítio, o deploy tinha corrido bem, e só o
+   * navegador de quem olhava é que ainda tinha o «não» guardado.
+   *
+   * Com um parâmetro diferente no endereço, o navegador trata-o como outro
+   * ficheiro e vai mesmo buscá-lo. Uma vez só: se a segunda também falhar, é
+   * porque falta de verdade, e aí o aviso está certo.
+   */
+  const [segundaTentativa, setSegundaTentativa] = useState(false);
+
+  function falhou() {
+    if (segundaTentativa) setEstado('falhou');
+    else setSegundaTentativa(true);
+  }
+
   return (
     <div className="grid items-center gap-8 lg:grid-cols-5 lg:gap-12">
       {/* A imagem ocupa três quintos: é a protagonista, e o texto está ao
@@ -123,12 +149,15 @@ function UmEcra({ ecra, invertido, primeira }: {
             {estado === 'a-carregar' && <ACarregar />}
             {estado === 'falhou' && <PorPreencher ficheiro={ecra.ficheiro} />}
             <img
-              src={`/ecras/${ecra.ficheiro}`}
+              // A `key` muda com a tentativa para o React trocar mesmo o
+              // elemento: mudar só o `src` nem sempre refaz o pedido.
+              key={segundaTentativa ? 'outra' : 'primeira'}
+              src={`/ecras/${ecra.ficheiro}${segundaTentativa ? '?r=1' : ''}`}
               alt={ecra.titulo}
               loading={primeira ? 'eager' : 'lazy'}
               decoding="async"
               onLoad={() => setEstado('pronta')}
-              onError={() => setEstado('falhou')}
+              onError={falhou}
               className={`absolute inset-0 h-full w-full object-contain transition-opacity
                 duration-300 ${estado === 'pronta' ? 'opacity-100' : 'opacity-0'}`}
             />
