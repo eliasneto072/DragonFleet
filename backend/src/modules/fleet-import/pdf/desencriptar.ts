@@ -155,7 +155,9 @@ function chaveDoFicheiro(
     partes.push(Buffer.from([0xff, 0xff, 0xff, 0xff]));
   }
 
-  let chave = md5(Buffer.concat(partes));
+  // `: Buffer` explícito, pela mesma razão que em `extrair-texto.ts`: ver
+  // `scripts/verificar-buffers.mjs`.
+  let chave: Buffer = md5(Buffer.concat(partes));
   if (revisao >= 3) {
     for (let i = 0; i < 50; i++) chave = md5(chave.subarray(0, bytes));
   }

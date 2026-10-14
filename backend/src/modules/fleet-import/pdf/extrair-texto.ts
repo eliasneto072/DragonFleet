@@ -215,7 +215,19 @@ function streamDe(corpo: string): string | null {
   if (!limites) return null;
 
   const cabecalho = corpo.slice(0, limites.inicio);
-  let dados = Buffer.from(corpo.slice(limites.inicio, limites.fim), 'latin1');
+
+  // ─── O `: Buffer` NÃO É DECORAÇÃO ─────────────────────────────────────────
+  //
+  // Sem ele, o tipo desta variável é inferido de `Buffer.from(string)`, que no
+  // @types/node moderno é `Buffer<ArrayBuffer>` — o tipo ESTREITO. Os filtros
+  // abaixo devolvem `Buffer` (que é `Buffer<ArrayBufferLike>`, o largo), e
+  // atribuir o largo ao estreito não compila.
+  //
+  // Isto partiu o build no Render. Não aparece aqui porque a verificação de
+  // tipos local corre sem o `node_modules`: sem os tipos do Node, `Buffer` não
+  // tem parâmetros e o engano é invisível. Ver `scripts/verificar-buffers.mjs`,
+  // que existe por causa deste commit.
+  let dados: Buffer = Buffer.from(corpo.slice(limites.inicio, limites.fim), 'latin1');
 
   const filtros = /\/Filter\s*\[([^\]]*)\]/.exec(cabecalho)?.[1]
     ?? /\/Filter\s*(\/[A-Za-z0-9]+)/.exec(cabecalho)?.[1]
