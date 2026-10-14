@@ -28,7 +28,7 @@ import {
   LayoutDashboard, Users, DollarSign, Car, TrendingUp,
   Settings, FileText, MessageCircle, Bell, ReceiptText, FileSpreadsheet,
   ShieldCheck, PiggyBank, Trophy, Landmark, Handshake, Gauge, FileUp, CalendarClock,
-  Briefcase,
+  Briefcase, FileSearch,
   Wrench, Boxes, Lock, AlertTriangle, Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -135,6 +135,14 @@ const MENU: { titulo: string; entradas: Entrada[] }[] = [
       {
         to: '/app/admin/settlements', icon: ReceiptText, label: 'Faturação', area: 'SETTLEMENTS', funcionalidade: 'SETTLEMENTS',
         fontes: ['earningsPending', 'missingSettlements'],
+      },
+      // Os pedidos de esclarecimento sobre uma linha do fecho. Entrada
+      // própria e não um separador dentro da Faturação: é a fila de alguém
+      // que está à espera de resposta, e uma fila escondida num separador é
+      // uma fila que ninguém abre.
+      {
+        to: '/app/admin/pedidos-extrato', icon: FileSearch, label: 'Pedidos', area: 'SETTLEMENTS', funcionalidade: 'SETTLEMENTS',
+        fontes: ['settlementQueries'],
       },
       // A importação não tem pendências próprias: lista vazia para não herdar
       // as da Faturação, que se tratam no ecrã ao lado.

@@ -29,6 +29,7 @@ import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { DriversPage } from '@/features/admin/pages/DriversPage';
 import { DriverDetailPage } from '@/features/admin/pages/DriverDetailPage'; // ← novo
 import { SettlementsPage } from '@/features/admin/pages/SettlementsPage';
+import { PedidosDeExtratoPage } from '@/features/admin/pages/PedidosDeExtratoPage';
 import { FinancialPage } from '@/features/admin/pages/FinancialPage';
 import { ScheduledPaymentsPage } from '@/features/admin/pages/ScheduledPaymentsPage';
 import { GreenReceiptsPage } from '@/features/admin/pages/GreenReceiptsPage';
@@ -172,6 +173,11 @@ export const router = createBrowserRouter([
           { path: 'ranks',          element: <RequireArea area="RANKS" funcionalidade="RANKS"><RanksPage /></RequireArea> },
 
           { path: 'settlements',    element: <RequireArea area="SETTLEMENTS" funcionalidade="SETTLEMENTS"><SettlementsPage /></RequireArea> },
+          // Os pedidos de esclarecimento sobre uma linha do fecho. Na mesma
+          // área da Faturação: é sobre um fecho que se pergunta. Quem só tem
+          // VIEW chega aqui de propósito — o suporte precisa de SABER que a
+          // pergunta existe; responder é que exige MANAGE, e isso é no servidor.
+          { path: 'pedidos-extrato', element: <RequireArea area="SETTLEMENTS" funcionalidade="SETTLEMENTS"><PedidosDeExtratoPage /></RequireArea> },
           // Cria fechos, por isso vive na mesma área da faturação.
           { path: 'importar',       element: <RequireArea area="SETTLEMENTS" funcionalidade="IMPORTAR"><ExpenseImportPage /></RequireArea> },
           { path: 'financial',      element: <RequireArea area="FINANCIAL" funcionalidade="FINANCIAL"><FinancialPage /></RequireArea> },

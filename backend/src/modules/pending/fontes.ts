@@ -64,6 +64,7 @@ export type ChaveDaFonte =
   // Faturação
   | 'earningsPending'
   | 'missingSettlements'
+  | 'settlementQueries'        // um motorista pediu o extrato de uma linha do fecho
   // Documentos
   | 'documentsPending'
   | 'documentsExpiring'
@@ -114,6 +115,16 @@ export const FONTES: Record<ChaveDaFonte, DefinicaoDaFonte> = {
 
   earningsPending:         { area: 'SETTLEMENTS',    nivel: 'resolve', minimo: 'MANAGE' },
   missingSettlements:      { area: 'SETTLEMENTS',    nivel: 'open',    minimo: 'MANAGE' },
+  // ─── 'resolve' E NÃO 'open' ───────────────────────────────────────────────
+  //
+  // Porque do outro lado está uma pessoa à espera de uma resposta sobre o
+  // dinheiro dela. Não é um ecrã a abrir: é uma decisão — ir buscar o extrato
+  // e responder. E esvazia-se: respondido, sai da lista.
+  //
+  // 'VIEW' e não 'MANAGE': responder exige MANAGE (ver `podeResponder`), mas o
+  // SUPPORT precisa de SABER que a pergunta existe — é a ele que ela chega
+  // primeiro, e esconder-lha punha-o a reencaminhar no escuro.
+  settlementQueries:       { area: 'SETTLEMENTS',    nivel: 'resolve', minimo: 'VIEW' },
 
   documentsPending:        { area: 'DOCUMENTS',      nivel: 'open',    minimo: 'MANAGE' },
   documentsExpiring:       { area: 'DOCUMENTS',      nivel: 'resolve', minimo: 'VIEW' },

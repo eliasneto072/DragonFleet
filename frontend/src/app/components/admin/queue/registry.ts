@@ -19,7 +19,7 @@
 // Acrescentar uma fonte nova é uma entrada em `COMO_MOSTRAR` e mais nada.
 
 import {
-  AlertTriangle, CalendarClock, Car, Clock, Coins, FileText, HandCoins,
+  AlertTriangle, CalendarClock, Car, Clock, Coins, FileSearch, FileText, HandCoins,
   Landmark, MessageCircle, Package, ReceiptText, TrendingDown, UserPlus,
   UserX, Wrench,
 } from 'lucide-react';
@@ -56,6 +56,29 @@ function primeirosNomes(lista: { name: string }[] | undefined, total: number): s
   const resto = total - primeiros.length;
   return `${primeiros.join(', ')}${resto > 0 ? ` e mais ${resto}` : ''}`;
 }
+
+/**
+ * As linhas do fecho em português, para o painel escrever "Via Verde" e não
+ * "VIA_VERDE".
+ *
+ * Repetidas aqui e não lidas do servidor de propósito: `/pending` manda só
+ * contagens e chaves — ir buscar a etiqueta obrigava a um segundo pedido só
+ * para escrever duas palavras numa linha do painel. Uma linha nova no servidor
+ * que falte aqui cai no `?? null` do detalhe, e o painel mostra a idade em vez
+ * de um código — degradar, e não rebentar.
+ */
+const ETIQUETAS_DAS_LINHAS: Record<string, string> = {
+  VIA_VERDE: 'Via Verde',
+  COMBUSTIVEL: 'Combustível',
+  CARREGAMENTO: 'Carregamento elétrico',
+  VIATURA: 'Viatura',
+  OUTRAS_DEDUCOES: 'Outras deduções',
+  IMPOSTO: 'Imposto',
+  COMISSAO: 'Comissão',
+  UBER: 'Uber',
+  BOLT: 'Bolt',
+  OUTRA: 'Outra dúvida',
+};
 
 interface ComoMostrar {
   icon: LucideIcon;
@@ -222,6 +245,25 @@ const COMO_MOSTRAR: Partial<Record<PendingKey, ComoMostrar>> = {
     navState: (f) => (f.extra?.weekStart
       ? { weekStart: f.extra.weekStart, weekEnd: f.extra.weekEnd }
       : undefined),
+  },
+
+  // ── Pedidos de esclarecimento sobre uma linha do fecho ────────────────────
+  //
+  // O título diz a LINHA e não só "um pedido": quem lê o painel reconhece o
+  // assunto sem ter de abrir o ecrã para saber qual é. A linha é a de quem
+  // espera há mais tempo, que é a que vai ser tratada primeiro.
+  settlementQueries: {
+    icon: FileSearch,
+    to: '/app/admin/pedidos-extrato',
+    titulo: (f) => (f.count === 1
+      ? '1 motorista pediu o extrato de uma linha do fecho'
+      : `${f.count} motoristas pediram o extrato de linhas do fecho`),
+    detalhe: (f, d) => {
+      const idade = espera(d);
+      const linha = f.extra?.line ? ETIQUETAS_DAS_LINHAS[f.extra.line] : null;
+      if (linha && idade) return `${linha} · ${idade.toLowerCase()}`;
+      return linha ?? idade;
+    },
   },
 
   // ── Documentos ───────────────────────────────────────────────────────────

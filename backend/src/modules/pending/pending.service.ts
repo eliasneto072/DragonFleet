@@ -102,6 +102,7 @@ export const pendingService = {
       // ── Faturação ──
       ganhosCount, ganhosVelho,
       motoristasAtivos, jaFechados,
+      pedidosCount, pedidosVelho,
       // ── Documentos ──
       docsCount, docsVelho,
       docsAExpirar,
@@ -231,6 +232,18 @@ export const pendingService = {
         distinct: ['userId'],
       }),
 
+      // ── Os pedidos de esclarecimento sobre uma linha do fecho ───────────
+      //
+      // Só os ABERTOS. Um respondido já não é trabalho, e contá-lo deixava o
+      // número do menu aceso para sempre — ver a nota do nível 'inform' em
+      // `fontes.ts`.
+      prisma.settlementQuery.count({ where: { status: 'ABERTO' } }),
+      prisma.settlementQuery.findFirst({
+        where: { status: 'ABERTO' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, line: true },
+      }),
+
       prisma.document.count({ where: { status: 'PENDING' } }),
       prisma.document.findFirst({
         where: { status: 'PENDING' },
@@ -336,6 +349,13 @@ export const pendingService = {
           weekStart: semana.start.toISOString().slice(0, 10),
           weekEnd: semana.end.toISOString().slice(0, 10),
         },
+      }),
+
+      f('settlementQueries', pedidosCount, iso(pedidosVelho?.createdAt), {
+        // A linha de quem espera há mais tempo. Chega para a frase do painel
+        // dizer "Via Verde" em vez de "um pedido", que é o que faz a diferença
+        // entre reconhecer o assunto e ter de abrir o ecrã para saber qual é.
+        extra: { line: pedidosVelho?.line ?? undefined },
       }),
 
       f('documentsPending', docsCount, iso(docsVelho?.createdAt)),

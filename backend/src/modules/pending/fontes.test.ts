@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   diasDesde, estaAtrasado, fontesVisiveis, resumoPorArea, ordenar, totalPorFazer,
-  DIAS_PARA_ATRASO, type Fonte,
+  DIAS_PARA_ATRASO, FONTES, type Fonte,
 } from './fontes';
 
 const AGORA = new Date('2026-10-09T12:00:00.000Z').getTime();
@@ -162,5 +162,29 @@ describe('totalPorFazer', () => {
 
   it('nada por fazer é zero', () => {
     expect(totalPorFazer([])).toBe(0);
+  });
+});
+
+describe('os pedidos de esclarecimento na fila', () => {
+  it('são da Faturação, pedem decisão, e bastam VIEW para os ver', () => {
+    // VIEW e não MANAGE: responder exige MANAGE, mas o SUPPORT precisa de
+    // SABER que a pergunta existe — é a ele que ela chega primeiro.
+    expect(FONTES.settlementQueries).toEqual({
+      area: 'SETTLEMENTS', nivel: 'resolve', minimo: 'VIEW',
+    });
+  });
+
+  it('contam para o número do menu — não são informativos', () => {
+    // Um informativo não acenderia o menu, e uma pessoa ficava à espera de
+    // uma resposta sobre o dinheiro dela sem ninguém saber.
+    expect(totalPorFazer([
+      fonte({ key: 'settlementQueries', area: 'SETTLEMENTS', nivel: 'resolve', count: 2 }),
+    ])).toBe(2);
+  });
+
+  it('o suporte vê-os; quem não tem a área não', () => {
+    const f = [fonte({ key: 'settlementQueries', area: 'SETTLEMENTS', nivel: 'resolve' })];
+    expect(fontesVisiveis(f, { SETTLEMENTS: 'VIEW' })).toHaveLength(1);
+    expect(fontesVisiveis(f, { FLEET: 'MANAGE' })).toHaveLength(0);
   });
 });

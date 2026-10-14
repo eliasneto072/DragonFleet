@@ -30,6 +30,7 @@ export type PendingKey =
   | 'negativeDrivers'
   | 'earningsPending'
   | 'missingSettlements'
+  | 'settlementQueries'
   | 'documentsPending'
   | 'documentsExpiring'
   | 'supportOpen'
@@ -62,6 +63,8 @@ export interface PendingSource {
     weekEnd?: string;
     /** A próxima ida à oficina já confirmada. */
     nextAt?: string;
+    /** A linha do fecho do pedido de esclarecimento que espera há mais tempo. */
+    line?: string;
   };
 }
 

@@ -296,6 +296,8 @@ model User {
   credits            Credit[]
   companyExpenses    CompanyExpense[]  @relation("companyExpensesCreated")
   cashMarks          CompanyCashMark[] @relation("cashMarksCreated")
+  settlementQueries  SettlementQuery[] @relation("queriesAsked")
+  queriesAnswered    SettlementQuery[] @relation("queriesAnswered")
 
   @@index([fleetId])
 
@@ -1027,6 +1029,7 @@ model WeeklySettlement {
   createdBy User     @relation("settlementsCreated", fields: [createdById], references: [id])
   vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   revisions SettlementRevision[]
+  queries   SettlementQuery[]
 
   // Guarda estrutural contra creditar a mesma semana duas vezes. E a protecao
   // que nao depende de ninguem se lembrar de conferir.
@@ -2805,4 +2808,95 @@ model CompanyCashMark {
   @@unique([fleetId, observedOn])
   @@index([fleetId, observedOn])
   @@map("company_cash_marks")
+}
+
+/// Qual linha do fecho é que o motorista está a pôr em causa.
+///
+/// Um enum e não texto livre: é por este campo que se agrupa («a Via Verde é
+/// metade dos pedidos») e que se impede o mesmo pedido duas vezes. Texto livre
+/// dava «via verde», «Via-Verde» e «viaverde» como três coisas diferentes.
+enum SettlementLine {
+  VIA_VERDE
+  COMBUSTIVEL
+  CARREGAMENTO
+  VIATURA
+  OUTRAS_DEDUCOES
+  IMPOSTO
+  COMISSAO
+  UBER
+  BOLT
+  OUTRA
+}
+
+enum SettlementQueryStatus {
+  ABERTO
+  RESPONDIDO
+}
+
+/// Um pedido de esclarecimento sobre uma linha do fecho semanal.
+///
+/// ─── O PROBLEMA QUE ISTO RESOLVE ────────────────────────────────────────────
+///
+/// Um motorista olha para o fecho, vê «Via Verde − 14,45 €» e acha estranho.
+/// Hoje a conversa acontece no WhatsApp: ele pergunta, alguém vai buscar o
+/// extrato, manda uma fotografia, e passadas duas semanas ninguém se lembra do
+/// que foi dito nem onde ficou o ficheiro. Da próxima vez, repete-se tudo.
+///
+/// Com isto o pedido fica registado, a resposta fica agarrada àquela semana, e
+/// quem perguntar outra vez encontra lá o extrato.
+///
+/// ─── PORQUE É QUE SERVE QUALQUER LINHA ──────────────────────────────────────
+///
+/// Porque o combustível levanta exactamente a mesma dúvida, e o aluguer e o
+/// imposto também. O dia em que alguém duvidar de outra coisa não precisa de
+/// uma migração nova.
+model SettlementQuery {
+  id String @id @default(cuid())
+
+  /// A frota a que isto pertence. Ver `escopo.ts`: nenhuma consulta sai
+  /// daqui sem esta coluna preenchida.
+  fleetId      String @default("") @map("fleet_id")
+  settlementId String @map("settlement_id")
+
+  /// Quem perguntou. O fecho já diz de quem é, mas guarda-se na mesma: é por
+  /// esta coluna que o motorista encontra os pedidos DELE sem ter de passar
+  /// pelos fechos todos.
+  userId String @map("user_id")
+
+  line SettlementLine
+
+  /// O que ele escreveu, se escreveu. Opcional de propósito: obrigar a
+  /// justificar uma dúvida é a melhor maneira de ninguém a levantar.
+  reason String?
+
+  status SettlementQueryStatus @default(ABERTO)
+
+  /// A resposta e o extrato anexado. O ficheiro é opcional: há dúvidas que se
+  /// esclarecem com uma frase, e exigir um anexo só obrigava a inventar um.
+  answer     String?
+  fileUrl    String? @map("file_url")
+  fileKey    String? @map("file_key")
+  answeredAt DateTime? @map("answered_at")
+
+  /// Quem respondeu. Opcional porque a conta pode sair da empresa e a resposta
+  /// tem de ficar — fica sem autor, que é muito melhor do que desaparecer.
+  answeredById String? @map("answered_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  settlement WeeklySettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  user       User             @relation("queriesAsked", fields: [userId], references: [id], onDelete: Cascade)
+  answeredBy User?            @relation("queriesAnswered", fields: [answeredById], references: [id], onDelete: SetNull)
+
+  /// ATENÇÃO: há um índice único PARCIAL na base que o Prisma não sabe
+  /// escrever — `settlement_queries_abertos_key` em (settlement_id, line)
+  /// WHERE status = 'ABERTO'. É ele que impede dois pedidos abertos sobre a
+  /// mesma linha e deixa na mesma voltar a perguntar depois de respondido.
+  /// Não o troques por um `@@unique([settlementId, line])`: esse fechava a
+  /// segunda porta para sempre. Ver a migração `20261014200000`.
+  @@index([fleetId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("settlement_queries")
 }

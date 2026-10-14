@@ -44,6 +44,7 @@ import { queryKeys } from '@/shared/lib/query-keys';
 import { formatCurrency, formatCurrencyCompact } from '@/shared/lib/format';
 import { PLATFORM_OPTIONS, platformLabel } from '@/shared/lib/platform-labels';
 import { WalletIllustration } from '@/app/components/ui/wallet-illustration';
+import { PedidosDeExtrato } from '@/app/components/driver/pedidos-de-extrato';
 import type { ApiEarning, EarningPlatform, EarningStatus } from '@/shared/types/api';
 import type { LedgerEntry, LedgerReconciliation } from '@/features/admin/services/balance.service';
 import {
@@ -384,6 +385,11 @@ function WeekDetail({ s, entry, reconciliation }: {
           <p className="mt-1 whitespace-pre-line text-sm">{s.notes}</p>
         </div>
       )}
+
+      {/* ─── PEDIR O EXTRATO DETALHADO DE UMA LINHA ──────────────────────────
+          Depois das contas e não antes: a dúvida nasce de olhar para os
+          números, por isso o botão fica onde o olho acaba de os ler. */}
+      <PedidosDeExtrato settlementId={s.id} />
     </div>
   );
 }
