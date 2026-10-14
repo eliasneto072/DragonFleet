@@ -54,6 +54,8 @@
 // precisa de estar sempre certa, precisa de nunca estar errada em silêncio.
 
 import { inflateSync, inflateRawSync } from 'node:zlib';
+import { lerSeguranca, desencriptar } from './desencriptar';
+import { objetosDentroDeStreams } from './objstm';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Objetos e streams
@@ -68,27 +70,131 @@ import { inflateSync, inflateRawSync } from 'node:zlib';
  */
 function objetos(bruto: string): Map<number, string> {
   const mapa = new Map<number, string>();
+  for (const { num, corpo } of varrerObjetos(bruto)) mapa.set(num, corpo);
+  return mapa;
+}
+
+/** O mesmo varrimento, mas com a geração — que a desencriptação precisa. */
+function varrerObjetos(bruto: string): { num: number; gen: number; corpo: string }[] {
+  const out: { num: number; gen: number; corpo: string }[] = [];
   const re = /(?<![0-9])(\d+)\s+(\d+)\s+obj\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(bruto)) !== null) {
     const fim = bruto.indexOf('endobj', m.index);
-    mapa.set(Number(m[1]), bruto.slice(m.index + m[0].length, fim < 0 ? bruto.length : fim));
+    out.push({
+      num: Number(m[1]),
+      gen: Number(m[2]),
+      corpo: bruto.slice(m.index + m[0].length, fim < 0 ? bruto.length : fim),
+    });
   }
-  return mapa;
+  return out;
 }
 
-/** O conteúdo de um stream, já descomprimido, ou null se não der. */
-function streamDe(corpo: string): string | null {
+/**
+ * Onde começam e acabam os bytes do stream dentro do corpo de um objeto.
+ *
+ * ─── PORQUE É QUE O `/Length` MANDA, QUANDO EXISTE ────────────────────────
+ *
+ * Contar até ao `endstream` apanha também o fim de linha que o separa dos
+ * dados — um ou dois bytes a mais. Para o zlib isso é indiferente: ele lê o
+ * que precisa e ignora o resto.
+ *
+ * Para o AES não é. O AES trabalha em blocos de 16 bytes exactos, e dois
+ * bytes a mais fazem a desencriptação atirar. Era isto que deixava o extrato
+ * do Millennium sem uma única linha: 57 dos 65 streams rebentavam, e o
+ * extrator — que não atira nunca — devolvia vazio.
+ *
+ * O `/Length` dá o número exacto. Quando vem por referência a outro objeto
+ * (`/Length 42 0 R`, que é legal), volta-se a contar até ao `endstream` e
+ * tira-se o fim de linha à mão.
+ */
+function limitesDoStream(corpo: string): { inicio: number; fim: number } | null {
   const m = /stream\r?\n/.exec(corpo);
   if (!m) return null;
   const inicio = m.index + m[0].length;
-  const fim = corpo.lastIndexOf('endstream');
-  if (fim < inicio) return null;
-  const dados = Buffer.from(corpo.slice(inicio, fim), 'latin1');
-  if (!corpo.slice(0, m.index).includes('/FlateDecode')) return dados.toString('latin1');
+
+  const fimDoMarcador = corpo.lastIndexOf('endstream');
+  if (fimDoMarcador < inicio) return null;
+
+  const declarado = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(corpo.slice(0, m.index));
+  if (declarado) {
+    const fim = inicio + Number(declarado[1]);
+    // Só se confia no `/Length` se ele couber: um valor errado não deve pôr o
+    // fim do stream depois do `endstream`.
+    if (fim <= fimDoMarcador) return { inicio, fim };
+  }
+
+  // Sem `/Length` utilizável: tira-se o fim de linha que antecede o marcador.
+  let fim = fimDoMarcador;
+  if (corpo[fim - 1] === '\n') fim--;
+  if (corpo[fim - 1] === '\r') fim--;
+  return { inicio, fim: Math.max(inicio, fim) };
+}
+
+/**
+ * ASCII85, o alfabeto de 85 letras.
+ *
+ * ─── PORQUE É QUE ISTO APARECEU ───────────────────────────────────────────
+ *
+ * O extrato pessoal do Abanca comprime as páginas DUAS vezes:
+ *
+ *   /Filter[/ASCII85Decode/FlateDecode]
+ *
+ * primeiro zlib, depois um reescrever dos bytes em texto imprimível. O zlib
+ * sozinho não abre aquilo: o que lá está não são bytes comprimidos, é a
+ * TRANSCRIÇÃO deles em letras. Sem desfazer a transcrição primeiro, o stream
+ * não abre e a página fica vazia.
+ *
+ * Cinco letras dão quatro bytes. O `z` é um atalho para quatro zeros, e o
+ * último grupo pode estar incompleto — e aí completa-se com `u` e cortam-se
+ * os bytes que não foram escritos.
+ */
+function ascii85(dados: Buffer): Buffer | null {
+  const texto = dados.toString('latin1');
+  const fim = texto.indexOf('~>');
+  const corpo = (fim >= 0 ? texto.slice(0, fim) : texto).replace(/^<~/, '');
+
+  const out: number[] = [];
+  let grupo: number[] = [];
+
+  for (const c of corpo) {
+    if (/\s/.test(c)) continue;
+    if (c === 'z' && grupo.length === 0) { out.push(0, 0, 0, 0); continue; }
+    const v = c.charCodeAt(0) - 33;
+    if (v < 0 || v > 84) return null;
+    grupo.push(v);
+    if (grupo.length === 5) {
+      let n = 0;
+      for (const g of grupo) n = n * 85 + g;
+      out.push((n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff);
+      grupo = [];
+    }
+  }
+
+  if (grupo.length === 1) return null; // um resto de uma letra é impossível
+  if (grupo.length > 1) {
+    const faltam = 5 - grupo.length;
+    for (let i = 0; i < faltam; i++) grupo.push(84);
+    let n = 0;
+    for (const g of grupo) n = n * 85 + g;
+    const quatro = [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+    out.push(...quatro.slice(0, 4 - faltam));
+  }
+
+  return Buffer.from(out);
+}
+
+function asciiHex(dados: Buffer): Buffer {
+  const texto = dados.toString('latin1');
+  const fim = texto.indexOf('>');
+  const hex = (fim >= 0 ? texto.slice(0, fim) : texto).replace(/[^0-9A-Fa-f]/g, '');
+  return Buffer.from(hex.length % 2 === 0 ? hex : `${hex}0`, 'hex');
+}
+
+function inflar(dados: Buffer): Buffer | null {
   for (const descomprimir of [inflateSync, inflateRawSync]) {
     try {
-      return descomprimir(dados).toString('latin1');
+      return descomprimir(dados);
     } catch {
       // Tenta a seguinte. Um stream que não abre é um stream que se ignora:
       // as fontes embutidas também são streams e não interessam a ninguém.
@@ -97,10 +203,75 @@ function streamDe(corpo: string): string | null {
   return null;
 }
 
-/** O número do objeto em `/Chave 12 0 R`. */
+/**
+ * O conteúdo de um stream, já descomprimido, ou null se não der.
+ *
+ * Os filtros aplicam-se PELA ORDEM EM QUE ESTÃO ESCRITOS, que é a ordem em que
+ * desfazem o que foi feito. Trocá-la dá lixo — e dá lixo em silêncio, porque o
+ * zlib aceita quase qualquer coisa como entrada e só falha no fim.
+ */
+function streamDe(corpo: string): string | null {
+  const limites = limitesDoStream(corpo);
+  if (!limites) return null;
+
+  const cabecalho = corpo.slice(0, limites.inicio);
+  let dados = Buffer.from(corpo.slice(limites.inicio, limites.fim), 'latin1');
+
+  const filtros = /\/Filter\s*\[([^\]]*)\]/.exec(cabecalho)?.[1]
+    ?? /\/Filter\s*(\/[A-Za-z0-9]+)/.exec(cabecalho)?.[1]
+    ?? '';
+
+  for (const filtro of filtros.match(/\/[A-Za-z0-9]+/g) ?? []) {
+    if (filtro === '/FlateDecode' || filtro === '/Fl') {
+      const aberto = inflar(dados);
+      if (!aberto) return null;
+      dados = aberto;
+    } else if (filtro === '/ASCII85Decode' || filtro === '/A85') {
+      const aberto = ascii85(dados);
+      if (!aberto) return null;
+      dados = aberto;
+    } else if (filtro === '/ASCIIHexDecode' || filtro === '/AHx') {
+      dados = asciiHex(dados);
+    } else {
+      // Um filtro que não conheço (uma imagem em JPEG, por exemplo). Devolver
+      // os bytes como se estivessem abertos daria lixo a parecer texto.
+      return null;
+    }
+  }
+
+  return dados.toString('latin1');
+}
+
+/** O número do objeto em `/Chave 12 0 R` — ou em `/Chave [12 0 R]`. */
 function referencia(corpo: string, chave: string): number | null {
-  const m = new RegExp(`/${chave}\\s+(\\d+)\\s+\\d+\\s+R`).exec(corpo);
-  return m ? Number(m[1]) : null;
+  return referencias(corpo, chave)[0] ?? null;
+}
+
+/**
+ * Todos os objetos apontados por uma chave.
+ *
+ * ─── PORQUE É QUE ISTO NÃO É UMA REFERÊNCIA SÓ ────────────────────────────
+ *
+ * Porque o `/Contents` de uma página pode vir de três formas:
+ *
+ *   /Contents 8 0 R            uma referência
+ *   /Contents[8 0 R]           um array de uma
+ *   /Contents[8 0 R 9 0 R]     um array de várias, a concatenar
+ *
+ * Os extratos do Novo Banco e do Abanca usam a SEGUNDA. A expressão que só
+ * reconhecia a primeira devolvia nulo, a página ficava sem conteúdo, e o
+ * extrato inteiro saía vazio — com cinco páginas encontradas e zero lidas.
+ *
+ * A terceira forma existe porque um gerador de PDF pode partir o desenho de
+ * uma página em vários streams. Juntos são a página; um só é um pedaço.
+ */
+function referencias(corpo: string, chave: string): number[] {
+  const arranjo = new RegExp(`/${chave}\\s*\\[([^\\]]*)\\]`).exec(corpo);
+  if (arranjo) {
+    return [...arranjo[1].matchAll(/(\d+)\s+\d+\s+R/g)].map((m) => Number(m[1]));
+  }
+  const unica = new RegExp(`/${chave}\\s+(\\d+)\\s+\\d+\\s+R`).exec(corpo);
+  return unica ? [Number(unica[1])] : [];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -271,16 +442,38 @@ function paginas(objs: Map<number, string>): Pagina[] {
     const cabecalho = inicioStream >= 0 ? corpo.slice(0, inicioStream) : corpo;
     if (!/\/Type\s*\/Page(?![s])/.test(cabecalho)) continue;
 
-    const refConteudo = referencia(cabecalho, 'Contents');
-    const bruto = refConteudo !== null ? objs.get(refConteudo) : undefined;
-    const conteudo = bruto ? streamDe(bruto) : null;
+    // Vários streams juntam-se com um fim de linha entre eles: encostados, a
+    // última instrução de um colava-se à primeira do seguinte.
+    const pedacos: string[] = [];
+    for (const ref of referencias(cabecalho, 'Contents')) {
+      const bruto = objs.get(ref);
+      const pedaco = bruto ? streamDe(bruto) : null;
+      if (pedaco) pedacos.push(pedaco);
+    }
+    const conteudo = pedacos.length > 0 ? pedacos.join('\n') : null;
     if (!conteudo) continue;
 
     const refRecursos = referencia(cabecalho, 'Resources');
     const recursos = (refRecursos !== null ? objs.get(refRecursos) : undefined) ?? cabecalho;
 
+    // ─── O /Font PODE SER UMA REFERÊNCIA, E NÃO UM DICIONÁRIO ─────────────
+    //
+    // Inline:      /Font<</F1 9 0 R/F2 10 0 R>>
+    // Por referência: /Font 18 0 R
+    //
+    // Os dois extratos da Revolut usam a SEGUNDA. Sem a resolver, a página
+    // ficava sem fontes nenhumas — e sem fontes o extrator não sabe que os
+    // códigos são de dois bytes (`/Identity-H`) nem tem a tabela que os
+    // traduz, por isso escrevia os códigos como se fossem letras. Dava texto
+    // com a forma certa e as letras todas trocadas: «) \ X V E X S» onde
+    // estava escrito «Extrato». Pior do que vazio, porque parece ter corrido
+    // bem.
+    const refFont = referencias(recursos, 'Font')[0];
+    const bloco = refFont !== undefined
+      ? /<<([\s\S]*)>>/.exec(objs.get(refFont) ?? '')
+      : /\/Font\s*<<([\s\S]*?)>>/.exec(recursos);
+
     const fontes = new Map<string, Fonte>();
-    const bloco = /\/Font\s*<<([\s\S]*?)>>/.exec(recursos);
     if (bloco) {
       const re = /\/([^\s/]+)\s+(\d+)\s+\d+\s+R/g;
       let m: RegExpExecArray | null;
@@ -599,6 +792,66 @@ function juntarEmLinhas(pecas: Peca[]): string[] {
  * é um leitor que confere a soma contra o total do fornecedor, e é essa
  * conferência que decide se a importação avança — não esta função.
  */
+/**
+ * O mapa de objetos, já aberto: desencriptado quando é preciso, e com os
+ * objetos que vivem dentro dos ObjStm trazidos para fora.
+ *
+ * ─── A ORDEM DESTES TRÊS PASSOS NÃO É ARBITRÁRIA ──────────────────────────
+ *
+ * 1. varrer     — os objetos que estão à vista no ficheiro
+ * 2. desencriptar — os streams desses objetos, cada um com a sua chave
+ * 3. abrir ObjStm — os objetos escondidos lá dentro
+ *
+ * O 3 depois do 2 porque um ObjStm encriptado não descomprime. E os objetos
+ * que saem de um ObjStm NÃO se desencriptam outra vez: já vieram de dentro de
+ * um stream que foi aberto, e passá-los pela cifra outra vez dava lixo.
+ */
+function abrir(bruto: string): { objs: Map<number, string>; recusa: string | null } {
+  const crus = varrerObjetos(bruto);
+  const porNumero = new Map<number, string>();
+  for (const o of crus) porNumero.set(o.num, o.corpo);
+
+  const seguranca = lerSeguranca(bruto, porNumero);
+  if (seguranca && !seguranca.ok) {
+    return { objs: new Map(), recusa: seguranca.motivo };
+  }
+
+  // A chave fora do ciclo: assim o compilador sabe que ela não é nula lá
+  // dentro, e não é preciso afirmá-lo com um `!`.
+  const chave = seguranca?.ok ? seguranca.seg : null;
+
+  const objs = new Map<number, string>();
+  for (const o of crus) {
+    const limites = chave ? limitesDoStream(o.corpo) : null;
+    if (!chave || !limites) { objs.set(o.num, o.corpo); continue; }
+
+    const aberto = desencriptar(
+      Buffer.from(o.corpo.slice(limites.inicio, limites.fim), 'latin1'),
+      o.num, o.gen, chave,
+    );
+
+    // ─── O /Length TEM DE ACOMPANHAR ──────────────────────────────────────
+    //
+    // O AES devolve menos bytes do que recebeu: leva 16 do vector de
+    // inicialização e os do enchimento. Deixar no dicionário o `/Length` do
+    // texto cifrado punha a leitura seguinte a contar bytes que já não
+    // existem — e a descompressão falhava num stream que estava correcto.
+    const cabecalho = o.corpo.slice(0, limites.inicio)
+      .replace(/\/Length\s+\d+(?!\s+\d+\s+R)/, `/Length ${aberto.length}`);
+
+    objs.set(o.num, cabecalho + aberto.toString('latin1') + o.corpo.slice(limites.fim));
+  }
+
+  for (const [num, corpo] of objetosDentroDeStreams(objs, (n) => {
+    const c = objs.get(n);
+    return c ? streamDe(c) : null;
+  })) {
+    objs.set(num, corpo);
+  }
+
+  return { objs, recusa: null };
+}
+
 export function extrairTextoPdf(ficheiro: Buffer): string {
   let bruto: string;
   try {
@@ -608,7 +861,7 @@ export function extrairTextoPdf(ficheiro: Buffer): string {
   }
   if (!bruto.startsWith('%PDF')) return '';
 
-  const objs = objetos(bruto);
+  const { objs } = abrir(bruto);
   const linhas: string[] = [];
   for (const pagina of paginas(objs)) {
     try {
