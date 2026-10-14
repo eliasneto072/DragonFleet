@@ -31,10 +31,19 @@
 
 import 'dotenv/config';
 import { comFrota, comoSistema } from '../config/escopo';
-import { PrismaClient } from '@prisma/client';
+// O cliente ESTENDIDO, e não um `new PrismaClient()`.
+//
+// Estava aqui um cliente cru, e com ele este seed nunca teria funcionado: o
+// `comFrota()` lá em baixo não lhe diz nada, o `user.create` nascia com a
+// frota vazia e a chave estrangeira recusava-o com
+// `users_fleet_id_fkey`. Descoberto ao escrever o `seed-frota-exemplo`, que
+// tinha o mesmo erro e rebentou à primeira linha que escreveu.
+//
+// Ver o cabeçalho de `config/prisma.ts`: o cliente cru fica fechado lá
+// dentro de propósito, e há uma guarda em `scripts/verificar-cliente.mjs`
+// para isto não voltar a acontecer.
+import { prisma } from '../config/prisma';
 import bcrypt from 'bcrypt';
-
-const prisma = new PrismaClient();
 
 function requireEnv(name: string): string {
   const value = process.env[name];

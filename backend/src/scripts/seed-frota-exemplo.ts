@@ -54,12 +54,28 @@
 // fotografar.
 
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  TEM DE SER ESTE `prisma`, E NÃO UM `new PrismaClient()`                 ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+//
+// A primeira versão deste script criava o seu próprio cliente. A frota nascia
+// bem — essa parte é feita pelo `systemService`, que usa o cliente certo — e a
+// primeira escrita minha a seguir rebentava com:
+//
+//   Foreign key constraint violated: `companies_fleet_id_fkey`
+//
+// Porque o cliente cru não leva a camada do âmbito: o `comFrota()` à volta
+// não lhe serve de nada, a linha nascia com a frota vazia, e a chave
+// estrangeira recusou-a. O `config/prisma.ts` avisa isto no cabeçalho, com
+// estas palavras: «o cliente cru fica fechado aqui dentro; o que sai é só o
+// estendido».
+//
+// Vale a pena reparar no que aconteceu: a protecção funcionou. Em vez de
+// escrever os dados de exemplo numa frota à toa, parou tudo à primeira linha.
+import { prisma } from '../config/prisma';
 import { comFrota, comoDono } from '../config/escopo';
 import { systemService } from '../modules/system/system.service';
 import { computeTotals } from '../modules/settlements/settlements.types';
-
-const prisma = new PrismaClient();
 
 // ─── AS PESSOAS E AS COISAS INVENTADAS ──────────────────────────────────────
 //
@@ -166,36 +182,47 @@ async function main() {
   const nomeDaFrota = process.env.DEMO_NOME?.trim() || 'Frota Exemplo';
   const emailGestor = (process.env.DEMO_EMAIL?.trim() || `gestor@${DOMINIO}`).toLowerCase();
 
-  // ─── Já existe? Então não se escreve nada ────────────────────────────────
+  // ─── A frota: cria, ou retoma a que ficou a meio ─────────────────────────
   //
-  // Correr duas vezes por engano é fácil (uma ligação que cai a meio, um
-  // comando repetido na consola do Render). Em vez de criar uma segunda frota
-  // de exemplo com o mesmo nome e um slug diferente, pára aqui.
+  // ╔════════════════════════════════════════════════════════════════════════╗
+  // ║  PORQUE É QUE ISTO RETOMA EM VEZ DE PARAR                              ║
+  // ╚════════════════════════════════════════════════════════════════════════╝
+  //
+  // A primeira versão parava se a frota já existisse. Parecia prudente, e era
+  // o contrário: o script rebentou a meio na primeira vez que correu — a
+  // frota ficou criada e vazia — e a partir daí a única saída era inventar um
+  // nome novo e deixar uma frota morta para trás para sempre, porque o painel
+  // de dono desliga frotas mas não as apaga.
+  //
+  // Um script que escreve em vinte tabelas vai falhar a meio mais vezes: uma
+  // ligação que cai, a consola do Render que fecha. Ou ele sabe continuar de
+  // onde ficou, ou cada falha deixa lixo permanente na base de dados.
+  //
+  // Daí cada secção abaixo perguntar primeiro se já tem alguma coisa lá
+  // dentro. Correr isto duas, três ou dez vezes dá sempre o mesmo resultado.
   const existente = await comoDono(async () => prisma.fleet.findFirst({
     where: { name: nomeDaFrota },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, name: true },
   }));
+
+  let frotaId: string;
   if (existente) {
-    console.log(
-      `[frota-exemplo] Já existe uma frota chamada "${nomeDaFrota}" (${existente.slug}).`
-      + `\n  Não foi escrito nada. Para criar outra, corre com DEMO_NOME='Outro nome'.`,
-    );
-    return;
+    frotaId = existente.id;
+    console.log(`[frota-exemplo] A retomar a frota "${existente.name}" (${existente.slug}).`);
+  } else {
+    // Sem plano, de propósito: sem plano o sistema abre tudo (ver
+    // `capacidade.ts`), e as capturas têm de poder mostrar qualquer menu. Um
+    // ano de assinatura para não aparecer o aviso de expirada por cima das
+    // imagens.
+    const { frota } = await comoDono(async () => systemService.criarFrota({
+      nome: nomeDaFrota,
+      notas: 'Frota de demonstração. Todos os dados são inventados.',
+      dias: 365,
+      gestor: { nome: 'Rui Marques', email: emailGestor, password },
+    }));
+    frotaId = frota.id;
+    console.log(`[frota-exemplo] Frota criada: ${frota.name} (${frota.slug})`);
   }
-
-  // ─── A frota ─────────────────────────────────────────────────────────────
-  //
-  // Sem plano, de propósito: sem plano o sistema abre tudo (ver
-  // `capacidade.ts`), e as capturas têm de poder mostrar qualquer menu. Um ano
-  // de assinatura para não aparecer o aviso de expirada por cima das imagens.
-  const { frota } = await comoDono(async () => systemService.criarFrota({
-    nome: nomeDaFrota,
-    notas: 'Frota de demonstração. Todos os dados são inventados.',
-    dias: 365,
-    gestor: { nome: 'Rui Marques', email: emailGestor, password },
-  }));
-
-  console.log(`[frota-exemplo] Frota criada: ${frota.name} (${frota.slug})`);
 
   // ─── DAQUI PARA BAIXO, TUDO DENTRO DA FROTA NOVA ─────────────────────────
   //
@@ -203,31 +230,41 @@ async function main() {
   // linhas nasciam com a frota vazia e a chave estrangeira recusava-as — que
   // é exactamente o que se quer que aconteça, em vez de irem parar à frota
   // errada em silêncio.
-  await comFrota(frota.id, async () => {
-    // O `id` e a cifra da password do gestor. A cifra é lida uma vez e
-    // reutilizada nos motoristas: é a mesma password para todos, o que numa
-    // frota de mentira poupa seis passwords a quem tiver de entrar numa conta
-    // de motorista para fotografar o lado dele. A password em claro nunca é
-    // guardada nem impressa em lado nenhum.
+  await comFrota(frotaId, async () => {
+    // O gestor é procurado pelo PAPEL e não pelo email: a retomar uma frota
+    // criada numa corrida anterior, o `DEMO_EMAIL` desta pode nem ser o
+    // mesmo, e procurar pelo email dava um erro que não dizia nada de útil.
+    //
+    // A cifra da password é lida uma vez e reutilizada nos motoristas: é a
+    // mesma password para todos, o que numa frota de mentira poupa seis
+    // passwords a quem tiver de entrar numa conta de motorista para
+    // fotografar o lado dele. A password em claro nunca é guardada nem
+    // impressa em lado nenhum.
     const gestor = await prisma.user.findFirst({
-      where: { email: emailGestor }, select: { id: true, password: true },
+      where: { role: 'ADMIN' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, password: true, email: true },
     });
-    if (!gestor) throw new Error('[frota-exemplo] o gestor não foi encontrado na frota nova');
+    if (!gestor) throw new Error('[frota-exemplo] a frota não tem administrador');
 
     // ── Sociedades ──
-    const sociedades = [];
-    for (const [i, nome] of SOCIEDADES.entries()) {
-      sociedades.push(await prisma.company.create({
-        data: { name: nome, sortOrder: i, active: true },
-      }));
+    let sociedades = await prisma.company.findMany({ orderBy: { sortOrder: 'asc' } });
+    if (sociedades.length === 0) {
+      for (const [i, nome] of SOCIEDADES.entries()) {
+        sociedades.push(await prisma.company.create({
+          data: { name: nome, sortOrder: i, active: true },
+        }));
+      }
     }
 
     // ── Oficinas ──
-    const oficinas = [];
-    for (const o of OFICINAS) {
-      oficinas.push(await prisma.workshop.create({
-        data: { name: o.nome, kind: o.tipo, address: o.morada, phone: '210 000 000', active: true },
-      }));
+    let oficinas = await prisma.workshop.findMany({ orderBy: { name: 'asc' } });
+    if (oficinas.length === 0) {
+      for (const o of OFICINAS) {
+        oficinas.push(await prisma.workshop.create({
+          data: { name: o.nome, kind: o.tipo, address: o.morada, phone: '210 000 000', active: true },
+        }));
+      }
     }
 
     // Os tipos de serviço já foram criados pelo `criarFrota`, iguais aos de
@@ -242,7 +279,16 @@ async function main() {
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/\s+/g, '.')}@${DOMINIO}`;
 
-      const u = await prisma.user.create({
+      // Já lá está de uma corrida anterior? Reaproveita-se, com o carro que
+      // já tiver. O email é único no sistema inteiro, por isso tentar criar
+      // outra vez rebentava — e rebentava a meio, deixando a frota num
+      // estado ainda mais incompleto do que estava.
+      const existia = await prisma.user.findFirst({
+        where: { email },
+        select: { id: true, vehicles: { select: { id: true }, take: 1 } },
+      });
+
+      const u = existia ?? await prisma.user.create({
         data: {
           name: m.nome,
           email,
@@ -251,11 +297,11 @@ async function main() {
           status: 'ACTIVE',
           phone: '+351910000000',
         },
-        select: { id: true },
+        select: { id: true, vehicles: { select: { id: true }, take: 1 } },
       });
 
-      let veiculoId: string | null = null;
-      if (m.carro && m.matricula) {
+      let veiculoId: string | null = existia?.vehicles[0]?.id ?? null;
+      if (!veiculoId && m.carro && m.matricula) {
         const v = await prisma.vehicle.create({
           data: {
             brand: m.carro.marca,
@@ -285,15 +331,17 @@ async function main() {
       //
       // O IBAN é todo a zeros: não passa a validação de um banco e não é de
       // ninguém. Numa captura lê-se como exemplo.
-      await prisma.bankAccount.create({
-        data: {
-          userId: u.id,
-          label: 'Conta principal',
-          isPrimary: true,
-          iban: 'PT50000000000000000000000',
-          holderName: m.nome,
-        },
-      });
+      if (await prisma.bankAccount.count({ where: { userId: u.id } }) === 0) {
+        await prisma.bankAccount.create({
+          data: {
+            userId: u.id,
+            label: 'Conta principal',
+            isPrimary: true,
+            iban: 'PT50000000000000000000000',
+            holderName: m.nome,
+          },
+        });
+      }
 
       motoristas.push({
         id: u.id, nome: m.nome, veiculoId,
@@ -309,9 +357,12 @@ async function main() {
     // para mostrar: um já expirado, dois a expirar dentro de dias, e o resto
     // longe. Um ecrã todo verde não ilustra a funcionalidade que o vende.
     const hoje = soData(new Date());
+    // Uma tabela vazia é a definição de «esta secção ainda não correu».
+    // A lista fica vazia quando já correu, e o ciclo abaixo não faz nada.
+    const porDocumentar = await prisma.document.count() === 0 ? motoristas : [];
     const prazos = [-4, 9, 23, 120, 210, 300];
 
-    for (const [i, m] of motoristas.entries()) {
+    for (const [i, m] of porDocumentar.entries()) {
       await prisma.document.create({
         data: {
           userId: m.id, type: 'CARTA_CONDUCAO', status: 'APPROVED',
@@ -346,8 +397,9 @@ async function main() {
     // conta que o comprador vai conferir com o dedo no ecrã.
     const SEMANAS = 8;
     let fechos = 0;
+    const semanasAFechar = await prisma.weeklySettlement.count() === 0 ? SEMANAS : 0;
 
-    for (let s = SEMANAS; s >= 1; s -= 1) {
+    for (let s = semanasAFechar; s >= 1; s -= 1) {
       const inicio = segunda(s);
       const fim = maisDias(inicio, 6);
 
@@ -419,7 +471,8 @@ async function main() {
     // classificar. É isto que enche a tabela cruzada dos recibos verdes: sem
     // retiradas pagas em meses diferentes, aquela captura ficava vazia.
     let retiradas = 0;
-    for (const [i, m] of motoristas.entries()) {
+    const porRetirar = await prisma.withdrawal.count() === 0 ? motoristas : [];
+    for (const [i, m] of porRetirar.entries()) {
       for (let k = 0; k < 4; k += 1) {
         const diasAtras = 20 + k * 55 + i * 3;
         const pago = k > 0;
@@ -452,7 +505,8 @@ async function main() {
     const comCarro = motoristas.filter((m) => m.veiculoId);
     const estados = ['PENDENTE', 'CONFIRMADA', 'CONCLUIDA', 'PENDENTE'] as const;
 
-    for (const [i, m] of comCarro.slice(0, 4).entries()) {
+    const porMarcar = await prisma.booking.count() === 0 ? comCarro.slice(0, 4) : [];
+    for (const [i, m] of porMarcar.entries()) {
       const estado = estados[i];
       const concluida = estado === 'CONCLUIDA';
       await prisma.booking.create({
@@ -483,7 +537,8 @@ async function main() {
     // Dois materiais ficam abaixo do mínimo de propósito: a captura do stock
     // tem de mostrar o aviso, que é a parte que interessa a quem compra.
     let movimentos = 0;
-    for (const [i, mat] of MATERIAIS.entries()) {
+    const porCriar = await prisma.material.count() === 0 ? MATERIAIS : [];
+    for (const [i, mat] of porCriar.entries()) {
       const abaixo = i === 0 || i === 5;
       const entrada = abaixo ? mat.minimo - 1 : mat.minimo * 3;
 
