@@ -68,6 +68,7 @@ import {
   GESTORES, MENSAGEM_WHATSAPP, CONTACTO, DEMONSTRACAO,
 } from '../conteudo';
 import { leadsService } from '../services/leads.service';
+import { escadaDePlanos } from '../escada';
 
 function duracao(dias: number): string {
   if (dias === 30) return '/mês';
@@ -96,6 +97,9 @@ export function GestoresPage() {
     staleTime: 10 * 60 * 1000,
   });
   const planos = data?.planos ?? [];
+  // Cada degrau sabe o que acrescenta ao anterior — e sabe também quando NÃO
+  // pode dizer que o contém todo. Ver `escada.ts`.
+  const degraus = escadaDePlanos(planos);
 
   return (
     <div className="min-h-screen bg-[#07100d]">
@@ -389,11 +393,16 @@ export function GestoresPage() {
                 : 'mx-auto max-w-sm'
           }`}
           >
-            {planos.map((p, i) => {
+            {degraus.map((degrau, i) => {
+              const p = degrau.plano;
               // O do meio em destaque quando são três — é onde o olho cai, e
               // é onde costuma estar o plano que se quer vender. Com um ou
               // dois planos não há meio, e nenhum fica em destaque.
-              const destaque = planos.length >= 3 && i === 1;
+              //
+              // O meio da ESCADA (ordenada por preço), e não o meio da lista
+              // que veio do servidor: se os planos chegassem por ordem de
+              // criação, o destaque caía no plano errado.
+              const destaque = degraus.length >= 3 && i === 1;
 
               return (
                 <div
@@ -427,8 +436,21 @@ export function GestoresPage() {
                     Primeiro mês grátis
                   </p>
 
-                  <ul className="mt-6 flex-1 space-y-2.5">
-                    {p.inclui.map((f) => (
+                  {/* Só o que este degrau acrescenta. Três linhas em vez de
+                      dezanove: a diferença entre os planos passa a ver-se de
+                      relance, que é a decisão que a pessoa veio tomar aqui.
+
+                      Quando `herdaDe` é nulo, este plano não contém o anterior
+                      todo e a lista completa volta — ver a nota em `escada.ts`
+                      sobre porque é que a frase tem de ser verificada. */}
+                  {degrau.herdaDe && (
+                    <p className="mt-5 text-sm font-medium text-white/70">
+                      Tudo o do <span className="text-white">{degrau.herdaDe}</span>, mais:
+                    </p>
+                  )}
+
+                  <ul className={`flex-1 space-y-2.5 ${degrau.herdaDe ? 'mt-3' : 'mt-6'}`}>
+                    {degrau.mostrar.map((f) => (
                       <li key={f.codigo} className="flex items-start gap-2.5 text-sm text-white/80">
                         <CheckCircle2
                           className="mt-0.5 h-4 w-4 shrink-0"
