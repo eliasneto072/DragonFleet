@@ -298,6 +298,8 @@ model User {
   cashMarks          CompanyCashMark[] @relation("cashMarksCreated")
   settlementQueries  SettlementQuery[] @relation("queriesAsked")
   queriesAnswered    SettlementQuery[] @relation("queriesAnswered")
+  statementAccounts  StatementAccount[] @relation("statementAccountOwner")
+  statementsImported StatementFile[]    @relation("statementsImported")
 
   @@index([fleetId])
 
@@ -2605,7 +2607,9 @@ model TradeEntry {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tranches CreditTranche[]
+  payments CreditPayment[]
 
   @@index([fleetId])
   @@index([userId, openedAt])
@@ -2663,6 +2667,7 @@ model PersonalExpense {
   user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category   PersonalExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   adjustment BalanceAdjustment?       @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
+  movements  StatementMovement[]
 
   @@index([fleetId])
   @@index([userId, spentOn])
@@ -2697,7 +2702,15 @@ model Credit {
   monthlyPayment Decimal? @map("monthly_payment") @db.Decimal(12, 2)
 
   /// Corre sobre o capital em dívida. A ÚNICA que entra no quadro.
-  tan  Decimal  @default(0) @db.Decimal(6, 3)
+  ///
+  /// OPCIONAL: há créditos que não são de bancos — investidores particulares,
+  /// com condições próprias e às vezes sem juros nenhuns. Num contrato desses
+  /// não há TAN, e um zero não distingue «sem juros» de «não preenchi».
+  tan  Decimal? @db.Decimal(6, 3)
+
+  /// O que se devolve ao todo. É a alternativa à taxa: a diferença para o
+  /// capital É o juro, sem taxa nenhuma de permeio. Ver `plano.ts`.
+  totalToPay Decimal? @map("total_to_pay") @db.Decimal(12, 2)
   /// Inclui comissões, seguros e imposto de selo. Para comparar propostas.
   taeg Decimal? @db.Decimal(6, 3)
   /// O total que se acaba por entregar, lido do contrato. Não se calcula.
@@ -2772,6 +2785,7 @@ model CompanyExpense {
 
   category  CompanyExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy User?                   @relation("companyExpensesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  movements StatementMovement[]
 
   @@index([fleetId, spentOn])
   @@index([categoryId])
@@ -2899,4 +2913,185 @@ model SettlementQuery {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@map("settlement_queries")
+}
+
+
+/// De que banco é a conta. Igual aos leitores em `modules/extratos`.
+enum BankCode {
+  ABANCA
+  NOVO_BANCO
+  MILLENNIUM
+  REVOLUT
+  REVOLUT_BUSINESS
+}
+
+/// De quem é a conta: dele ou da empresa.
+enum BankScope {
+  PESSOAL
+  EMPRESA
+}
+
+enum MovementClass {
+  DESPESA
+  RECEITA
+  TRANSFERENCIA
+}
+
+/// Uma conta bancária de onde se importam extratos.
+model StatementAccount {
+  id      String @id @default(cuid())
+  fleetId String @default("") @map("fleet_id")
+
+  bank  BankCode
+  scope BankScope
+
+  /// Os QUATRO ÚLTIMOS dígitos do IBAN, e mais nada — ver a nota longa na
+  /// migração. Chegam para reconhecer a conta e para não misturar duas do
+  /// mesmo banco, que é tudo para o que isto serve.
+  tail  String
+  label String
+
+  /// A quem pertence, nas contas pessoais. Nulo nas da empresa.
+  ownerId String? @map("owner_id")
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  owner      User?           @relation("statementAccountOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  statements StatementFile[]
+  movements  StatementMovement[]
+
+  @@unique([fleetId, bank, tail])
+  @@index([fleetId, scope])
+  @@index([ownerId])
+  @@map("statement_accounts")
+}
+
+/// Um ficheiro de extrato que foi importado.
+model StatementFile {
+  id        String @id @default(cuid())
+  fleetId   String @default("") @map("fleet_id")
+  accountId String @map("account_id")
+
+  periodStart DateTime? @map("period_start") @db.Date
+  periodEnd   DateTime? @map("period_end")   @db.Date
+
+  openingBalance Decimal? @map("opening_balance") @db.Decimal(12, 2)
+  closingBalance Decimal? @map("closing_balance") @db.Decimal(12, 2)
+
+  fileName String? @map("file_name")
+  fileUrl  String? @map("file_url")
+  fileKey  String? @map("file_key")
+
+  /// SHA-256 do PDF. É o que impede importar o mesmo extrato duas vezes —
+  /// o engano mais fácil de cometer e o mais difícil de ver depois, porque
+  /// os movimentos repetidos parecem todos legítimos.
+  fileHash String @map("file_hash")
+
+  importedById String?  @map("imported_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  account    StatementAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  importedBy User?          @relation("statementsImported", fields: [importedById], references: [id], onDelete: SetNull)
+  movements  StatementMovement[]
+
+  @@unique([fleetId, fileHash])
+  @@index([accountId, periodStart])
+  @@map("statement_files")
+}
+
+/// Uma linha do extrato.
+///
+/// ─── OS PONTEIROS PARA AS DESPESAS ──────────────────────────────────────────
+///
+/// Um movimento não guarda uma segunda cópia da despesa: quando passa a
+/// contar, CRIA a linha em `company_expenses` ou `personal_expenses` e guarda
+/// aqui o ponteiro. O lucro e o saldo continuam a ler as tabelas de sempre,
+/// que já estão testadas — uma segunda fonte para os mesmos números acabaria
+/// por divergir da primeira.
+model StatementMovement {
+  id          String @id @default(cuid())
+  fleetId     String @default("") @map("fleet_id")
+  statementId String @map("statement_id")
+  accountId   String @map("account_id")
+
+  /// A data VALOR: é a que decide em que mês o movimento entra.
+  occurredOn DateTime  @map("occurred_on") @db.Date
+  bookedOn   DateTime? @map("booked_on")   @db.Date
+
+  description String
+
+  /// Negativo saiu, positivo entrou.
+  amount Decimal @db.Decimal(12, 2)
+  /// O saldo impresso pelo banco. É a prova contra a qual a importação se
+  /// verificou, e com a qual se volta a verificar um dia.
+  balance Decimal? @db.Decimal(12, 2)
+
+  reference String?
+  class     MovementClass
+  position  Int @default(0)
+
+  companyExpenseId  String? @map("company_expense_id")
+  personalExpenseId String? @map("personal_expense_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  statement       StatementFile    @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  account         StatementAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  companyExpense  CompanyExpense?  @relation(fields: [companyExpenseId], references: [id], onDelete: SetNull)
+  personalExpense PersonalExpense? @relation(fields: [personalExpenseId], references: [id], onDelete: SetNull)
+
+  @@index([statementId, position])
+  @@index([accountId, occurredOn])
+  @@index([fleetId, occurredOn])
+  @@map("statement_movements")
+}
+
+
+/// Um tramo de prestações: «a partir da N.ª, passa a ser X».
+///
+/// Guarda o INÍCIO e não o intervalo. Com intervalos (1–12, 13–24) é possível
+/// deixar um buraco ou sobrepor dois, e aí não há resposta para «quanto é a
+/// prestação 13». Com o início só, cada prestação cai sempre em exactamente um
+/// tramo.
+model CreditTranche {
+  id       String @id @default(cuid())
+  fleetId  String @default("") @map("fleet_id")
+  creditId String @map("credit_id")
+
+  fromInstallment Int     @map("from_installment")
+  amount          Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@unique([creditId, fromInstallment])
+  @@index([creditId, fromInstallment])
+  @@map("credit_tranches")
+}
+
+/// Uma prestação paga de facto.
+///
+/// Existe porque contar pelos meses decorridos assume que se pagou sempre a
+/// horas — e um dos créditos dele tem uma prestação em atraso. Contado pela
+/// data, um crédito em incumprimento aparecia como se estivesse em dia.
+model CreditPayment {
+  id       String @id @default(cuid())
+  fleetId  String @default("") @map("fleet_id")
+  creditId String @map("credit_id")
+
+  paidOn DateTime @map("paid_on") @db.Date
+  amount Decimal  @db.Decimal(12, 2)
+  notes  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@index([creditId, paidOn])
+  @@index([fleetId, paidOn])
+  @@map("credit_payments")
 }

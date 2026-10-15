@@ -146,6 +146,26 @@ const corpoDoCredito = z.object({
   notes: z.string().trim().max(1000).nullish(),
   /** Liquidado antes do fim. Nulo é o caso normal. */
   closedOn: dataOpcional,
+
+  /**
+   * O que se devolve ao todo. A alternativa à taxa.
+   *
+   * Num empréstimo de um investidor particular não há TAN: há o que se pediu
+   * e o que se devolve. A diferença entre os dois É o juro.
+   */
+  totalToPay: numeroOpcional,
+
+  /**
+   * «A partir da N.ª prestação, passa a ser X.»
+   *
+   * No máximo 60 tramos: um crédito com mais do que isso não tem tramos, tem
+   * um plano de pagamentos linha a linha — e aceitar mil tornava o pedido
+   * lento antes de falhar.
+   */
+  tramos: z.array(z.object({
+    dePrestacao: z.coerce.number().int().min(1).max(600),
+    valor: numero,
+  })).max(60).optional(),
 });
 
 export const criarCreditoSchema = z.object({ body: corpoDoCredito });
@@ -185,3 +205,17 @@ export function periodoDaQuery(query: unknown): { de: Date | null; ate: Date | n
     ate: q.ate ? new Date(`${q.ate}T23:59:59.999Z`) : null,
   };
 }
+
+
+export const pagamentoSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z.object({
+    paidOn: dataDoDia,
+    amount: numero,
+    notes: z.string().trim().max(300).nullish(),
+  }),
+});
+
+export const pagamentoIdSchema = z.object({
+  params: z.object({ id: z.string().min(1), pagamentoId: z.string().min(1) }),
+});

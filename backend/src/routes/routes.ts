@@ -13,6 +13,7 @@ import { reportsRouter } from '../modules/reports/reports.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
 import { balanceRouter } from '../modules/balance/balance.routes';
 import { settlementsRouter } from '../modules/settlements/settlements.routes';
+import { extratosRouter } from '../modules/extratos/extratos.routes';
 import { fleetImportRouter } from '../modules/fleet-import/fleet-import.routes';
 import { bankRouter } from '../modules/bank/bank.routes';
 import { companiesRouter } from '../modules/companies/companies.routes';
@@ -209,6 +210,14 @@ router.use('/reminders', requireArea('DASHBOARD'), remindersRouter());
 // é UMA pergunta sobre todas elas, e o que cada pessoa vê é filtrado lá
 // dentro pelas permissões dela. É também o que alimenta os números do menu,
 // por isso tem de abrir a quem só tem o painel.
+// A importação de extratos bancários, pessoais e da empresa.
+//
+// Sob FINANCIAL e não sob SETTLEMENTS: o que isto traz são despesas e saldos,
+// não fechos. Quem pode ver o dinheiro pode ver os extratos — e quem pode
+// importar os da EMPRESA decide-se no serviço, que é onde está a diferença
+// entre o âmbito pessoal e o da empresa.
+router.use('/extratos', requireArea('FINANCIAL'), extratosRouter());
+
 router.use('/pending', requireArea('DASHBOARD'), pendingRouter());
 
 export { router };

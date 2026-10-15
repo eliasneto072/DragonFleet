@@ -28,6 +28,8 @@ import {
   despesaIdSchema, criarDespesaSchema, actualizarDespesaSchema,
   periodoDaQuery,
   criarCreditoSchema, actualizarCreditoSchema, creditoIdSchema,
+  pagamentoSchema,
+  pagamentoIdSchema,
 } from './personal.schemas';
 
 /** O actor, a partir da sessão e de mais nada. */
@@ -136,6 +138,30 @@ export class PersonalController {
     const { params } = creditoIdSchema.parse({ params: req.params });
     await s.apagarCredito(quem(req), params.id);
     return res.status(204).send();
+  };
+
+  // GET /pessoal/creditos/:id/pagamentos
+  pagamentosDoCredito = async (req: AuthRequest, res: Response) => {
+    const p = creditoIdSchema.parse({ params: req.params });
+    return ok(res, { pagamentos: await s.pagamentos(quem(req), p.params.id) });
+  };
+
+  // POST /pessoal/creditos/:id/pagamentos
+  registarPagamento = async (req: AuthRequest, res: Response) => {
+    const p = pagamentoSchema.parse({ params: req.params, body: req.body });
+    const pago = await s.registarPagamento(quem(req), p.params.id, {
+      paidOn: p.body.paidOn,
+      amount: p.body.amount,
+      notes: p.body.notes ?? null,
+    });
+    return ok(res, { pagamento: pago }, 201);
+  };
+
+  // DELETE /pessoal/creditos/:id/pagamentos/:pagamentoId
+  apagarPagamento = async (req: AuthRequest, res: Response) => {
+    const p = pagamentoIdSchema.parse({ params: req.params });
+    await s.apagarPagamento(quem(req), p.params.id, p.params.pagamentoId);
+    return ok(res, { ok: true });
   };
 }
 

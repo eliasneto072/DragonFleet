@@ -1,37 +1,28 @@
 // src/app/components/driver/pessoal-creditos.tsx
 //
-// Os créditos: quanto falta, quanto já foi pago, e quanto disso foram juros.
+// Os créditos: o quadro de quem deve o quê, quanto falta, e o que já se pagou.
 //
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║  NADA NESTA TELA É UM NÚMERO GUARDADO                                    ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
+// ─── DOIS TIPOS DE CRÉDITO, NO MESMO ECRÃ ───────────────────────────────────
 //
-// Guarda-se o contrato — capital, TAN, prazo, data da primeira prestação — e
-// tudo o resto é calculado na hora pelo `creditos.ts` do servidor, que tem 21
-// testes. Guardar «quanto já pagaste» dava um número que ficava velho no dia
-// seguinte, e um número guardado que diverge da fórmula é uma avaria que
-// ninguém encontra: os dois parecem plausíveis.
+// COM TAXA  — um crédito de banco. Há TAN, e o quadro de amortização calcula-se.
+// POR PLANO — um empréstimo de um investidor particular. Não há taxa: há o que
+//             se pediu, o que se devolve, e as prestações por tramos. Às vezes
+//             nem juros tem.
 //
-// ─── A BARRA É DE PRESTAÇÕES E NÃO DE CAPITAL ───────────────────────────────
+// O formulário aceita os dois e não obriga a nenhum. Deixar a TAN em branco é
+// uma resposta legítima — e por isso o campo nunca se preenche sozinho.
 //
-// Porque é assim que se responde a «quanto falta». A percentagem de CAPITAL
-// amortizado é muito mais baixa no início — os primeiros anos de um crédito
-// são quase só juro — e daria uma barra desanimadora e difícil de explicar.
+// ─── A BARRA SAI DOS PAGAMENTOS, NÃO DO CALENDÁRIO ──────────────────────────
 //
-// Mas a conta do capital não desaparece: está escrita por baixo, em euros,
-// que é onde tem sentido.
-//
-// ─── E PORQUE É QUE O JURO É ÂMBAR E NÃO VERDE ──────────────────────────────
-//
-// Os dois tons de verde do tema estão a 8,3 de distância um do outro, e abaixo
-// de 15 nem com visão normal se distinguem — muito menos empilhados na mesma
-// barra. O par usado aqui foi validado nos dois modos e para daltonismo.
-// Âmbar também por significado: o juro é o dinheiro que se perde.
+// Contar pelos meses decorridos assume que se pagou sempre a horas. Um dos
+// créditos dele tem uma prestação em atraso: contado pela data, aparecia como
+// se estivesse em dia — e era essa a informação que ele queria ver.
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Fragment, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -39,63 +30,76 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { Badge } from '@/app/components/ui/badge';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
-import {
-  Plus, Pencil, Trash2, AlertTriangle, Landmark, CheckCircle2,
-} from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   pessoalService, type Credito, type CorpoDeCredito,
 } from '@/features/driver/services/pessoal.service';
 import { formatCurrency } from '@/shared/lib/format';
 
-const VAZIO: CorpoDeCredito = {
-  name: '', lender: '', principal: '', startedOn: new Date().toISOString().slice(0, 10),
-  installments: '', monthlyPayment: '', tan: '', taeg: '', mtic: '', notes: '',
-};
-
-const dia = (iso: string) => new Date(iso).toLocaleDateString('pt-PT');
+const hoje = () => new Date().toISOString().slice(0, 10);
+const dia = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-PT') : '—');
 const pct = (n: number) => `${n.toLocaleString('pt-PT', { maximumFractionDigits: 1 })}%`;
 
-/** A barra de 0 a 100. */
-function Barra({ valor }: { valor: number }) {
-  const v = Math.max(0, Math.min(100, valor));
-  return (
-    <div
-      className="h-2.5 w-full overflow-hidden rounded-full bg-muted"
-      role="progressbar"
-      aria-valuenow={Math.round(v)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label="Percentagem já paga"
-    >
-      <div
-        className="h-full rounded-full transition-all"
-        style={{ width: `${v}%`, background: 'var(--grafico-capital)' }}
-      />
-    </div>
-  );
+interface TramoNoForm { dePrestacao: string; valor: string }
+
+interface FormDeCredito extends CorpoDeCredito {
+  tramosNoForm: TramoNoForm[];
 }
 
-function Campo({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">{rotulo}</p>
-      <p className="mt-0.5 font-semibold">{valor}</p>
-      {nota && <p className="text-xs text-muted-foreground">{nota}</p>}
-    </div>
-  );
-}
+const VAZIO: FormDeCredito = {
+  name: '', lender: '', principal: '', startedOn: hoje(),
+  installments: '', monthlyPayment: '', tan: '', taeg: '', mtic: '',
+  totalToPay: '', notes: '',
+  tramosNoForm: [{ dePrestacao: '1', valor: '' }],
+};
+
+// ═══════════════════════════════════════════════════════════ a barra de % ══
 
 /**
- * O gráfico de cada ano: quanto se pagou, e quanto disso foi juro.
+ * A barra de 0 a 100 que ele pediu.
  *
- * Empilhado e não lado a lado: a altura da barra é o que saiu da conta nesse
- * ano, e a fatia âmbar é a parte que não abateu dívida nenhuma. Lado a lado,
- * perdia-se o total — e o total é metade da resposta.
+ * Mostra sempre os dois lados — o que está pago e o que falta — porque uma
+ * barra a 12% sem o resto desenhado lê-se como «quase vazio» em vez de
+ * «faltam 88%». O número vai ao lado e não dentro: dentro, numa barra curta,
+ * não cabe.
  */
-function GraficoPorAno({ dados }: { dados: { ano: number; juro: number; capital: number }[] }) {
+function Barra({ percentagem, emAtraso }: { percentagem: number; emAtraso: boolean }) {
+  const p = Math.max(0, Math.min(100, percentagem));
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-2 w-full min-w-[4rem] overflow-hidden rounded-full bg-secondary">
+        <div
+          className="h-full rounded-full transition-[width] duration-500"
+          style={{
+            width: `${p}%`,
+            // Em atraso pinta-se de outra cor: a percentagem sozinha não
+            // distingue «vai a meio e em dia» de «vai a meio e a dever».
+            background: emAtraso ? 'var(--grafico-juro)' : 'var(--grafico-capital)',
+          }}
+        />
+      </div>
+      <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        {pct(p)}
+      </span>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════ gráficos ══
+
+/** Liquidado contra por liquidar, crédito a crédito. */
+function GraficoLiquidado({ creditos }: { creditos: Credito[] }) {
+  const dados = creditos.map((c) => ({
+    nome: c.nome.length > 14 ? `${c.nome.slice(0, 13)}…` : c.nome,
+    liquidado: c.pago.pago,
+    porLiquidar: c.pago.porPagar,
+  }));
+
   if (dados.length === 0) return null;
 
   return (
@@ -103,65 +107,162 @@ function GraficoPorAno({ dados }: { dados: { ano: number; juro: number; capital:
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={dados} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="ano" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} />
-          <YAxis
-            stroke="var(--muted-foreground)" fontSize={11} width={64} tickLine={false}
-            tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
-          />
+          <XAxis dataKey="nome" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+          <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
           <Tooltip
+            formatter={(v: number) => formatCurrency(v)}
             contentStyle={{
-              background: 'var(--popover)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              fontSize: 12,
+              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8,
             }}
-            labelStyle={{ color: 'var(--foreground)' }}
-            formatter={(v: number, nome: string) => [formatCurrency(v), nome]}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          {/* O capital por baixo e o juro por cima: a fatia que interessa ver
-              fica no topo, onde se lê a altura dela de relance.
-              O `stroke` da cor da superfície é o espaço de 2px entre as duas
-              fatias — sem ele, encostadas, lêem-se como uma só. */}
-          <Bar
-            dataKey="capital" stackId="a" name="Capital"
-            fill="var(--grafico-capital)"
-            stroke="var(--card)" strokeWidth={2}
-          />
-          <Bar
-            dataKey="juro" stackId="a" name="Juro"
-            fill="var(--grafico-juro)"
-            stroke="var(--card)" strokeWidth={2}
-            radius={[4, 4, 0, 0]}
-          />
+          <Legend />
+          {/* O contorno da cor do cartão separa as duas fatias: encostadas,
+              lêem-se como uma só. */}
+          <Bar dataKey="liquidado" stackId="a" name="Liquidado"
+            fill="var(--grafico-capital)" stroke="var(--card)" strokeWidth={2} />
+          <Bar dataKey="porLiquidar" stackId="a" name="Por liquidar"
+            fill="var(--grafico-juro)" stroke="var(--card)" strokeWidth={2}
+            radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
+/**
+ * A reta dos pagamentos acumulados: o previsto contra o que foi pago.
+ *
+ * O real acaba onde o tempo acabou — depois de hoje vem nulo, e a linha
+ * simplesmente para. Desenhar zero no futuro fazia-a mergulhar a pique e isso
+ * lê-se como «parou de pagar».
+ */
+function GraficoAcumulado({ credito }: { credito: Credito }) {
+  if (credito.acumulado.length === 0) return null;
+
+  return (
+    <div className="h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={credito.acumulado} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+          <XAxis dataKey="mes" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+          <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+          <Tooltip
+            formatter={(v: number | null) => (v === null ? '—' : formatCurrency(v))}
+            contentStyle={{
+              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8,
+            }}
+          />
+          <Legend />
+          <Line type="monotone" dataKey="previsto" name="Previsto"
+            stroke="var(--grafico-juro)" strokeWidth={2} dot={false} strokeDasharray="4 3" />
+          <Line type="monotone" dataKey="pago" name="Pago"
+            stroke="var(--grafico-capital)" strokeWidth={2} dot={false} connectNulls={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════ pagamentos ══
+
+function Pagamentos({ credito, aoMudar }: { credito: Credito; aoMudar: () => void }) {
+  const [quando, setQuando] = useState(hoje());
+  const [valor, setValor] = useState(String(credito.prestacaoEmVigor || ''));
+
+  const lista = useQuery({
+    queryKey: ['pessoal', 'creditos', credito.id, 'pagamentos'],
+    queryFn: () => pessoalService.pagamentosDoCredito(credito.id),
+  });
+
+  const registar = useMutation({
+    mutationFn: () => pessoalService.registarPagamento(credito.id, {
+      paidOn: quando, amount: valor,
+    }),
+    onSuccess: () => {
+      toast.success('Pagamento registado.');
+      setValor(String(credito.prestacaoEmVigor || ''));
+      void lista.refetch();
+      aoMudar();
+    },
+    onError: (e: Error) => toast.error(e.message || 'Não foi possível registar.'),
+  });
+
+  const apagar = useMutation({
+    mutationFn: (id: string) => pessoalService.apagarPagamento(credito.id, id),
+    onSuccess: () => { void lista.refetch(); aoMudar(); },
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`pg-data-${credito.id}`} className="text-xs">Data</Label>
+          <Input id={`pg-data-${credito.id}`} type="date" className="h-9 w-[9.5rem]"
+            value={quando} onChange={(e) => setQuando(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`pg-valor-${credito.id}`} className="text-xs">Valor</Label>
+          <Input id={`pg-valor-${credito.id}`} inputMode="decimal" className="h-9 w-28"
+            value={valor} onChange={(e) => setValor(e.target.value)} placeholder="200,00" />
+        </div>
+        <Button size="sm" className="h-9"
+          onClick={() => registar.mutate()} disabled={!valor || registar.isPending}>
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
+          Registar
+        </Button>
+      </div>
+
+      {(lista.data?.pagamentos ?? []).length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Ainda não registou pagamentos. Sem eles, a barra fica a zero — e um crédito
+          em atraso não se distingue de um em dia.
+        </p>
+      ) : (
+        <ul className="max-h-40 space-y-1 overflow-y-auto">
+          {(lista.data?.pagamentos ?? []).map((p) => (
+            <li key={p.id} className="flex items-center gap-2 text-sm">
+              <span className="w-24 tabular-nums text-muted-foreground">{dia(p.quando)}</span>
+              <span className="tabular-nums">{formatCurrency(p.valor)}</span>
+              <Button variant="ghost" size="sm" className="ml-auto h-7 px-2"
+                onClick={() => apagar.mutate(p.id)}>
+                <X className="h-3 w-3" aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════ o ecrã ══
+
 export function PessoalCreditos() {
   const qc = useQueryClient();
   const [aberto, setAberto] = useState(false);
   const [aEditar, setAEditar] = useState<Credito | null>(null);
-  const [form, setForm] = useState<CorpoDeCredito>(VAZIO);
+  const [form, setForm] = useState<FormDeCredito>(VAZIO);
   const [erro, setErro] = useState<string | null>(null);
+  const [aberto1, setAberto1] = useState<string | null>(null);
 
   const creditos = useQuery({
     queryKey: ['pessoal', 'creditos'],
     queryFn: () => pessoalService.listarCreditos(),
   });
-  const resumo = useQuery({
-    queryKey: ['pessoal', 'creditos', 'resumo'],
-    queryFn: () => pessoalService.resumoDeCreditos(),
-  });
 
   const recarregar = () => qc.invalidateQueries({ queryKey: ['pessoal', 'creditos'] });
 
   const gravar = useMutation({
-    mutationFn: (corpo: CorpoDeCredito) => (aEditar
-      ? pessoalService.actualizarCredito(aEditar.id, corpo)
-      : pessoalService.criarCredito(corpo)),
+    mutationFn: (f: FormDeCredito) => {
+      const { tramosNoForm, ...corpo } = f;
+      const tramos = tramosNoForm
+        .filter((t) => String(t.valor).trim() !== '')
+        .map((t) => ({ dePrestacao: t.dePrestacao || '1', valor: t.valor }));
+      const completo: CorpoDeCredito = { ...corpo, tramos };
+      return aEditar
+        ? pessoalService.actualizarCredito(aEditar.id, completo)
+        : pessoalService.criarCredito(completo);
+    },
     onSuccess: () => { recarregar(); fechar(); },
     onError: (e: unknown) => setErro(
       (e as { message?: string })?.message ?? 'Não foi possível gravar.',
@@ -186,11 +287,17 @@ export function PessoalCreditos() {
       startedOn: c.inicio.slice(0, 10),
       installments: String(c.prestacoes),
       monthlyPayment: c.prestacaoDoContrato ?? '',
-      tan: String(c.tan),
+      // Nulo passa a campo VAZIO, e não a zero: zero afirmava que o crédito
+      // não tem juros.
+      tan: c.tan ?? '',
       taeg: c.taeg ?? '',
       mtic: c.mtic ?? '',
+      totalToPay: c.totalAPagar ?? '',
       notes: c.notas ?? '',
       closedOn: c.liquidadoEm ? c.liquidadoEm.slice(0, 10) : '',
+      tramosNoForm: c.tramos.length > 0
+        ? c.tramos.map((t) => ({ dePrestacao: String(t.dePrestacao), valor: String(t.valor) }))
+        : [{ dePrestacao: '1', valor: String(c.prestacaoDoContrato ?? '') }],
     });
     setErro(null);
     setAberto(true);
@@ -198,397 +305,338 @@ export function PessoalCreditos() {
 
   function fechar() { setAberto(false); setAEditar(null); setErro(null); }
 
+  function mudarTramo(i: number, campo: keyof TramoNoForm, v: string) {
+    setForm((f) => ({
+      ...f,
+      tramosNoForm: f.tramosNoForm.map((t, j) => (j === i ? { ...t, [campo]: v } : t)),
+    }));
+  }
+
+  function acrescentarTramo() {
+    setForm((f) => {
+      const ultimo = f.tramosNoForm[f.tramosNoForm.length - 1];
+      // O tramo novo começa a seguir ao anterior: é quase sempre o que se
+      // quer, e poupa a conta de cabeça.
+      const seguinte = String((Number(ultimo?.dePrestacao) || 1) + 12);
+      return { ...f, tramosNoForm: [...f.tramosNoForm, { dePrestacao: seguinte, valor: '' }] };
+    });
+  }
+
+  function tirarTramo(i: number) {
+    setForm((f) => ({
+      ...f,
+      tramosNoForm: f.tramosNoForm.length <= 1
+        ? f.tramosNoForm
+        : f.tramosNoForm.filter((_, j) => j !== i),
+    }));
+  }
+
   const lista = creditos.data?.creditos ?? [];
-  const r = resumo.data;
+  const aCorrer = useMemo(() => lista.filter((c) => !c.liquidado), [lista]);
+
+  const totais = useMemo(() => ({
+    porPagar: aCorrer.reduce((s, c) => s + c.pago.porPagar, 0),
+    pago: lista.reduce((s, c) => s + c.pago.pago, 0),
+    emAtraso: aCorrer.reduce((s, c) => s + c.pago.valorEmAtraso, 0),
+    juros: lista.reduce((s, c) => s + (c.juroTotal ?? 0), 0),
+  }), [lista, aCorrer]);
 
   return (
     <div className="space-y-6">
-      {/* ── O conjunto ── */}
+      {/* ── O conjunto ───────────────────────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Em dívida
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {resumo.isLoading
-              ? <Skeleton className="h-8 w-28" />
-              : (
-                <>
-                  <p className="text-2xl font-bold">{formatCurrency(r?.emDivida ?? 0)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {r?.aCorrer ?? 0} {r?.aCorrer === 1 ? 'crédito' : 'créditos'} a correr
-                  </p>
-                </>
-              )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sai todos os meses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {resumo.isLoading
-              ? <Skeleton className="h-8 w-28" />
-              : <p className="text-2xl font-bold">{formatCurrency(r?.prestacaoMensal ?? 0)}</p>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Juros já pagos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {resumo.isLoading
-              ? <Skeleton className="h-8 w-28" />
-              : (
-                <p className="text-2xl font-bold" style={{ color: 'var(--grafico-juro)' }}>
-                  {formatCurrency(r?.jurosPagos ?? 0)}
-                </p>
-              )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Juros que faltam
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {resumo.isLoading
-              ? <Skeleton className="h-8 w-28" />
-              : (
-                <>
-                  <p className="text-2xl font-bold" style={{ color: 'var(--grafico-juro)' }}>
-                    {formatCurrency(r?.jurosPorPagar ?? 0)}
-                  </p>
-                  {/* Dito aqui porque é o número que faz decidir amortizar:
-                      é o que ainda dá para poupar. */}
-                  <p className="text-xs text-muted-foreground">
-                    É o que ainda dá para poupar
-                  </p>
-                </>
-              )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── O gráfico de todos ── */}
-      {(r?.porAno.length ?? 0) > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Ano a ano, todos os créditos</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              A altura é o que sai da conta nesse ano. A fatia âmbar é a parte
-              que não abate dívida nenhuma.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <GraficoPorAno dados={r!.porAno} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── A lista ── */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Os teus créditos</h2>
-        <Button size="sm" onClick={abrirNovo}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo crédito
-        </Button>
-      </div>
-
-      {creditos.isLoading && <Skeleton className="h-40 w-full" />}
-
-      {!creditos.isLoading && lista.length === 0 && (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <Landmark className="mx-auto h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
-            <p className="mt-3 text-sm text-muted-foreground">
-              Ainda não registaste nenhum crédito.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="space-y-4">
-        {lista.map((c) => (
-          <Card key={c.id} className={c.liquidado ? 'opacity-70' : undefined}>
-            <CardHeader className="flex-row items-start justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  {c.nome}
-                  {c.liquidado && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-normal">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Liquidado
-                    </span>
-                  )}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {c.credor ? `${c.credor} · ` : ''}
-                  {formatCurrency(c.capital)} a {pct(c.tan)} TAN
-                </p>
-              </div>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="icon" onClick={() => abrirEdicao(c)} aria-label="Alterar">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => apagar.mutate(c.id)} aria-label="Apagar">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+        {[
+          { t: 'Por liquidar', v: totais.porPagar },
+          { t: 'Já liquidado', v: totais.pago },
+          { t: 'Juros do conjunto', v: totais.juros },
+          { t: 'Em atraso', v: totais.emAtraso, aviso: totais.emAtraso > 0 },
+        ].map((k) => (
+          <Card key={k.t}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{k.t}</CardTitle>
             </CardHeader>
-
-            <CardContent className="space-y-5">
-              {/* O aviso de que os números do contrato não batem certo.
-                  Primeiro de tudo: se estiver aceso, nada do que está por
-                  baixo é de confiança. */}
-              {c.conferencia && !c.conferencia.bate && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
-                  <p className="text-sm text-muted-foreground">
-                    A prestação que escreveste ({formatCurrency(c.prestacaoDoContrato ?? 0)})
-                    não bate certo com o capital, a TAN e o prazo — as contas dão{' '}
-                    <strong className="text-foreground">
-                      {formatCurrency(c.conferencia.calculada)}
-                    </strong>.
-                    Confere os números no contrato: se algum estiver mal copiado,
-                    tudo o que está aqui em baixo está errado.
-                  </p>
-                </div>
-              )}
-
-              {/* ── A barra ── */}
-              <div className="space-y-2">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium">
-                    {pct(c.estado.percentagemPaga)} pago
-                  </span>
-                  <span className="text-muted-foreground">
-                    {c.estado.pagas} de {c.estado.prestacoes} prestações
-                  </span>
-                </div>
-                <Barra valor={c.estado.percentagemPaga} />
-                <div className="flex items-baseline justify-between text-xs text-muted-foreground">
-                  <span>
-                    Capital abatido {formatCurrency(c.estado.capitalPago)}
-                  </span>
-                  <span>
-                    {c.estado.fim ? `Acaba em ${dia(c.estado.fim)}` : ''}
-                  </span>
-                </div>
-              </div>
-
-              {/* ── Os números ── */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Campo
-                  rotulo="Falta pagar"
-                  valor={formatCurrency(c.estado.emDivida)}
-                  nota="de capital"
-                />
-                <Campo
-                  rotulo="Último pagamento"
-                  valor={c.estado.ultimoPagamento
-                    ? formatCurrency(c.estado.ultimoPagamento.prestacao)
-                    : '—'}
-                  nota={c.estado.ultimoPagamento
-                    ? dia(c.estado.ultimoPagamento.quando)
-                    : 'ainda não começou'}
-                />
-                <Campo
-                  rotulo="Juros pagos"
-                  valor={formatCurrency(c.estado.jurosPagos)}
-                  nota={`de ${formatCurrency(c.estado.jurosTotais)} no total`}
-                />
-                <Campo
-                  rotulo="Juros que faltam"
-                  valor={formatCurrency(c.estado.jurosPorPagar)}
-                  nota="o que dá para poupar"
-                />
-              </div>
-
-              {/* ── O contrato ── */}
-              <div className="flex flex-wrap gap-x-6 gap-y-1 border-t pt-4 text-sm text-muted-foreground">
-                <span>TAN <strong className="text-foreground">{pct(c.tan)}</strong></span>
-                {c.taeg !== null && (
-                  <span>TAEG <strong className="text-foreground">{pct(c.taeg)}</strong></span>
-                )}
-                {c.mtic !== null && (
-                  <span>MTIC <strong className="text-foreground">{formatCurrency(c.mtic)}</strong></span>
-                )}
-                <span>
-                  Prestação <strong className="text-foreground">
-                    {formatCurrency(c.prestacaoEmVigor)}
-                  </strong>
-                </span>
-                <span>Início <strong className="text-foreground">{dia(c.inicio)}</strong></span>
-              </div>
-
-              {/* ── O ano a ano deste crédito ── */}
-              {c.porAno.length > 1 && <GraficoPorAno dados={c.porAno} />}
-
-              {c.notas && (
-                <p className="text-sm text-muted-foreground">{c.notas}</p>
+            <CardContent>
+              {creditos.isLoading ? <Skeleton className="h-7 w-24" /> : (
+                <p className={`text-2xl font-semibold tabular-nums ${k.aviso ? 'text-destructive' : ''}`}>
+                  {formatCurrency(k.v)}
+                </p>
               )}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* ── O formulário ── */}
-      <Dialog open={aberto} onOpenChange={(v) => (v ? setAberto(true) : fechar())}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+      {/* ── O quadro: nome, credor, e a barra de 0 a 100 ─────────────────── */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <CardTitle>Créditos</CardTitle>
+          <Button size="sm" onClick={abrirNovo}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+            Novo crédito
+          </Button>
+        </CardHeader>
+
+        <CardContent>
+          {creditos.isLoading ? (
+            <Skeleton className="h-28 w-full" />
+          ) : lista.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Ainda não registou nenhum crédito.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Crédito</th>
+                    <th className="py-2 pr-3 font-medium">Credor</th>
+                    <th className="py-2 pr-3 text-right font-medium">Prestação</th>
+                    <th className="py-2 pr-3 text-right font-medium">Por liquidar</th>
+                    <th className="py-2 pr-3 font-medium">Pago</th>
+                    <th className="py-2 font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((c) => (
+                    // A chave vai no Fragment e não no <tr>: num fragmento
+                    // curto (`<>`) não há onde a pôr, e o React volta a
+                    // desenhar a tabela inteira a cada mudança.
+                    <Fragment key={c.id}>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2.5 pr-3">
+                          <span className="font-medium">{c.nome}</span>
+                          {c.pago.emAtraso > 0 && (
+                            <Badge variant="outline" className="ml-2 gap-1 text-destructive">
+                              <AlertTriangle className="h-3 w-3" aria-hidden />
+                              {c.pago.emAtraso} em atraso
+                            </Badge>
+                          )}
+                          {c.liquidado && (
+                            <Badge variant="secondary" className="ml-2">Liquidado</Badge>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-3 text-muted-foreground">{c.credor ?? '—'}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">
+                          {formatCurrency(c.prestacaoEmVigor)}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">
+                          {formatCurrency(c.pago.porPagar)}
+                        </td>
+                        <td className="w-48 py-2.5 pr-3">
+                          <Barra percentagem={c.pago.percentagem} emAtraso={c.pago.emAtraso > 0} />
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <Button variant="ghost" size="sm" className="h-8 px-2"
+                            onClick={() => setAberto1(aberto1 === c.id ? null : c.id)}>
+                            {aberto1 === c.id ? 'Fechar' : 'Detalhe'}
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-2"
+                            onClick={() => abrirEdicao(c)}>
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-2"
+                            onClick={() => apagar.mutate(c.id)}>
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                        </td>
+                      </tr>
+
+                      {aberto1 === c.id && (
+                        <tr className="border-b border-border/50">
+                          <td colSpan={6} className="py-4">
+                            <div className="grid gap-6 lg:grid-cols-2">
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                  Pagamentos acumulados
+                                </p>
+                                <GraficoAcumulado credito={c} />
+                              </div>
+                              <div className="space-y-3">
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                  <span className="text-muted-foreground">Capital pedido</span>
+                                  <span className="text-right tabular-nums">{formatCurrency(c.capital)}</span>
+                                  <span className="text-muted-foreground">A pagar no final</span>
+                                  <span className="text-right tabular-nums">
+                                    {c.totalAPagar === null ? '—' : formatCurrency(c.totalAPagar)}
+                                  </span>
+                                  <span className="text-muted-foreground">Juro total</span>
+                                  <span className="text-right tabular-nums">
+                                    {c.juroTotal === null ? 'por saber' : formatCurrency(c.juroTotal)}
+                                  </span>
+                                  {c.custo && (
+                                    <>
+                                      <span className="text-muted-foreground">Custo por ano</span>
+                                      <span className="text-right tabular-nums">{pct(c.custo.porAno)}</span>
+                                    </>
+                                  )}
+                                  {c.tan !== null && (
+                                    <>
+                                      <span className="text-muted-foreground">TAN</span>
+                                      <span className="text-right tabular-nums">{pct(c.tan)}</span>
+                                    </>
+                                  )}
+                                  <span className="text-muted-foreground">Última prestação</span>
+                                  <span className="text-right tabular-nums">
+                                    {dia(c.pago.ultimoPagamento)}
+                                  </span>
+                                </div>
+                                <div className="border-t border-border pt-3">
+                                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                    Registar pagamento
+                                  </p>
+                                  <Pagamentos credito={c} aoMudar={recarregar} />
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Liquidado contra por liquidar ────────────────────────────────── */}
+      {lista.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Liquidado e por liquidar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <GraficoLiquidado creditos={lista} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── O formulário ─────────────────────────────────────────────────── */}
+      <Dialog open={aberto} onOpenChange={(o) => { if (!o) fechar(); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{aEditar ? 'Alterar crédito' : 'Novo crédito'}</DialogTitle>
+            <DialogTitle>{aEditar ? 'Editar crédito' : 'Novo crédito'}</DialogTitle>
             <DialogDescription>
-              Copia do contrato. Tudo o resto é calculado a partir destes números.
+              A TAN e a TAEG são opcionais. Num empréstimo sem taxa, escreva o que
+              pediu e o que devolve: a diferença é o juro.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="nome">Nome</Label>
-                <Input
-                  id="nome" maxLength={80} placeholder="Consolidação, Carro, Mário…"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="c-nome">Nome</Label>
+                <Input id="c-nome" value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
-              <div>
-                <Label htmlFor="credor">A quem deves</Label>
-                <Input
-                  id="credor" maxLength={80} placeholder="Opcional"
-                  value={String(form.lender ?? '')}
+              <div className="space-y-1.5">
+                <Label htmlFor="c-credor">Credor</Label>
+                <Input id="c-credor" value={String(form.lender ?? '')}
                   onChange={(e) => setForm({ ...form, lender: e.target.value })}
-                />
+                  placeholder="Banco, financeira ou pessoa" />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <Label htmlFor="capital">Capital</Label>
-                <Input
-                  id="capital" inputMode="decimal" placeholder="0,00"
-                  value={String(form.principal)}
-                  onChange={(e) => setForm({ ...form, principal: e.target.value })}
-                />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="c-capital">Capital pedido</Label>
+                <Input id="c-capital" inputMode="decimal" value={String(form.principal)}
+                  onChange={(e) => setForm({ ...form, principal: e.target.value })} />
               </div>
-              <div>
-                <Label htmlFor="inicio">1.ª prestação</Label>
-                <Input
-                  id="inicio" type="date"
-                  value={form.startedOn}
-                  onChange={(e) => setForm({ ...form, startedOn: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="n">N.º de prestações</Label>
-                <Input
-                  id="n" inputMode="numeric" placeholder="84"
-                  value={String(form.installments)}
-                  onChange={(e) => setForm({ ...form, installments: e.target.value })}
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="c-total">Capital a pagar no final</Label>
+                <Input id="c-total" inputMode="decimal" value={String(form.totalToPay ?? '')}
+                  onChange={(e) => setForm({ ...form, totalToPay: e.target.value })}
+                  placeholder="Deixe vazio se não souber" />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="prestacao">Prestação mensal</Label>
-              <Input
-                id="prestacao" inputMode="decimal" placeholder="0,00"
-                value={String(form.monthlyPayment ?? '')}
-                onChange={(e) => setForm({ ...form, monthlyPayment: e.target.value })}
-              />
-              {/* Dito aqui porque é o que faz esta caixa valer a pena: é o
-                  número que ele sabe de cor, e é a única coisa que denuncia
-                  um dígito mal copiado nos outros três. */}
-              <p className="mt-1 text-xs text-muted-foreground">
-                O valor que sai mesmo da conta. Serve para conferir os outros:
-                se não bater com as contas, avisamos.
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="c-inicio">1.ª prestação</Label>
+                <Input id="c-inicio" type="date" value={form.startedOn}
+                  onChange={(e) => setForm({ ...form, startedOn: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="c-n">Número de prestações</Label>
+                <Input id="c-n" inputMode="numeric" value={String(form.installments)}
+                  onChange={(e) => setForm({ ...form, installments: e.target.value })} />
+              </div>
+            </div>
+
+            {/* ── Os tramos ─────────────────────────────────────────────── */}
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <Label>Prestações</Label>
+                <Button type="button" variant="outline" size="sm" onClick={acrescentarTramo}>
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Outro valor
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Um valor só, ou vários: «da 1.ª à 12.ª, 200 €; da 13.ª em diante, 300 €».
               </p>
+
+              {form.tramosNoForm.map((t, i) => (
+                <div key={i} className="flex items-end gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor={`t-de-${i}`} className="text-xs">A partir da</Label>
+                    <Input id={`t-de-${i}`} inputMode="numeric" className="h-9 w-24"
+                      value={t.dePrestacao}
+                      onChange={(e) => mudarTramo(i, 'dePrestacao', e.target.value)} />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor={`t-v-${i}`} className="text-xs">Prestação</Label>
+                    <Input id={`t-v-${i}`} inputMode="decimal" className="h-9"
+                      value={t.valor}
+                      onChange={(e) => mudarTramo(i, 'valor', e.target.value)}
+                      placeholder="200,00" />
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" className="h-9 px-2"
+                    onClick={() => tirarTramo(i)} disabled={form.tramosNoForm.length <= 1}>
+                    <X className="h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
+              ))}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <Label htmlFor="tan">TAN (%)</Label>
-                <Input
-                  id="tan" inputMode="decimal" placeholder="5,4"
-                  value={String(form.tan ?? '')}
-                  onChange={(e) => setForm({ ...form, tan: e.target.value })}
-                />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="c-tan">TAN <span className="text-muted-foreground">(opcional)</span></Label>
+                <Input id="c-tan" inputMode="decimal" value={String(form.tan ?? '')}
+                  onChange={(e) => setForm({ ...form, tan: e.target.value })} placeholder="—" />
               </div>
-              <div>
-                <Label htmlFor="taeg">TAEG (%)</Label>
-                <Input
-                  id="taeg" inputMode="decimal" placeholder="6,8"
-                  value={String(form.taeg ?? '')}
-                  onChange={(e) => setForm({ ...form, taeg: e.target.value })}
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="c-taeg">TAEG <span className="text-muted-foreground">(opcional)</span></Label>
+                <Input id="c-taeg" inputMode="decimal" value={String(form.taeg ?? '')}
+                  onChange={(e) => setForm({ ...form, taeg: e.target.value })} placeholder="—" />
               </div>
-              <div>
-                <Label htmlFor="mtic">MTIC</Label>
-                <Input
-                  id="mtic" inputMode="decimal" placeholder="0,00"
-                  value={String(form.mtic ?? '')}
-                  onChange={(e) => setForm({ ...form, mtic: e.target.value })}
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="c-mtic">MTIC <span className="text-muted-foreground">(opcional)</span></Label>
+                <Input id="c-mtic" inputMode="decimal" value={String(form.mtic ?? '')}
+                  onChange={(e) => setForm({ ...form, mtic: e.target.value })} placeholder="—" />
               </div>
             </div>
 
-            {/* As três taxas fazem coisas diferentes, e só uma entra nas
-                contas. Sem isto escrito, a pergunta «porque é que o gráfico
-                não usa a TAEG, que é maior?» não tem resposta à vista. */}
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <strong>A TAN</strong> é a única que entra nas contas — é a que corre
-              sobre o capital em dívida. <strong>A TAEG</strong> inclui comissões e
-              seguros e serve para comparar propostas de bancos diferentes.{' '}
-              <strong>O MTIC</strong> é o total que acabas por entregar, do contrato:
-              guardamo-lo para o poderes confrontar com o que estas contas dizem.
-            </p>
-
-            <div>
-              <Label htmlFor="liquidado">Liquidado em</Label>
-              <Input
-                id="liquidado" type="date"
-                value={String(form.closedOn ?? '')}
-                onChange={(e) => setForm({ ...form, closedOn: e.target.value })}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Só se já o fechaste antes do fim. Deixa vazio se ainda está a correr.
-              </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="c-notas">Notas</Label>
+              <Textarea id="c-notas" rows={2} value={String(form.notes ?? '')}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
 
-            <div>
-              <Label htmlFor="notascred">Notas</Label>
-              <Textarea
-                id="notascred" rows={2} maxLength={1000}
-                value={String(form.notes ?? '')}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="c-liq">Liquidado em <span className="text-muted-foreground">(se já acabou)</span></Label>
+              <Input id="c-liq" type="date" value={String(form.closedOn ?? '')}
+                onChange={(e) => setForm({ ...form, closedOn: e.target.value })} />
             </div>
 
-            {erro && (
-              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {erro}
-              </p>
-            )}
+            {erro && <p className="text-sm text-destructive">{erro}</p>}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={fechar}>Cancelar</Button>
-            <Button
-              disabled={gravar.isPending || !form.name.trim() || !String(form.principal).trim()}
-              onClick={() => { setErro(null); gravar.mutate(form); }}
-            >
-              {aEditar ? 'Gravar' : 'Registar'}
+            <Button variant="ghost" onClick={fechar}>Cancelar</Button>
+            <Button onClick={() => { setErro(null); gravar.mutate(form); }}
+              disabled={gravar.isPending}>
+              {gravar.isPending ? 'A gravar…' : 'Guardar'}
             </Button>
           </DialogFooter>
         </DialogContent>

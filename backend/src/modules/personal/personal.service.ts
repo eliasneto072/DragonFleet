@@ -40,6 +40,11 @@ import {
 import {
   estadoDoCredito, jurosPorAno, prestacaoBateCerto, quadroDeAmortizacao,
 } from './creditos';
+import {
+  acumuladoPorMes, custoEmPercentagem, estadoPorPagamentos, juroTotal,
+  planoDoCredito, totalDoPlano, tramosOrdenados,
+  type CreditoPorPlano, type Tramo,
+} from './plano';
 
 /** O que o extrato mostra. Ver a nota no topo. */
 const MOTIVO_NO_EXTRATO = 'Despesa pessoal';
@@ -109,6 +114,16 @@ export interface EntradaDeCredito {
   mtic?: number | null;
   notes?: string | null;
   closedOn?: Date | null;
+  /** O que se devolve ao todo. A alternativa à taxa — ver `plano.ts`. */
+  totalToPay?: number | null;
+  /** «A partir da N.ª prestação, passa a ser X.» Vazio = prestação única. */
+  tramos?: { dePrestacao: number; valor: number }[];
+}
+
+export interface EntradaDePagamento {
+  paidOn: Date;
+  amount: number;
+  notes?: string | null;
 }
 
 export interface EntradaDeDespesa {
@@ -467,28 +482,55 @@ class PersonalService {
     const linhas = await prisma.credit.findMany({
       where: { userId: actor.id },
       orderBy: [{ closedOn: 'asc' }, { startedOn: 'asc' }],
+      include: {
+        tranches: { orderBy: { fromInstallment: 'asc' } },
+        payments: { orderBy: { paidOn: 'asc' } },
+      },
     });
 
     return linhas.map((c) => this.comAsContas(c, hoje));
   }
 
   async verCredito(actor: Actor, id: string, hoje: Date = new Date()) {
-    const c = await prisma.credit.findFirst({ where: { id, userId: actor.id } });
+    const c = await prisma.credit.findFirst({
+      where: { id, userId: actor.id },
+      include: {
+        tranches: { orderBy: { fromInstallment: 'asc' } },
+        payments: { orderBy: { paidOn: 'asc' } },
+      },
+    });
     if (!c) throw new AppError('Crédito não encontrado.', 404, 'CREDIT_NOT_FOUND');
 
+    const contas = this.comAsContas(c, hoje);
+
+    // O quadro de amortização só existe quando há taxa. Num empréstimo sem
+    // juros não há capital e juro a separar — há prestações — e inventar um
+    // quadro a partir de uma taxa que ninguém escreveu era pôr no ecrã
+    // números que o contrato não tem.
+    const comTaxa = contas.tan !== null && contas.tramos.length === 0;
     const base = {
-      capital: Number(c.principal),
-      tan: Number(c.tan),
-      prestacoes: c.installments,
-      inicio: c.startedOn,
+      capital: contas.capital, tan: contas.tan ?? 0,
+      prestacoes: c.installments, inicio: c.startedOn,
     };
 
     return {
-      ...this.comAsContas(c, hoje),
-      /** O quadro completo, prestação a prestação. */
-      quadro: quadroDeAmortizacao(base),
-      /** Ano a ano: quanto se pagou e quanto disso foi juro. */
-      porAno: jurosPorAno(base),
+      ...contas,
+      quadro: comTaxa ? quadroDeAmortizacao(base) : [],
+      /** O plano, prestação a prestação. É o que substitui o quadro. */
+      plano: contas.tramos.length > 0 || contas.prestacaoDoContrato !== null
+        ? planoDoCredito({
+          capital: contas.capital,
+          totalAPagar: contas.totalAPagar,
+          prestacoes: c.installments,
+          inicio: c.startedOn,
+          tramos: contas.tramos.length > 0
+            ? contas.tramos
+            : [{ dePrestacao: 1, valor: contas.prestacaoDoContrato ?? 0 }],
+        })
+        : [],
+      pagamentos: c.payments.map((p) => ({
+        id: p.id, quando: p.paidOn, valor: Number(p.amount), notas: p.notes,
+      })),
     };
   }
 
@@ -545,7 +587,33 @@ class PersonalService {
   }
 
   async criarCredito(actor: Actor, entrada: EntradaDeCredito) {
-    return prisma.credit.create({ data: this.dadosDoCredito(actor, entrada) });
+    return prisma.$transaction(async (tx) => {
+      const credito = await tx.credit.create({ data: this.dadosDoCredito(actor, entrada) });
+      await this.gravarTramos(tx, credito.id, entrada.tramos ?? []);
+      return credito;
+    });
+  }
+
+  /**
+   * Os tramos são substituídos por inteiro, nunca remendados.
+   *
+   * Remendar obrigava a saber quais mudaram, quais desapareceram e quais são
+   * novos — e um tramo esquecido deixa um buraco no plano sem nada no ecrã a
+   * dizê-lo. Apagar e reescrever é mais lento e não tem como ficar a meio.
+   */
+  private async gravarTramos(
+    tx: { creditTranche: { deleteMany: Function; createMany: Function } },
+    creditId: string,
+    tramos: { dePrestacao: number; valor: number }[],
+  ) {
+    await tx.creditTranche.deleteMany({ where: { creditId } });
+    const limpos = tramosOrdenados(tramos as Tramo[]);
+    if (limpos.length === 0) return;
+    await tx.creditTranche.createMany({
+      data: limpos.map((t) => ({
+        creditId, fromInstallment: t.dePrestacao, amount: t.valor,
+      })),
+    });
   }
 
   async actualizarCredito(actor: Actor, id: string, entrada: EntradaDeCredito) {
@@ -555,7 +623,67 @@ class PersonalService {
     if (!existe) throw new AppError('Crédito não encontrado.', 404, 'CREDIT_NOT_FOUND');
 
     const { userId, ...dados } = this.dadosDoCredito(actor, entrada);
-    return prisma.credit.update({ where: { id }, data: dados });
+    return prisma.$transaction(async (tx) => {
+      const credito = await tx.credit.update({ where: { id }, data: dados });
+      if (entrada.tramos !== undefined) {
+        await this.gravarTramos(tx, id, entrada.tramos);
+      }
+      return credito;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────── pagamentos ──
+
+  /**
+   * Regista uma prestação paga.
+   *
+   * É daqui que sai a barra de percentagem, a reta acumulada e o atraso. Era
+   * tudo contado pelos meses decorridos, o que assume que se pagou sempre a
+   * horas — e um dos créditos dele tem uma prestação em atraso que assim
+   * aparecia como se estivesse em dia.
+   */
+  async registarPagamento(actor: Actor, creditoId: string, e: EntradaDePagamento) {
+    await this.creditoOuErro(actor, creditoId);
+    const valor = Math.abs(dinheiro(e.amount, 'pagamento'));
+    if (valor === 0) {
+      throw new AppError('O pagamento não pode ser zero.', 400, 'AMOUNT_REQUIRED');
+    }
+    return prisma.creditPayment.create({
+      data: {
+        creditId: creditoId,
+        paidOn: e.paidOn,
+        amount: valor,
+        notes: texto(e.notes, 300),
+      },
+    });
+  }
+
+  async apagarPagamento(actor: Actor, creditoId: string, pagamentoId: string) {
+    await this.creditoOuErro(actor, creditoId);
+    const p = await prisma.creditPayment.findFirst({
+      where: { id: pagamentoId, creditId: creditoId }, select: { id: true },
+    });
+    if (!p) throw new AppError('Pagamento não encontrado.', 404, 'PAYMENT_NOT_FOUND');
+    await prisma.creditPayment.delete({ where: { id: pagamentoId } });
+  }
+
+  async pagamentos(actor: Actor, creditoId: string) {
+    await this.creditoOuErro(actor, creditoId);
+    const linhas = await prisma.creditPayment.findMany({
+      where: { creditId: creditoId },
+      orderBy: [{ paidOn: 'desc' }],
+    });
+    return linhas.map((p) => ({
+      id: p.id, quando: p.paidOn, valor: Number(p.amount), notas: p.notes,
+    }));
+  }
+
+  private async creditoOuErro(actor: Actor, id: string) {
+    const c = await prisma.credit.findFirst({
+      where: { id, userId: actor.id }, select: { id: true },
+    });
+    if (!c) throw new AppError('Crédito não encontrado.', 404, 'CREDIT_NOT_FOUND');
+    return c;
   }
 
   async apagarCredito(actor: Actor, id: string) {
@@ -578,7 +706,11 @@ class PersonalService {
       startedOn: e.startedOn,
       installments: Math.max(1, Math.floor(e.installments)),
       monthlyPayment: numeroOuNulo(e.monthlyPayment),
-      tan: numeroOuNulo(e.tan) ?? 0,
+      // NUNCA mais `?? 0`: um zero afirmava que o crédito não tem juros, e
+      // há créditos dele que simplesmente não têm taxa escrita. Nulo é
+      // «não preenchi», que é a verdade.
+      tan: numeroOuNulo(e.tan),
+      totalToPay: numeroOuNulo(e.totalToPay),
       taeg: numeroOuNulo(e.taeg),
       mtic: numeroOuNulo(e.mtic),
       notes: texto(e.notes, 1000),
@@ -586,54 +718,112 @@ class PersonalService {
     };
   }
 
-  /** O que a base guardou, mais tudo o que se calcula a partir disso. */
+  /**
+   * O que a base guardou, mais tudo o que se calcula a partir disso.
+   *
+   * ─── DOIS CAMINHOS, E O CRÉDITO ESCOLHE ─────────────────────────────────
+   *
+   * COM TRAMOS  → o plano manda. As prestações são as que ele escreveu, e o
+   *               juro é a diferença entre o que se devolve e o que se
+   *               pediu. Serve os empréstimos que não são de bancos, que às
+   *               vezes nem juros têm.
+   *
+   * SEM TRAMOS  → a TAN manda, e o quadro de amortização calcula-se como
+   *               sempre. É `creditos.ts`, que já estava testado e não se
+   *               toca.
+   *
+   * O ESTADO vem dos pagamentos registados nos dois casos. É a diferença que
+   * faz um crédito em atraso aparecer como em atraso em vez de aparecer em
+   * dia só porque os meses passaram.
+   */
   private comAsContas(c: {
     id: string; name: string; lender: string | null;
     principal: unknown; startedOn: Date; installments: number;
     monthlyPayment: unknown; tan: unknown; taeg: unknown; mtic: unknown;
+    totalToPay: unknown;
     notes: string | null; closedOn: Date | null;
+    tranches?: { fromInstallment: number; amount: unknown }[];
+    payments?: { paidOn: Date; amount: unknown }[];
   }, hoje: Date) {
-    const base = {
-      capital: Number(c.principal),
-      tan: Number(c.tan),
+    const capital = Number(c.principal);
+    const doContrato = c.monthlyPayment === null ? null : Number(c.monthlyPayment);
+    const tanEscrita = c.tan === null || c.tan === undefined ? null : Number(c.tan);
+    const totalAPagar = c.totalToPay === null || c.totalToPay === undefined
+      ? null : Number(c.totalToPay);
+
+    const tramos: Tramo[] = (c.tranches ?? []).map((t) => ({
+      dePrestacao: t.fromInstallment, valor: Number(t.amount),
+    }));
+
+    const pagamentos = (c.payments ?? []).map((p) => ({
+      quando: p.paidOn, valor: Number(p.amount),
+    }));
+
+    const porPlano: CreditoPorPlano = {
+      capital,
+      totalAPagar,
       prestacoes: c.installments,
       inicio: c.startedOn,
+      // Sem tramos escritos, a prestação do contrato serve de tramo único —
+      // assim um crédito antigo continua a ter plano e barra sem ele ter de
+      // voltar lá para escrever o que já lá estava.
+      tramos: tramos.length > 0
+        ? tramos
+        : (doContrato ? [{ dePrestacao: 1, valor: doContrato }] : []),
     };
 
-    const estado = estadoDoCredito(base, hoje);
-    const doContrato = c.monthlyPayment === null ? null : Number(c.monthlyPayment);
+    const temPlano = porPlano.tramos.length > 0;
+    const estadoPagos = estadoPorPagamentos(porPlano, pagamentos, hoje);
 
-    // A prestação que vale para as somas: a do contrato quando existe, senão
-    // a calculada. A do contrato é a que sai da conta de facto.
+    // ── O caminho da taxa, só quando há taxa e não há plano próprio ───────
+    const base = { capital, tan: tanEscrita ?? 0, prestacoes: c.installments, inicio: c.startedOn };
+    const porTaxa = tanEscrita !== null && tramos.length === 0;
+    const estadoCalculado = porTaxa ? estadoDoCredito(base, hoje) : null;
+
     const prestacaoEmVigor = doContrato
-      ?? estado.proximoPagamento?.prestacao
-      ?? 0;
+      ?? (temPlano ? (planoDoCredito(porPlano)[0]?.valor ?? 0) : 0);
 
     return {
       id: c.id,
       nome: c.name,
       credor: c.lender,
-      capital: base.capital,
+      capital,
       inicio: c.startedOn,
       prestacoes: c.installments,
       prestacaoDoContrato: doContrato,
       prestacaoEmVigor,
-      tan: base.tan,
+
+      /** Nulo quer dizer «não preenchi», e nunca «sem juros». */
+      tan: tanEscrita,
       taeg: c.taeg === null ? null : Number(c.taeg),
       mtic: c.mtic === null ? null : Number(c.mtic),
+      totalAPagar,
+
+      tramos: tramosOrdenados(tramos),
+      /** Quanto o plano manda pagar ao todo. */
+      totalDoPlano: temPlano ? totalDoPlano(porPlano) : null,
+      /** O que se devolve menos o que se pediu. Nulo sem total escrito. */
+      juroTotal: juroTotal(porPlano),
+      custo: custoEmPercentagem(porPlano),
+
       notas: c.notes,
-      liquidado: c.closedOn !== null,
+      liquidado: c.closedOn !== null || estadoPagos.liquidado,
       liquidadoEm: c.closedOn,
-      estado,
-      porAno: jurosPorAno(base),
-      /**
-       * A prestação do contrato bate certo com as contas?
-       *
-       * `null` quando ele não a escreveu. Quando escreveu e não bate, a tela
-       * avisa: há um engano a copiar o contrato, e o quadro inteiro está
-       * errado sem nada no ecrã a denunciá-lo.
-       */
-      conferencia: doContrato === null ? null : prestacaoBateCerto(base, doContrato),
+
+      /** O estado real, pelos pagamentos registados. É o que a barra mostra. */
+      pago: estadoPagos,
+      /** Quantos pagamentos estão registados. Zero avisa a tela. */
+      pagamentosRegistados: pagamentos.length,
+
+      /** Previsto contra real, mês a mês. É o gráfico da reta acumulada. */
+      acumulado: temPlano ? acumuladoPorMes(porPlano, pagamentos, hoje) : [],
+
+      /** Só quando há taxa: o quadro de amortização de sempre. */
+      estado: estadoCalculado,
+      porAno: porTaxa ? jurosPorAno(base) : [],
+      conferencia: porTaxa && doContrato !== null
+        ? prestacaoBateCerto(base, doContrato)
+        : null,
     };
   }
 }

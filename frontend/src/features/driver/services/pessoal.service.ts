@@ -132,6 +132,40 @@ export interface AnoDeJuros {
   percentagemEmJuros: number;
 }
 
+export interface Tramo {
+  /** A partir de que prestação este valor vale. 1 é a primeira. */
+  dePrestacao: number;
+  valor: number;
+}
+
+/** O estado REAL, contado pelos pagamentos registados. É o que a barra mostra. */
+export interface EstadoPorPagamentos {
+  pago: number;
+  porPagar: number;
+  percentagem: number;
+  prestacoesPagas: number;
+  prestacoesDevidas: number;
+  /** Quantas estão em atraso. É a razão de os pagamentos serem registados. */
+  emAtraso: number;
+  valorEmAtraso: number;
+  ultimoPagamento: string | null;
+  liquidado: boolean;
+}
+
+export interface PontoAcumulado {
+  mes: string;
+  previsto: number;
+  /** Nulo depois de hoje: a linha acaba onde o tempo acabou. */
+  pago: number | null;
+}
+
+export interface Pagamento {
+  id: string;
+  quando: string;
+  valor: number;
+  notas: string | null;
+}
+
 export interface Credito {
   id: string;
   nome: string;
@@ -141,13 +175,24 @@ export interface Credito {
   prestacoes: number;
   prestacaoDoContrato: number | null;
   prestacaoEmVigor: number;
-  tan: number;
+  /** Nulo quer dizer «não preenchi», e NUNCA «sem juros». */
+  tan: number | null;
   taeg: number | null;
   mtic: number | null;
+  /** O que se devolve ao todo. A alternativa à taxa. */
+  totalAPagar: number | null;
+  tramos: Tramo[];
+  totalDoPlano: number | null;
+  juroTotal: number | null;
+  custo: { total: number; porAno: number } | null;
+  pago: EstadoPorPagamentos;
+  pagamentosRegistados: number;
+  acumulado: PontoAcumulado[];
   notas: string | null;
   liquidado: boolean;
   liquidadoEm: string | null;
-  estado: EstadoDoCredito;
+  /** Só existe quando há TAN. Nulo nos créditos por plano. */
+  estado: EstadoDoCredito | null;
   porAno: AnoDeJuros[];
   /**
    * A prestação do contrato bate certo com as contas?
@@ -182,6 +227,10 @@ export interface CorpoDeCredito {
   mtic?: string | number | null;
   notes?: string | null;
   closedOn?: string | null;
+  /** O que se devolve ao todo. Vazio = não sei. */
+  totalToPay?: string | number | null;
+  /** «A partir da N.ª prestação, passa a ser X.» */
+  tramos?: { dePrestacao: number | string; valor: number | string }[];
 }
 
 export interface CorpoDaDespesa {
@@ -271,6 +320,15 @@ export const pessoalService = {
 
   actualizarCredito: (id: string, corpo: CorpoDeCredito) =>
     apiClient.put<Credito>(`/pessoal/creditos/${id}`, semVazios(corpo, ['closedOn'])),
+
+  pagamentosDoCredito: (id: string) =>
+    apiClient.get<{ pagamentos: Pagamento[] }>(`/pessoal/creditos/${id}/pagamentos`),
+
+  registarPagamento: (id: string, corpo: { paidOn: string; amount: string | number; notes?: string | null }) =>
+    apiClient.post<{ pagamento: Pagamento }>(`/pessoal/creditos/${id}/pagamentos`, corpo),
+
+  apagarPagamento: (id: string, pagamentoId: string) =>
+    apiClient.delete<void>(`/pessoal/creditos/${id}/pagamentos/${pagamentoId}`),
 
   apagarCredito: (id: string) =>
     apiClient.delete<void>(`/pessoal/creditos/${id}`),

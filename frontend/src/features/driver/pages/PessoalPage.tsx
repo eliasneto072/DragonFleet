@@ -25,7 +25,8 @@
 
 import { Navigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Wallet, LineChart, Tags, Landmark } from 'lucide-react';
+import { ImportarExtratos } from '@/app/components/shared/importar-extratos';
+import { Wallet, LineChart, Tags, Upload, Landmark } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { PessoalTrading } from '@/app/components/driver/pessoal-trading';
 import { PessoalDespesas } from '@/app/components/driver/pessoal-despesas';
@@ -68,6 +69,13 @@ export default function PessoalPage() {
           {/* As categorias no fim: arrumam-se uma vez por mês, e vão ser
               muitas. Em cima da lista de despesas empurravam para fora do
               ecrã aquilo a que se vem. */}
+          {/* A importação a seguir aos créditos: é o que traz as despesas
+              todas de uma vez, e quem a usa vem cá de propósito uma vez por
+              mês — não é trabalho de todos os dias. */}
+          <TabsTrigger value="importar" className="gap-1.5">
+            <Upload className="h-4 w-4" />
+            Importar
+          </TabsTrigger>
           <TabsTrigger value="categorias" className="gap-1.5">
             <Tags className="h-4 w-4" />
             Categorias
@@ -82,6 +90,9 @@ export default function PessoalPage() {
         </TabsContent>
         <TabsContent value="creditos" className="mt-6">
           <PessoalCreditos />
+        </TabsContent>
+        <TabsContent value="importar" className="mt-6">
+          <ImportarExtratos ambito="PESSOAL" />
         </TabsContent>
         <TabsContent value="categorias" className="mt-6">
           <PessoalCategorias />

@@ -55,6 +55,12 @@ export function personalRouter(): Router {
   router.put('/creditos/:id', c.actualizarCredito);
   router.delete('/creditos/:id', c.apagarCredito);
 
+  // Os pagamentos de um crédito. São eles que dão a barra de percentagem, a
+  // reta acumulada e o atraso — ver `plano.ts`.
+  router.get('/creditos/:id/pagamentos', c.pagamentosDoCredito);
+  router.post('/creditos/:id/pagamentos', c.registarPagamento);
+  router.delete('/creditos/:id/pagamentos/:pagamentoId', c.apagarPagamento);
+
   // Despesas
   router.get('/despesas', c.listarDespesas);
   router.get('/despesas/resumo', c.resumoDeDespesas);
