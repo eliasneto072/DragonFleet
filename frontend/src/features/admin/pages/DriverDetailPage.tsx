@@ -432,12 +432,15 @@ export function DriverDetailPage() {
                   </p>
                 </div>
 
-                {/* Breakdown */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                  <div className="rounded-lg border p-3">
-                    <p className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" />Ganhos</p>
-                    <p className="font-semibold mt-1">{eur(balance.totalEarnings)}</p>
-                  </div>
+                {/* Breakdown.
+                    Os GANHOS ficam separados dos outros quatro de propósito.
+                    Em linha com Créditos e Débitos, lêem-se como mais uma
+                    parcela do saldo — e não são: não entram na soma. Quem
+                    confirmasse um ganho e viesse aqui à procura dele ficava
+                    sem perceber se o sistema estava partido. Ver o comentário
+                    em `balance.service.ts`: o dinheiro tem uma porta só, que
+                    é o fecho semanal. */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-lg border p-3">
                     <p className="text-green-600 flex items-center gap-1"><Plus className="h-3.5 w-3.5" />Créditos</p>
                     <p className="font-semibold mt-1">{eur(balance.totalCredits)}</p>
@@ -454,6 +457,26 @@ export function DriverDetailPage() {
                     <p className="text-amber-600 flex items-center gap-1"><Clock className="h-3.5 w-3.5" />Reservado</p>
                     <p className="font-semibold mt-1">{eur(balance.pendingWithdrawals)}</p>
                   </div>
+                </div>
+
+                {/* ── Os ganhos declarados, fora da conta ─────────────────
+                    Separado e explicado. É o que o motorista diz ter feito na
+                    Uber e na Bolt; o que entra no saldo é o que a frota lança
+                    no fecho da semana. Se os dois creditassem, o mesmo dinheiro
+                    entrava por dois caminhos e a semana era paga a dobrar. */}
+                <div className="rounded-lg border border-dashed p-3 text-sm">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <p className="text-muted-foreground flex items-center gap-1">
+                      <TrendingUp className="h-3.5 w-3.5" />Ganhos declarados
+                    </p>
+                    <p className="font-semibold">{eur(balance.totalEarnings)}</p>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    <strong className="font-medium text-foreground">Não entra no saldo acima.</strong>{' '}
+                    É o que ele comunicou ter feito nas plataformas. O dinheiro entra
+                    quando fechar a semana — é o fecho que cria o movimento no extrato.
+                    Confirmar um lançamento serve para conferir, não para creditar.
+                  </p>
                 </div>
 
                 {/* O que está aplicado já saiu do disponível mas continua a

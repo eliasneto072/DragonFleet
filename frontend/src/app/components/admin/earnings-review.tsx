@@ -164,7 +164,7 @@ export function EarningsReview() {
       invalidateAfterEarning(queryClient);
       toast.success(
         vars.status === 'APPROVED'
-          ? 'Confirmado. Inclua o valor ao fechar a semana.'
+          ? 'Confirmado — não creditou nada. Inclua o valor ao fechar a semana.'
           : 'Recusado. O motorista foi notificado.',
       );
       setRejectTarget(null);

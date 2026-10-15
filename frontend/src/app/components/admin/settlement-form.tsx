@@ -284,6 +284,30 @@ export function SettlementForm({
   const reportedFor = (platform: string) =>
     reported.find((r) => r.platform === platform)?.total ?? 0;
 
+  /**
+   * O que a motorista comunicou e que não é Uber nem Bolt.
+   *
+   * ─── PORQUE É QUE ESTE TEM BOTÃO E OS OUTROS DOIS NÃO ───────────────────
+   *
+   * Porque a Uber e a Bolt têm uma fonte melhor: o relatório da plataforma. O
+   * que ela comunica serve aí para conferir — se não bater certo com o
+   * relatório, é o relatório que manda.
+   *
+   * Nas outras receitas não há relatório nenhum. O que ela comunicou é a única
+   * fonte que existe, e escrevê-lo à mão era copiar um número de um aviso para
+   * um campo que está a dois palmos dele.
+   *
+   * Botão e não automático: o dinheiro continua a entrar por uma porta só, que
+   * é este fecho. Um valor que se escrevesse sozinho fazia da declaração dela
+   * um pagamento por omissão — bastava não reparar numa semana.
+   */
+  const reportedOutras = reported
+    .filter((r) => r.platform !== 'UBER' && r.platform !== 'BOLT')
+    .reduce((s, r) => s + r.total, 0);
+
+  /** Já lá está? Então o botão não tem nada a fazer. */
+  const outrasJaUsado = Number(amounts.otherRevenue || 0) === reportedOutras;
+
   // Sobreposição, verificada ao escolher a semana.
   //
   // O servidor recusa de qualquer forma — é ele que garante. Mas só o fazia ao
@@ -621,6 +645,26 @@ export function SettlementForm({
               <MoneyField
                 id="otherRevenue" label="Outras receitas"
                 value={amounts.otherRevenue} onChange={setAmount('otherRevenue')}
+                hint={
+                  reportedOutras > 0
+                    ? (
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span>O motorista comunicou {formatCurrency(reportedOutras)}</span>
+                        {outrasJaUsado
+                          ? <span className="text-foreground">· já usado</span>
+                          : (
+                            <Button
+                              type="button" variant="outline" size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => setAmount('otherRevenue')(String(reportedOutras))}
+                            >
+                              Usar
+                            </Button>
+                          )}
+                      </span>
+                    )
+                    : undefined
+                }
               />
 
               {reported.length > 0 && (
@@ -637,7 +681,8 @@ export function SettlementForm({
                         em {platformLabel(r.platform)}
                       </span>
                     ))}
-                    . Serve de conferência — esses lançamentos não creditam nada.
+                    . Serve de conferência: o que ele comunica não credita nada por
+                    si — credita o que ficar escrito nos campos acima.
                   </p>
                 </div>
               )}

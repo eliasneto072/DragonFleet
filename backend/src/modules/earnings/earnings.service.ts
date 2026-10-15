@@ -203,8 +203,12 @@ export class EarningsService {
       const when = earning.date.toISOString().slice(0, 10).split('-').reverse().join('/');
       await avisar(earning.userId, {
         titulo: approved ? 'Lançamento confirmado' : 'Lançamento recusado',
+        // Dito por extenso porque é a dúvida de quem recebe: "confirmado"
+        // lê-se como "pago", e não é. O saldo só mexe no fecho da semana.
         mensagem: approved
-          ? `${eur(earning.amount)} de ${when} confirmados. Entram no fecho da semana.`
+          ? `${eur(earning.amount)} de ${when} confirmados.\n\n`
+            + 'Isto não entra já no teu saldo: entra no fecho desta semana, e é '
+            + 'aí que vais ver o movimento no extrato.'
           : `${eur(earning.amount)} de ${when} recusados. Motivo: ${notes}`,
       });
     } catch (notifErr) {
