@@ -24,6 +24,7 @@ import {
   entrada, saida, ajuste, emDinheiro, emQuantidade, stockBaixo, valorDoStock,
   ErroDeStock, type Estado,
 } from './custeio';
+import { avisarGestao } from '../../shared/services/avisos';
 
 export interface Actor { id: string; role?: UserRole }
 
@@ -332,7 +333,7 @@ export const materialsService = {
       throw new AppError('A data não pode ser no futuro.', 400, 'FUTURE_DATE');
     }
 
-    return prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       const m = await tx.material.findUnique({ where: { id: dados.materialId } });
       if (!m) throw new AppError('Material não encontrado', 404, 'NOT_FOUND');
 
@@ -407,8 +408,35 @@ export const materialsService = {
       return {
         move: movimentoParaPublico(movimento),
         material: materialParaPublico({ ...m, qty: r.estado.qty, avgCost: r.estado.avgCost }),
+        // Para o aviso lá fora: só interessa quando ATRAVESSOU o mínimo agora.
+        passouAbaixoDoMinimo:
+          !stockBaixo(num(m.qty), m.minQty === null ? null : num(m.minQty))
+          && stockBaixo(r.estado.qty, m.minQty === null ? null : num(m.minQty)),
+        nomeDoMaterial: m.name,
+        quantidadeAgora: r.estado.qty,
       };
     });
+
+    // ── O aviso à gestão ──────────────────────────────────────────────────
+    //
+    // Só no momento em que o stock ATRAVESSA o mínimo, e não de cada vez que
+    // fica abaixo. Um material em baixo sobre o qual se faz mais três saídas
+    // mandaria três emails iguais, e ao quarto ninguém os lê.
+    //
+    // Fora da transação de propósito: o movimento já está gravado, e um email
+    // não se desfaz com um rollback.
+    if (resultado.passouAbaixoDoMinimo) {
+      await avisarGestao({
+        titulo: `Stock baixo: ${resultado.nomeDoMaterial}`,
+        mensagem: `Restam ${resultado.quantidadeAgora} de "${resultado.nomeDoMaterial}", `
+          + 'no mínimo definido ou abaixo dele. Convém repor.',
+      });
+    }
+
+    return {
+      move: resultado.move,
+      material: resultado.material,
+    };
   },
 
   // ══ Os números ═══════════════════════════════════════════════════════════

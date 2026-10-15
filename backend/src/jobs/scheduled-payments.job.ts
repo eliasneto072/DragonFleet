@@ -20,6 +20,7 @@ import { prisma } from '../config/prisma';
 import { logger } from '../shared/utils/logger';
 import { AdjustmentType } from '../shared/types/enums';
 import { decidir, soDia, comoDia, type Frequencia } from '../modules/scheduled-payments/recorrencia';
+import { avisar } from '../shared/services/avisos';
 
 const eur = (n: number) =>
   new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(n || 0);
@@ -108,29 +109,23 @@ export async function runScheduledPayments(hoje = new Date()): Promise<void> {
         const total = valor * decisao.lancarEm.length;
         const quantos = decisao.lancarEm.length;
 
-        await prisma.notification.create({
-          data: {
-            userId: p.userId,
-            title: p.type === AdjustmentType.CREDIT
-              ? 'Crédito adicionado ao seu saldo'
-              : 'Débito aplicado ao seu saldo',
-            message: `${sinal}${eur(valor)} — ${p.description}`
-              + (quantos > 1 ? ` (${quantos} lançamentos em atraso)` : ''),
-          },
+        await avisar(p.userId, {
+          titulo: p.type === AdjustmentType.CREDIT
+            ? 'Crédito adicionado ao seu saldo'
+            : 'Débito aplicado ao seu saldo',
+          mensagem: `${sinal}${eur(valor)} — ${p.description}`
+            + (quantos > 1 ? ` (${quantos} lançamentos em atraso)` : ''),
         });
 
         // E o aviso a quem criou o agendamento, que foi o que ele pediu: o
         // movimento entra sozinho, mas ninguém fica sem saber que entrou.
-        await prisma.notification.create({
-          data: {
-            userId: p.createdById,
-            title: 'Pagamento agendado lançado',
-            message: `${sinal}${eur(total)} em ${p.user.name} — ${p.description}`
-              + (quantos > 1 ? ` (${quantos} lançamentos)` : '')
-              + (decisao.proximo.active && decisao.proximo.nextRunOn
-                ? ` · próximo a ${comoDia(decisao.proximo.nextRunOn)}`
-                : ' · foi o último'),
-          },
+        await avisar(p.createdById, {
+          titulo: 'Pagamento agendado lançado',
+          mensagem: `${sinal}${eur(total)} em ${p.user.name} — ${p.description}`
+            + (quantos > 1 ? ` (${quantos} lançamentos)` : '')
+            + (decisao.proximo.active && decisao.proximo.nextRunOn
+              ? ` · próximo a ${comoDia(decisao.proximo.nextRunOn)}`
+              : ' · foi o último'),
         });
       } catch (erro) {
         logger.error('[agendamentos] falhou a notificação', erro);

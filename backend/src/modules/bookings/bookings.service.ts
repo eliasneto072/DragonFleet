@@ -27,6 +27,7 @@ import {
   ehGestao, podeVer,
   type Quem, type Marcacao, type Logistica, type Perfil,
 } from './regras';
+import { avisar as avisarPessoa } from '../../shared/services/avisos';
 
 /** Quem está a pedir. A oficina só é lida para contas de mecânico. */
 export interface Actor { id: string; role?: UserRole }
@@ -151,11 +152,10 @@ function paraPublico(b: any) {
 /** Avisa, sem deixar o aviso derrubar a operação que já aconteceu. */
 async function avisar(userId: string | null | undefined, title: string, message: string) {
   if (!userId) return;
-  try {
-    await prisma.notification.create({ data: { userId, title, message } });
-  } catch (erro) {
-    logger.error('[marcações] falhou a notificação', erro);
-  }
+  // O `avisos.ts` já apanha os seus próprios erros e já escreve nos dois
+  // sítios — site e email. Este embrulho fica só pela guarda do `userId`,
+  // que aqui pode vir nulo (uma marcação sem motorista atribuído).
+  await avisarPessoa(userId, { titulo: title, mensagem: message });
 }
 
 /** A gestão toda, para avisar de um pedido novo. */

@@ -2,6 +2,8 @@
 import { AppError }     from '../../shared/errors/AppError';
 import { UserRole, TicketStatus, TicketCategory } from '../../shared/types/enums';
 import { supportRepository } from './support.repository';
+import { avisarGestao } from '../../shared/services/avisos';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -32,7 +34,17 @@ export class SupportService {
 
   /** Criar ticket — apenas drivers */
   async create(actor: Actor, data: { subject: string; category: TicketCategory; message: string }) {
-    return supportRepository.create({ ...data, userId: actor.id });
+    const ticket = await supportRepository.create({ ...data, userId: actor.id });
+
+    // Até aqui, um ticket aberto não avisava ninguém: ficava na base de dados
+    // à espera de que alguém abrisse a página do suporte. Quem escreve a pedir
+    // ajuda espera resposta, e quem não a recebe liga pelo telefone.
+    await avisarGestao({
+      titulo: `Novo pedido de suporte: ${data.subject}`,
+      mensagem: `Foi aberto um pedido de suporte.\n\n${data.message}`,
+    });
+
+    return ticket;
   }
 
   /** Atualizar status — apenas admin */
@@ -54,7 +66,24 @@ export class SupportService {
     if (isAdmin(actor.role) && ticket.status === TicketStatus.OPEN) {
       await supportRepository.updateStatus(ticketId, { status: TicketStatus.IN_PROGRESS });
     }
-    return supportRepository.addReply({ message, ticketId, authorId: actor.id });
+    const resposta = await supportRepository.addReply({ message, ticketId, authorId: actor.id });
+
+    // A resposta vai para o outro lado: se respondeu a administração, avisa-se
+    // o motorista; se foi ele, avisa-se a administração. Sem isto, qualquer um
+    // dos dois tinha de voltar à página para saber que havia novidade.
+    if (isAdmin(actor.role)) {
+      await avisar(ticket.userId, {
+        titulo: `Resposta ao seu pedido: ${ticket.subject}`,
+        mensagem: message,
+      });
+    } else {
+      await avisarGestao({
+        titulo: `Resposta num pedido de suporte: ${ticket.subject}`,
+        mensagem: `Houve uma resposta nova.\n\n${message}`,
+      });
+    }
+
+    return resposta;
   }
 }
 

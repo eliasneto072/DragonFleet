@@ -27,6 +27,7 @@ import type {
   SettlementPublic,
 } from './settlements.types';
 import { parsePage, parseSearchTerms } from '../../shared/http/pagination';
+import { avisar } from '../../shared/services/avisos';
 
 /** Limite superior para o intervalo de um fecho, como guarda contra enganos. */
 const MAX_WEEK_DAYS = 31;
@@ -469,12 +470,9 @@ export class SettlementsService {
     try {
       const from = existing.weekStart.toISOString().slice(0, 10).split('-').reverse().join('/');
       const to = existing.weekEnd.toISOString().slice(0, 10).split('-').reverse().join('/');
-      await prisma.notification.create({
-        data: {
-          userId: existing.userId,
-          title: 'Fecho semanal disponível',
-          message: `Semana de ${from} a ${to}: ${eur(existing.netToDriver)} creditados na sua conta.`,
-        },
+      await avisar(existing.userId, {
+        titulo: 'Fecho semanal disponível',
+        mensagem: `Semana de ${from} a ${to}: ${eur(existing.netToDriver)} creditados na sua conta.`,
       });
     } catch (notifErr) {
       logger.error('Erro ao notificar fecho semanal', notifErr);

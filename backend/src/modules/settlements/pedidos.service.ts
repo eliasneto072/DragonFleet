@@ -21,12 +21,12 @@
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
-import { notificationsService } from '../notifications/notifications.service';
 import {
   etiquetaDaLinha, linhaConhecida, linhasQuestionaveis, podePedir, respostaCompleta,
   MAXIMO_DE_ABERTOS_POR_FECHO,
 } from './pedidos';
 import type { PedidoExistente, ValoresDoFecho } from './pedidos';
+import { avisar, avisarGestao } from '../../shared/services/avisos';
 
 export type Actor = { id: string; role?: UserRole };
 
@@ -202,6 +202,16 @@ export class PedidosService {
         },
         include: INCLUI,
       });
+
+      // A gestão tem de saber que há uma pergunta à espera. Sem isto, o
+      // motorista pergunta e fica à espera de alguém que não sabe que ele
+      // perguntou — e ao fim de dois dias liga a perguntar pela pergunta.
+      await avisarGestao({
+        titulo: `Novo pedido de esclarecimento: ${etiquetaDaLinha(linha)}`,
+        mensagem: texto(entrada.reason, 1000)
+          ?? 'Sem motivo escrito — ver o fecho da semana.',
+      });
+
       return publico(criado);
     } catch (erro: unknown) {
       // O índice único PARCIAL da base. Duas pessoas — ou dois toques no botão
@@ -300,9 +310,9 @@ export class PedidosService {
     // A notificação é o ponto todo: sem ela, ele só sabe que foi respondido se
     // for lá ver — e quem não sabe que há resposta volta a perguntar.
     try {
-      await notificationsService.create(actor, pedido.userId, {
-        title: `Resposta sobre ${etiquetaDaLinha(pedido.line)}`,
-        message:
+      await avisar(pedido.userId, {
+        titulo: `Resposta sobre ${etiquetaDaLinha(pedido.line)}`,
+        mensagem:
           `Semana de ${dia(pedido.settlement.weekStart)} a ${dia(pedido.settlement.weekEnd)}: `
           + (answer ?? 'o extrato está anexado no detalhe da semana.'),
       });

@@ -45,6 +45,7 @@ import {
   pendingInvestorAccruals, projectEarnings, round2, round6,
   withdrawalAvailableOn, type Day, type RatePoint,
 } from './investors.math';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 // O tipo vem do cliente a sério, que leva a camada do âmbito.
@@ -878,13 +879,10 @@ export class InvestorsService {
         });
       }
 
-      await tx.notification.create({
-        data: {
-          userId: account.userId,
-          title: 'Depósito registado',
-          message: `Foram creditados ${eur(amount)} na sua conta, com data de ${fmtDay(day)}.`,
-        },
-      });
+      await avisar(account.userId, {
+        titulo: 'Depósito registado',
+        mensagem: `Foram creditados ${eur(amount)} na sua conta, com data de ${fmtDay(day)}.`,
+      }, tx);
     });
 
     if (recalcularDesde) await this.catchUp(accountId);
@@ -937,13 +935,10 @@ export class InvestorsService {
           createdBy: actor.id,
         },
       });
-      await tx.notification.create({
-        data: {
-          userId: account.userId,
-          title: 'Acerto na sua conta',
-          message: `${amount > 0 ? 'Crédito' : 'Débito'} de ${eur(Math.abs(amount))}: ${input.description.trim()}`,
-        },
-      });
+      await avisar(account.userId, {
+        titulo: 'Acerto na sua conta',
+        mensagem: `${amount > 0 ? 'Crédito' : 'Débito'} de ${eur(Math.abs(amount))}: ${input.description.trim()}`,
+      }, tx);
     });
 
     return this.balanceByAccount(accountId);
@@ -986,13 +981,10 @@ export class InvestorsService {
         update: { annualRate: new Prisma.Decimal(input.annualRate), createdBy: actor.id },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: account.userId,
-          title: 'Taxa atualizada',
-          message: `A partir de ${fmtDay(effectiveFrom)} a sua conta passa a render ${input.annualRate}% ao ano.`,
-        },
-      });
+      await avisar(account.userId, {
+        titulo: 'Taxa atualizada',
+        mensagem: `A partir de ${fmtDay(effectiveFrom)} a sua conta passa a render ${input.annualRate}% ao ano.`,
+      }, tx);
     });
 
     return this.getAccount(actor, accountId);
@@ -1065,17 +1057,14 @@ export class InvestorsService {
         },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: w.account.userId,
-          title: input.approve ? 'Resgate pago' : 'Resgate recusado',
-          message: input.approve
-            ? `O resgate de ${eur(amount)} foi processado.`
-            : `O pedido de resgate de ${eur(amount)} não foi aprovado.${
-                input.decision?.trim() ? ` Motivo: ${input.decision.trim()}` : ''
-              }`,
-        },
-      });
+      await avisar(w.account.userId, {
+        titulo: input.approve ? 'Resgate pago' : 'Resgate recusado',
+        mensagem: input.approve
+          ? `O resgate de ${eur(amount)} foi processado.`
+          : `O pedido de resgate de ${eur(amount)} não foi aprovado.${
+              input.decision?.trim() ? ` Motivo: ${input.decision.trim()}` : ''
+            }`,
+      }, tx);
 
       return toWithdrawalPublic(atualizado);
     });

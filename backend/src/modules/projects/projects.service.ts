@@ -45,6 +45,7 @@ import {
   allocate, checkSubscription, computeLiquidation, computePeriod,
   dateToMonth, monthOf, monthStart, monthsBetween, nextMonthStart, round2,
 } from './projects.math';
+import { avisarVarios } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 // O tipo vem do cliente a sério, que leva a camada do âmbito.
@@ -657,14 +658,11 @@ export class ProjectsService {
         const donos = await tx.investorAccount.findMany({
           where: { id: { in: contas } }, select: { userId: true },
         });
-        await tx.notification.createMany({
-          data: donos.map((d) => ({
-            userId: d.userId,
-            title: 'Lucro distribuído',
-            message: `O projeto "${p.name}" distribuiu o lucro de ${mesLegivel(month)}.`
-              + ' Veja a sua parte no extrato.',
-          })),
-        });
+        await avisarVarios(donos.map((d) => d.userId), {
+          titulo: 'Lucro distribuído',
+          mensagem: `O projeto "${p.name}" distribuiu o lucro de ${mesLegivel(month)}.`
+            + ' Veja a sua parte no extrato.',
+        }, tx);
       }
 
       return periodPublic(atualizado);
@@ -770,14 +768,11 @@ export class ProjectsService {
         where: { id: { in: [...new Set(shares.map((s) => s.accountId))] } },
         select: { userId: true },
       });
-      await tx.notification.createMany({
-        data: donos.map((d) => ({
-          userId: d.userId,
-          title: 'Projeto liquidado',
-          message: `O projeto "${p.name}" foi fechado e o capital voltou ao seu saldo disponível.`
-            + (input.notes?.trim() ? ` ${input.notes.trim()}` : ''),
-        })),
-      });
+      await avisarVarios(donos.map((d) => d.userId), {
+        titulo: 'Projeto liquidado',
+        mensagem: `O projeto "${p.name}" foi fechado e o capital voltou ao seu saldo disponível.`
+          + (input.notes?.trim() ? ` ${input.notes.trim()}` : ''),
+      }, tx);
 
       return toPublic(atualizado);
     });
@@ -1004,14 +999,11 @@ export class ProjectsService {
           },
           select: { userId: true },
         });
-        await tx.notification.createMany({
-          data: donos.map((d) => ({
-            userId: d.userId,
-            title: 'Financiamento concluído',
-            message: `O projeto "${projeto.name}" está totalmente financiado. `
-              + 'Acompanhe os próximos passos na página do projeto.',
-          })),
-        });
+        await avisarVarios(donos.map((d) => d.userId), {
+          titulo: 'Financiamento concluído',
+          mensagem: `O projeto "${projeto.name}" está totalmente financiado. `
+            + 'Acompanhe os próximos passos na página do projeto.',
+        }, tx);
       }
 
       return {
@@ -1062,11 +1054,16 @@ export class ProjectsService {
         where: { projectId },
         select: { account: { select: { userId: true } } },
       });
-      const users = [...new Set(shares.map((s) => s.account.userId))];
+      // O tipo está escrito porque sem o cliente do Prisma gerado a linha vem
+      // como `any`, e o `Set` devolvia `unknown[]` — que o `avisarVarios`
+      // recusa, e bem.
+      // Os tipos estão escritos porque sem o cliente do Prisma gerado a linha
+      // vem como `any`, e `new Set(any)` escolhe a versão sem argumentos —
+      // devolvendo `Set<unknown>`, que o `avisarVarios` recusa, e bem.
+      const ids: string[] = shares.map((s: { account: { userId: string } }) => s.account.userId);
+      const users: string[] = [...new Set(ids)];
       if (users.length === 0) return;
-      await prisma.notification.createMany({
-        data: users.map((userId) => ({ userId, title, message })),
-      });
+      await avisarVarios(users, { titulo: title, mensagem: message });
     } catch (err) {
       // Um aviso que falha não pode desfazer a operação que já correu.
       logger.error({ err, projectId }, 'Falha ao notificar participantes do projeto');

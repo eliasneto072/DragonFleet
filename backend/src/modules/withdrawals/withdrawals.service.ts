@@ -13,6 +13,7 @@ import { emailService }         from '../../shared/services/email.service';
 import { balanceService }       from '../balance/balance.service';
 import { settingsService }      from '../settings/settings.service';
 import { bankService }          from '../bank/bank.service';
+import { avisarGestao } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -179,7 +180,19 @@ export class WithdrawalsService {
       // e até lá o motorista ainda pode corrigir os dados da conta.
       bankAccountId: bank.id,
     };
-    return withdrawalsRepository.create(data);
+    const pedido = await withdrawalsRepository.create(data);
+
+    // ── Avisar a administração ───────────────────────────────────────────
+    //
+    // É dinheiro à espera de uma decisão humana. Até aqui, o motorista pedia e
+    // o pedido ficava na lista: quem não abrisse a página não sabia que havia
+    // alguém à espera de ser pago.
+    await avisarGestao({
+      titulo: 'Novo pedido de retirada',
+      mensagem: `Há um pedido de retirada de €${amount.toFixed(2)} à espera de decisão.`,
+    });
+
+    return pedido;
   }
 
   async updateStatus(actor: Actor, id: string, input: UpdateWithdrawalStatusInput): Promise<IWithdrawalPublic> {

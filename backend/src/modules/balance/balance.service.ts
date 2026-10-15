@@ -26,6 +26,7 @@ import { frotaObrigatoria } from '../../config/escopo';
 import { logger } from '../../shared/utils/logger';
 import { AppError } from '../../shared/errors/AppError';
 import { AdjustmentType, UserRole } from '../../shared/types/enums';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -336,12 +337,9 @@ export class BalanceService {
       try {
         const isCredit = input.type === AdjustmentType.CREDIT;
         const suffix = reasonText ? ` — ${reasonText}` : '';
-        await prisma.notification.create({
-          data: {
-            userId,
-            title: isCredit ? 'Crédito adicionado ao seu saldo' : 'Débito aplicado ao seu saldo',
-            message: `${isCredit ? '+' : '−'}€${input.amount.toFixed(2)}${suffix}`,
-          },
+        await avisar(userId, {
+          titulo: isCredit ? 'Crédito adicionado ao seu saldo' : 'Débito aplicado ao seu saldo',
+          mensagem: `${isCredit ? '+' : '−'}€${input.amount.toFixed(2)}${suffix}`,
         });
       } catch (notifErr) {
         logger.error('Erro ao criar notificação de ajuste de saldo', notifErr);

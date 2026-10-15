@@ -29,6 +29,9 @@ import { prisma } from '../../config/prisma';
 import { comoSistema } from '../../config/escopo';
 import { AppError } from '../../shared/errors/AppError';
 import { logger } from '../../shared/utils/logger';
+import { idDaFrotaDaCasa } from '../../config/arranque';
+import { comFrota } from '../../config/escopo';
+import { avisarGestao } from '../../shared/services/avisos';
 
 export type TipoDeContacto = 'MOTORISTA' | 'GESTOR';
 export type EstadoDoContacto = 'NOVO' | 'FALADO' | 'GANHO' | 'PERDIDO';
@@ -117,6 +120,35 @@ export class LeadsService {
     }));
 
     logger.info(`[leads] contacto novo (${entrada.tipo})`);
+
+    // ── Avisar a administração ───────────────────────────────────────────
+    //
+    // Um pedido de contacto que ninguém vê é um cliente perdido. Até aqui,
+    // ficava na base de dados à espera de que alguém abrisse o painel.
+    //
+    // A frota é a DA CASA, escolhida à mão e não pelo escopo: isto nasce do
+    // formulário público, que corre em `comoSistema()` — ou seja, a ver todas
+    // as frotas. Chamar `avisarGestao` aí mandava o contacto aos admins de
+    // todos os clientes da plataforma. O lead é da casa; vai à casa.
+    try {
+      const casa = await idDaFrotaDaCasa();
+      if (casa) {
+        await comFrota(casa, () => avisarGestao({
+          titulo: `Novo contacto do site (${entrada.tipo})`,
+          mensagem: [
+            `Nome: ${nome}`,
+            telefone ? `Telefone: ${telefone}` : null,
+            entrada.email?.trim() ? `Email: ${entrada.email.trim()}` : null,
+            entrada.mensagem?.trim() ? `\n${entrada.mensagem.trim()}` : null,
+          ].filter(Boolean).join('\n'),
+        }));
+      }
+    } catch (erro) {
+      // Um aviso que falha não pode fazer o formulário público dar erro a
+      // quem o preencheu — o contacto já está guardado.
+      logger.error('[leads] falhou o aviso à administração', erro);
+    }
+
     return { ok: true };
   }
 

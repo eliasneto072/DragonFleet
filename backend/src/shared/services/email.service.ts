@@ -162,7 +162,21 @@ export const emailService = {
     ));
   },
 
-  async sendNotification(to: string, driverName: string, title: string, message: string) {
+  /**
+   * O aviso genérico. `destino` é para onde o botão do email leva.
+   *
+   * Tem valor por omissão porque durante muito tempo isto só servia motoristas
+   * — e era esse o problema: a administração não recebia nada. Quem avisa a
+   * gestão passa `/app/admin/notifications`, senão o admin clica no email e
+   * aterra no portal do motorista. Ver `avisos.ts`.
+   */
+  async sendNotification(
+    to: string,
+    driverName: string,
+    title: string,
+    message: string,
+    destino: string = '/app/driver/notifications',
+  ) {
     // O título vai escapado e o corpo passa pelo formatador partilhado: um
     // aviso escrito em parágrafos tem de chegar em parágrafos, e um "<" no
     // meio de uma frase não pode comer o resto do email.
@@ -172,7 +186,7 @@ export const emailService = {
          <h3 style="margin:0 0 10px;color:#1D1D1D">${escaparHtml(title)}</h3>
          ${mensagemParaHtml(message)}
        </div>`,
-      { href: `${APP_URL}/app/driver/notifications`, label: 'Ver Notificações' },
+      { href: `${APP_URL}${destino}`, label: 'Ver Notificações' },
     ));
   },
 };

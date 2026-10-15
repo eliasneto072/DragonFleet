@@ -44,6 +44,7 @@ import {
 } from './investments.math';
 import { ranksService } from '../ranks/ranks.service';
 import { tierIndex, type Tier } from '../ranks/ranks.math';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 // O tipo vem do cliente a sério, que leva a camada do âmbito.
@@ -570,13 +571,10 @@ export class InvestmentsService {
         },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: actor.id,
-          title: 'Aplicação em investimento',
-          message: `${eur(amount)} aplicados em "${plan.name}". Saíram do saldo principal e começam a render hoje.`,
-        },
-      });
+      await avisar(actor.id, {
+        titulo: 'Aplicação em investimento',
+        mensagem: `${eur(amount)} aplicados em "${plan.name}". Saíram do saldo principal e começam a render hoje.`,
+      }, tx);
 
       return created.id;
     });
@@ -754,15 +752,12 @@ export class InvestmentsService {
       const r = await close(tx, inv, accrued, today);
 
       const plan = await tx.investmentPlan.findUnique({ where: { id: inv.planId }, select: { name: true } });
-      await tx.notification.create({
-        data: {
-          userId: inv.userId,
-          title: 'Investimento resgatado',
-          message: r.reason === 'EARLY'
-            ? `"${plan?.name}": ${eur(r.payout)} voltaram ao saldo principal (ganhos ${eur(r.gains)}, penalização por resgate antecipado ${eur(r.penalty)}).`
-            : `"${plan?.name}": ${eur(r.payout)} voltaram ao saldo principal (ganhos ${eur(r.gains)}).`,
-        },
-      });
+      await avisar(inv.userId, {
+        titulo: 'Investimento resgatado',
+        mensagem: r.reason === 'EARLY'
+          ? `"${plan?.name}": ${eur(r.payout)} voltaram ao saldo principal (ganhos ${eur(r.gains)}, penalização por resgate antecipado ${eur(r.penalty)}).`
+          : `"${plan?.name}": ${eur(r.payout)} voltaram ao saldo principal (ganhos ${eur(r.gains)}).`,
+      }, tx);
       return { userId: inv.userId, payout: r.payout };
     });
 
@@ -801,13 +796,10 @@ export class InvestmentsService {
           if (inv.planType === InvestmentPlanType.FIXED && maturity && today >= maturity) {
             const r = await close(tx, inv, accrued, today);
             const plan = await tx.investmentPlan.findUnique({ where: { id: inv.planId }, select: { name: true } });
-            await tx.notification.create({
-              data: {
-                userId: inv.userId,
-                title: 'Investimento terminado',
-                message: `"${plan?.name}" chegou ao fim do prazo (${fmtDay(maturity)}): ${eur(r.payout)} voltaram ao saldo principal, com ${eur(r.gains)} de ganhos.`,
-              },
-            });
+            await avisar(inv.userId, {
+              titulo: 'Investimento terminado',
+              mensagem: `"${plan?.name}" chegou ao fim do prazo (${fmtDay(maturity)}): ${eur(r.payout)} voltaram ao saldo principal, com ${eur(r.gains)} de ganhos.`,
+            }, tx);
             return true;
           }
           return false;

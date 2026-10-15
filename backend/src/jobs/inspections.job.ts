@@ -32,6 +32,7 @@
 import { prisma } from '../config/prisma';
 import { logger } from '../shared/utils/logger';
 import { UserRole } from '../shared/types/enums';
+import { avisar } from '../shared/services/avisos';
 
 /** Os marcos, em dias. Do mais longe para o mais perto. */
 const MARCOS = [60, 30, 7, 0];
@@ -95,7 +96,7 @@ export async function runInspectionsCheck(hoje = new Date()): Promise<void> {
       // A gestão sempre, e o motorista que tem o carro — é ele que o leva.
       const destinatarios = [...gestao.map((g) => g.id), ...(c.userId ? [c.userId] : [])];
       for (const userId of destinatarios) {
-        await prisma.notification.create({ data: { userId, title: titulo, message: texto } });
+        await avisar(userId, { titulo, mensagem: texto });
         enviados += 1;
       }
     } catch (erro) {

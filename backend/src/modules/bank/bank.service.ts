@@ -44,6 +44,7 @@ import {
   type Actor, type BankAccountPublic, type ChosenAccount,
   type ReviewBankInput, type SubmitBankInput,
 } from './bank.types';
+import { avisar } from '../../shared/services/avisos';
 
 function canManage(role?: UserRole) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
@@ -368,14 +369,11 @@ export class BankService {
 
     const nome = row.label ? ` (${row.label})` : '';
     try {
-      await prisma.notification.create({
-        data: {
-          userId: existing.userId,
-          title: input.approve ? 'Dados bancários aprovados' : 'Dados bancários recusados',
-          message: input.approve
-            ? `A conta${nome} foi validada. Já pode receber retiradas nela.`
-            : `A alteração da conta${nome} foi recusada. Motivo: ${reason}`,
-        },
+      await avisar(existing.userId, {
+        titulo: input.approve ? 'Dados bancários aprovados' : 'Dados bancários recusados',
+        mensagem: input.approve
+          ? `A conta${nome} foi validada. Já pode receber retiradas nela.`
+          : `A alteração da conta${nome} foi recusada. Motivo: ${reason}`,
       });
     } catch (notifErr) {
       logger.error('Erro ao notificar revisão de dados bancários', notifErr);

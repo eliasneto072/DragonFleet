@@ -27,6 +27,7 @@ import { UserRole } from '../../shared/types/enums';
 import {
   AREAS, PADRAO_DO_PAPEL, atLeast, type Access, type Area,
 } from './permissions.catalog';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -145,14 +146,12 @@ export class PermissionsService {
       ),
     );
 
-    await prisma.notification.create({
-      data: {
-        userId,
-        title: 'Acessos atualizados',
-        message: 'A administração alterou o que pode ver e fazer no painel. '
-          + 'Se algum menu desapareceu, é por isso.',
-      },
-    }).catch(() => { /* um aviso que falha não desfaz a alteração */ });
+    // O `avisos.ts` nunca atira: um aviso que falha não desfaz a alteração.
+    await avisar(userId, {
+      titulo: 'Acessos atualizados',
+      mensagem: 'A administração alterou o que pode ver e fazer no painel. '
+        + 'Se algum menu desapareceu, é por isso.',
+    });
 
     return this.get(actor, userId);
   }

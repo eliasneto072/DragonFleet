@@ -29,6 +29,7 @@ import {
   ListEarningsFilter,
 } from './earnings.service.types';
 import { IEarningPublic, ReportedByPlatform } from './earnings.types';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = {
   id: string;
@@ -200,14 +201,11 @@ export class EarningsService {
     try {
       const approved = input.status === EarningStatus.APPROVED;
       const when = earning.date.toISOString().slice(0, 10).split('-').reverse().join('/');
-      await prisma.notification.create({
-        data: {
-          userId: earning.userId,
-          title: approved ? 'Lançamento confirmado' : 'Lançamento recusado',
-          message: approved
-            ? `${eur(earning.amount)} de ${when} confirmados. Entram no fecho da semana.`
-            : `${eur(earning.amount)} de ${when} recusados. Motivo: ${notes}`,
-        },
+      await avisar(earning.userId, {
+        titulo: approved ? 'Lançamento confirmado' : 'Lançamento recusado',
+        mensagem: approved
+          ? `${eur(earning.amount)} de ${when} confirmados. Entram no fecho da semana.`
+          : `${eur(earning.amount)} de ${when} recusados. Motivo: ${notes}`,
       });
     } catch (notifErr) {
       logger.error('Erro ao notificar revisão de lançamento', notifErr);

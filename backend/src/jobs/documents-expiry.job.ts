@@ -20,6 +20,7 @@
 import { prisma } from '../config/prisma';
 import { emailService } from '../shared/services/email.service';
 import { DocumentStatus, UserStatus } from '../shared/types/enums';
+import { avisarPessoaEGestao } from '../shared/services/avisos';
 
 const WARNING_DAYS = 7;
 
@@ -52,24 +53,29 @@ function dayWindow(daysFromNow: number): { start: Date; end: Date } {
   return { start, end };
 }
 
-/** Cria notificação in-app + envia email (best-effort). */
+/**
+ * Avisa o motorista E a administração.
+ *
+ * A administração entra porque um documento caducado é problema dos dois: o
+ * motorista tem de o renovar, e é a frota que fica com um carro que não pode
+ * circular se ele não o fizer. Antes disto, só o motorista era avisado — e se
+ * ele não abrisse o email, ninguém no escritório ficava a saber.
+ *
+ * `email` e `name` já não são precisos (o `avisos.ts` vai buscá-los), mas
+ * ficam na assinatura para não mexer nos dois sítios que chamam isto.
+ */
 async function notifyDriver(
   userId: string,
-  email: string,
+  _email: string,
   name: string,
   title: string,
   message: string,
 ): Promise<void> {
-  try {
-    await prisma.notification.create({ data: { title, message, userId } });
-  } catch (err) {
-    console.error('[expiry-job] Falha ao criar notificação in-app:', err);
-  }
-  try {
-    if (email) await emailService.sendNotification(email, name, title, message);
-  } catch (err) {
-    console.error('[expiry-job] Falha ao enviar email:', err);
-  }
+  await avisarPessoaEGestao(
+    userId,
+    { titulo: title, mensagem: message },
+    { titulo: `${title} — ${name}`, mensagem: `${name}: ${message}` },
+  );
 }
 
 /** (1) Avisa motoristas cujos documentos expiram daqui a 7 dias. */

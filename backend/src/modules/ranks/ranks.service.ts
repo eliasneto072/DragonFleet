@@ -28,6 +28,7 @@ import {
   lisbonDay, progressTo, seasonOf, tierIndex, type Day, type DriverMetrics, type Season,
   type Tier, type TierRequirements,
 } from './ranks.math';
+import { avisar } from '../../shared/services/avisos';
 
 type Actor = { id: string; role?: UserRole };
 
@@ -305,16 +306,13 @@ export class RanksService {
     if (subiu || desceu) {
       const e = subiu ?? desceu!;
       try {
-        await prisma.notification.create({
-          data: {
-            userId,
-            title: subiu ? `Subiu para ${nomes.get(e.tier)}` : `Passou para ${nomes.get(e.tier)}`,
-            message: subiu
-              ? `Parabéns! As vantagens de ${nomes.get(e.tier)} já estão ativas.`
-              : floorActive(floorUntil, today) && floorTier
-                ? `As vantagens de ${nomes.get(floorTier)} continuam garantidas até ${fmtDay(floorUntil!)}.`
-                : `As metas do nível anterior deixaram de estar cumpridas.`,
-          },
+        await avisar(userId, {
+          titulo: subiu ? `Subiu para ${nomes.get(e.tier)}` : `Passou para ${nomes.get(e.tier)}`,
+          mensagem: subiu
+            ? `Parabéns! As vantagens de ${nomes.get(e.tier)} já estão ativas.`
+            : floorActive(floorUntil, today) && floorTier
+              ? `As vantagens de ${nomes.get(floorTier)} continuam garantidas até ${fmtDay(floorUntil!)}.`
+              : `As metas do nível anterior deixaram de estar cumpridas.`,
         });
       } catch (err) {
         logger.error('[ranks] Erro ao notificar mudança de nível', err);
