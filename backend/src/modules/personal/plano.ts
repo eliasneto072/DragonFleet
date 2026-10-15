@@ -309,3 +309,93 @@ export function acumuladoPorMes(
 
   return out;
 }
+
+// ─── O resumo de todos os créditos juntos ───────────────────────────────────
+//
+// Isto vive aqui, e não no serviço, porque foi aqui que o erro aconteceu e
+// porque dentro do serviço não dava para o testar.
+//
+// O que rebentou: o resumo lia o quadro de amortização de cada crédito sem
+// perguntar se ele existia. Um crédito de investidor particular, sem taxa, não
+// tem quadro — e a página inteira dos créditos ia abaixo. Era exactamente o
+// caso que ele pediu: «investimento de investidores particulares com condições
+// especiais e às vezes até sem juros».
+
+/** O que o resumo precisa de saber de cada crédito. Nada mais. */
+export interface CreditoParaResumo {
+  liquidado: boolean;
+  /** Em vigor neste momento. */
+  prestacaoEmVigor: number;
+  /** Quanto falta pagar segundo o plano. Existe sempre. */
+  porPagarDoPlano: number;
+  /** O juro do crédito todo, quando se sabe. Nulo sem total a pagar escrito. */
+  juroTotal: number | null;
+  /**
+   * O quadro de amortização. NULO quando o crédito não tem taxa — e isso não
+   * é um dado em falta, é a verdade do contrato.
+   */
+  quadro: {
+    terminado: boolean;
+    emDivida: number;
+    jurosPagos: number;
+    jurosPorPagar: number;
+  } | null;
+}
+
+export interface ResumoDeCreditos {
+  aCorrer: number;
+  total: number;
+  emDivida: number;
+  prestacaoMensal: number;
+  jurosPagos: number;
+  jurosPorPagar: number;
+  jurosTotais: number;
+  juroSemQuadro: number;
+  juroDeTudo: number;
+}
+
+/**
+ * Soma os créditos todos.
+ *
+ * ─── PORQUE É QUE OS JUROS VÊM EM DOIS NÚMEROS ──────────────────────────────
+ *
+ * Porque um crédito sem taxa não reparte juro por prestação. Sabe-se o juro
+ * do crédito inteiro — total a pagar menos capital — mas não quanto desse
+ * juro já foi pago, porque não há quadro que o diga. Repartir à proporção do
+ * que foi pago era inventar: punha no ecrã um número que não está em contrato
+ * nenhum, com o aspeto de estar.
+ *
+ * Então `jurosPagos`/`jurosPorPagar` contam só os créditos com taxa, e o resto
+ * vai inteiro em `juroSemQuadro`. Nada se perde e nada finge estar repartido.
+ */
+export function somarCreditos(creditos: CreditoParaResumo[]): ResumoDeCreditos {
+  const soma = (ls: CreditoParaResumo[], f: (c: CreditoParaResumo) => number) =>
+    Math.round(ls.reduce((s, c) => s + f(c) * 100, 0)) / 100;
+
+  const aCorrer = creditos.filter((c) => !c.liquidado && !(c.quadro?.terminado ?? false));
+  const comQuadro = creditos.filter((c) => c.quadro !== null);
+  const semQuadro = creditos.filter((c) => c.quadro === null);
+
+  // Em dívida quer dizer o mesmo nos dois caminhos, e os dois sabem dizê-lo:
+  // pelo quadro quando há taxa, pelo que falta do plano quando não há.
+  const emDivida = soma(aCorrer, (c) => c.quadro?.emDivida ?? c.porPagarDoPlano);
+
+  const jurosPagos = soma(comQuadro, (c) => c.quadro?.jurosPagos ?? 0);
+  const jurosPorPagar = soma(
+    aCorrer.filter((c) => c.quadro !== null),
+    (c) => c.quadro?.jurosPorPagar ?? 0,
+  );
+  const juroSemQuadro = soma(semQuadro, (c) => c.juroTotal ?? 0);
+
+  return {
+    aCorrer: aCorrer.length,
+    total: creditos.length,
+    emDivida,
+    prestacaoMensal: soma(aCorrer, (c) => c.prestacaoEmVigor),
+    jurosPagos,
+    jurosPorPagar,
+    jurosTotais: Math.round((jurosPagos + jurosPorPagar) * 100) / 100,
+    juroSemQuadro,
+    juroDeTudo: Math.round((jurosPagos + jurosPorPagar + juroSemQuadro) * 100) / 100,
+  };
+}

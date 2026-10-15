@@ -38,6 +38,7 @@ import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
 import { extrairTextoPdf } from '../fleet-import/pdf/extrair-texto';
+import { MOTIVO_NO_EXTRATO } from '../personal/motivos';
 import { lerExtrato } from './index';
 import { classificar, type Classe, type Identidades } from './classificar';
 import type { Banco } from './tipos';
@@ -336,9 +337,15 @@ class ExtratosService {
               userId: actor.id,
               type: 'DEBIT' as never,
               amount: Math.abs(cent(m.valor)),
-              reason: 'Despesa pessoal',
-              notes: m.descricao.slice(0, 500),
-              createdById: actor.id,
+              // O mesmo motivo que o lançamento à mão escreve. Ver `motivos.ts`:
+              // duas cópias deste texto davam duas etiquetas no mesmo extrato.
+              reason: MOTIVO_NO_EXTRATO,
+              createdBy: actor.id,
+              // A data é a do movimento no banco, NÃO a de hoje. O ajuste é o
+              // que ancora a linha no extrato e decide os saldos corridos: um
+              // gasto de há três semanas importado hoje tem de pesar nessa
+              // semana, senão os saldos de todos os dias no meio ficam errados.
+              createdAt: quando,
             },
           });
           const d = await tx.personalExpense.create({

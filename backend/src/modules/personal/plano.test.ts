@@ -17,7 +17,8 @@ import { describe, it, expect } from 'vitest';
 import {
   tramosOrdenados, prestacaoNumero, planoDoCredito, totalDoPlano,
   juroTotal, custoEmPercentagem, estadoPorPagamentos, acumuladoPorMes,
-  type CreditoPorPlano,
+  somarCreditos,
+  type CreditoPorPlano, type CreditoParaResumo,
 } from './plano';
 
 const dia = (iso: string) => new Date(`${iso}T12:00:00.000Z`);
@@ -239,5 +240,110 @@ describe('a reta dos pagamentos acumulados', () => {
 
   it('sem plano não há reta', () => {
     expect(acumuladoPorMes({ ...CREDITO, tramos: [] }, pagos, hoje)).toEqual([]);
+  });
+});
+
+// ─── somarCreditos ──────────────────────────────────────────────────────────
+//
+// Estes testes existem porque esta conta rebentou em produção. O resumo lia o
+// quadro de amortização sem perguntar se existia, e um crédito sem taxa — o
+// caso dos investidores particulares — levava a página abaixo.
+
+const semTaxa = (over: Partial<CreditoParaResumo> = {}): CreditoParaResumo => ({
+  liquidado: false, prestacaoEmVigor: 200, porPagarDoPlano: 1000,
+  juroTotal: null, quadro: null, ...over,
+});
+
+const comTaxa = (over: Partial<CreditoParaResumo> = {}): CreditoParaResumo => ({
+  liquidado: false, prestacaoEmVigor: 300, porPagarDoPlano: 2000, juroTotal: 500,
+  quadro: { terminado: false, emDivida: 1800, jurosPagos: 120, jurosPorPagar: 380 },
+  ...over,
+});
+
+describe('somarCreditos: o resumo não pode precisar de um quadro que não existe', () => {
+  it('um crédito sem taxa nenhuma não rebenta e conta o que falta pelo plano', () => {
+    const r = somarCreditos([semTaxa()]);
+    expect(r.total).toBe(1);
+    expect(r.aCorrer).toBe(1);
+    // Sem quadro, «em dívida» é o que falta do plano.
+    expect(r.emDivida).toBe(1000);
+    expect(r.prestacaoMensal).toBe(200);
+  });
+
+  it('um crédito sem juros não inventa juro nenhum', () => {
+    const r = somarCreditos([semTaxa({ juroTotal: null })]);
+    expect(r.jurosPagos).toBe(0);
+    expect(r.jurosPorPagar).toBe(0);
+    expect(r.juroSemQuadro).toBe(0);
+    expect(r.juroDeTudo).toBe(0);
+  });
+
+  it('juro sabido mas não repartido fica em juroSemQuadro, FORA de jurosTotais', () => {
+    const r = somarCreditos([semTaxa({ juroTotal: 300 })]);
+    // Sabe-se que custou 300. Não se sabe quanto desses 300 já foi pago.
+    expect(r.juroSemQuadro).toBe(300);
+    expect(r.jurosPagos).toBe(0);
+    expect(r.jurosPorPagar).toBe(0);
+    // `jurosTotais` é só o repartido: 300 aqui seria uma repartição inventada.
+    expect(r.jurosTotais).toBe(0);
+    // E não se perde: aparece inteiro no total de tudo.
+    expect(r.juroDeTudo).toBe(300);
+  });
+
+  it('os dois tipos de crédito somam-se sem se misturarem', () => {
+    const r = somarCreditos([comTaxa(), semTaxa({ juroTotal: 300 })]);
+    expect(r.total).toBe(2);
+    expect(r.aCorrer).toBe(2);
+    expect(r.emDivida).toBe(1800 + 1000);
+    expect(r.prestacaoMensal).toBe(300 + 200);
+    expect(r.jurosPagos).toBe(120);
+    expect(r.jurosPorPagar).toBe(380);
+    expect(r.jurosTotais).toBe(500);
+    expect(r.juroSemQuadro).toBe(300);
+    expect(r.juroDeTudo).toBe(800);
+  });
+
+  it('um crédito liquidado sai do «em dívida» mas os juros que pagou ficam', () => {
+    const r = somarCreditos([
+      comTaxa({ liquidado: true, quadro: { terminado: true, emDivida: 0, jurosPagos: 450, jurosPorPagar: 0 } }),
+      comTaxa(),
+    ]);
+    expect(r.aCorrer).toBe(1);
+    expect(r.total).toBe(2);
+    // Só o que ainda corre está em dívida.
+    expect(r.emDivida).toBe(1800);
+    expect(r.prestacaoMensal).toBe(300);
+    // Mas os 450 que já saíram contam: o crédito antigo não foi de graça.
+    expect(r.jurosPagos).toBe(450 + 120);
+    // Por pagar só do que ainda corre.
+    expect(r.jurosPorPagar).toBe(380);
+  });
+
+  it('um crédito com o quadro terminado sai do «a correr» mesmo sem estar marcado liquidado', () => {
+    const r = somarCreditos([
+      comTaxa({ quadro: { terminado: true, emDivida: 0, jurosPagos: 500, jurosPorPagar: 0 } }),
+    ]);
+    expect(r.aCorrer).toBe(0);
+    expect(r.emDivida).toBe(0);
+    expect(r.prestacaoMensal).toBe(0);
+    expect(r.jurosPagos).toBe(500);
+  });
+
+  it('sem créditos nenhuns devolve zeros, não rebenta', () => {
+    const r = somarCreditos([]);
+    expect(r.total).toBe(0);
+    expect(r.aCorrer).toBe(0);
+    expect(r.emDivida).toBe(0);
+    expect(r.juroDeTudo).toBe(0);
+  });
+
+  it('os cêntimos somam-se sem erro de vírgula flutuante', () => {
+    const r = somarCreditos([
+      semTaxa({ porPagarDoPlano: 0.1, prestacaoEmVigor: 0.1, juroTotal: 0.1 }),
+      semTaxa({ porPagarDoPlano: 0.2, prestacaoEmVigor: 0.2, juroTotal: 0.2 }),
+    ]);
+    expect(r.emDivida).toBe(0.3);
+    expect(r.prestacaoMensal).toBe(0.3);
+    expect(r.juroSemQuadro).toBe(0.3);
   });
 });

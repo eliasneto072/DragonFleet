@@ -207,11 +207,25 @@ export interface Credito {
 export interface ResumoDeCreditos {
   aCorrer: number;
   total: number;
+  /** O que falta pagar ao todo: pelo quadro com taxa, pelo plano sem ela. */
   emDivida: number;
   prestacaoMensal: number;
+
+  // ── Juros: dois números, e é de propósito ────────────────────────────────
+  //
+  // Um crédito sem taxa não reparte juro por prestação — ninguém sabe quanto
+  // de cada prestação é juro. Os três campos abaixo só contam os créditos COM
+  // taxa; `juroSemQuadro` traz o resto, que se sabe ao todo e não se sabe
+  // repartir. Quem mostrar isto no ecrã mostra os dois, nunca só o primeiro.
   jurosPagos: number;
   jurosPorPagar: number;
+  /** `jurosPagos + jurosPorPagar`. Só os créditos com taxa. */
   jurosTotais: number;
+  /** Juro dos créditos sem taxa: total a pagar menos capital, sem repartição. */
+  juroSemQuadro: number;
+  /** Juro de todos os créditos, com taxa e sem ela. */
+  juroDeTudo: number;
+
   porAno: AnoDeJuros[];
 }
 
