@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 import { settlementsController } from './settlements.controller';
 import { pedidosController } from './pedidos.controller';
 
@@ -23,7 +24,7 @@ export function settlementsRouter(): Router {
   // silêncio, e a resposta fica sem anexo sem ninguém perceber porquê.
   router.post(
     '/pedidos/:pedidoId/responder',
-    upload.single('extrato'),
+    upload.single('extrato'), reporFrota,
     pedidosController.responder,
   );
   router.delete('/pedidos/:pedidoId', pedidosController.retirar);

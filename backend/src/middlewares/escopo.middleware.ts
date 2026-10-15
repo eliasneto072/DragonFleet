@@ -134,3 +134,44 @@ export async function escopoDaFrota(
     return next(erro);
   }
 }
+
+/**
+ * Repõe a frota depois de um middleware ter lido o corpo do pedido.
+ *
+ * ─── PORQUE É QUE ISTO PRECISA DE EXISTIR ───────────────────────────────────
+ *
+ * O `escopoDaFrota` acima envolve o `next()` numa frota, e tudo o que corre a
+ * seguir herda-a — enquanto correr dentro dessa cadeia. O multer não corre.
+ *
+ * O multer lê o corpo do pedido e só chama o `next()` no fim, de dentro de um
+ * evento do stream. Esse stream é o `req`, criado pelo servidor de HTTP ANTES
+ * de qualquer middleware, portanto fora da frota. O Node repõe o contexto de
+ * quem criou o recurso, não o de quem estava a correr quando o evento foi
+ * ligado — e o resto do pedido continua sem frota nenhuma.
+ *
+ * O resultado via-se assim, no Render:
+ *
+ *   ErroDeEscopo: SettlementQuery.findFirst correu fora de qualquer frota.
+ *
+ * Isto é reproduzível em vinte linhas só com o Node, sem express nem multer:
+ * ver `escopo-multipart.test.ts`.
+ *
+ * ─── PORQUE É QUE REPOR É SEGURO ────────────────────────────────────────────
+ *
+ * Porque a frota não vem do contexto perdido: vem do `req.frota`, que é uma
+ * propriedade do objecto do pedido e não depende de contexto nenhum. Já foi
+ * decidida e verificada em cima — aqui só se volta a entrar nela.
+ *
+ * E se não houver `req.frota`, isto não inventa nenhuma: segue em frente e
+ * deixa a guarda do Prisma atirar. Um middleware que adivinha frotas é pior
+ * do que um erro.
+ */
+export function reporFrota(
+  req: PedidoComFrota,
+  _res: Response,
+  next: NextFunction,
+) {
+  const fleetId = req.frota?.fleetId;
+  if (!fleetId) return next();
+  return comFrota(fleetId, () => { next(); }).catch(next);
+}

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 import { uploadToCloudinary } from '../upload/upload.service';
 import { ok } from '../../shared/http/response';
 import { AppError } from '../../shared/errors/AppError';
@@ -224,7 +225,7 @@ export function bookingsRouter(): Router {
   // ela própria fez. Em vez de abrir `/upload` a essas contas — que lhes daria
   // uma porta para guardar o que quisessem no armazenamento da frota — o envio
   // entra pela marcação: quem não pode mexer naquela marcação não envia nada.
-  router.post('/:id/files/upload', upload.single('file'), async (req: AuthRequest, res: Response) => {
+  router.post('/:id/files/upload', upload.single('file'), reporFrota, async (req: AuthRequest, res: Response) => {
     const { id } = idParam.parse(req.params);
     const { kind } = z.object({ kind: z.enum(['FATURA', 'COMPROVATIVO', 'OUTRO']) })
       .parse(req.body);

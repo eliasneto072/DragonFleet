@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 import { bankController } from './bank.controller';
 
 export function bankRouter(): Router {
@@ -17,7 +18,7 @@ export function bankRouter(): Router {
 
   // O comprovativo vem no mesmo pedido: separar permitiria gravar um IBAN sem
   // prova, que é o que a aprovação existe para impedir.
-  router.post('/', upload.single('proof'), bankController.submit);
+  router.post('/', upload.single('proof'), reporFrota, bankController.submit);
 
   // As operações sobre UMA conta. Por id e não por utilizador: com três contas
   // por pessoa, "a conta do motorista X" deixou de identificar alguma coisa.

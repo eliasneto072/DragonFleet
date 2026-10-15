@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middlewares/auth.middleware';
 import { requireAdmin } from '../../middlewares/role.middleware';
 import { documentsController } from './documents.controller';
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 
 export function documentsRouter(): Router {
   const router = Router();
@@ -12,7 +13,7 @@ export function documentsRouter(): Router {
   router.get('/', documentsController.list);
   router.get('/:id', documentsController.getById);
   router.get('/:id/file', documentsController.getFile); // ← serve o ficheiro com auth
-  router.post('/', upload.single('file'), documentsController.create); // ← multipart
+  router.post('/', upload.single('file'), reporFrota, documentsController.create); // ← multipart
   router.patch('/:id', documentsController.update);
   router.patch('/:id/status', documentsController.updateStatus);
   router.delete('/:id', documentsController.remove);

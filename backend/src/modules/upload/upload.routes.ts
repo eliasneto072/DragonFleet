@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { UploadController } from './upload.controller';
 
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 
 const uploadRoutes = Router();
 
@@ -16,7 +17,7 @@ const uploadController =
 // POST /upload
 uploadRoutes.post(
   '/',
-  upload.single('image'),
+  upload.single('image'), reporFrota,
   uploadController.upload
 );
 

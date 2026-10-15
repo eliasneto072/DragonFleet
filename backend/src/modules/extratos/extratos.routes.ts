@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { upload } from '../../middlewares/upload.middleware';
+import { reporFrota } from '../../middlewares/escopo.middleware';
 import { extratosController } from './extratos.controller';
 
 export function extratosRouter(): Router {
@@ -20,7 +21,7 @@ export function extratosRouter(): Router {
 
   // Multipart: o campo do ficheiro chama-se 'extrato'. Qualquer outro nome e o
   // multer ignora-o em silêncio, e o pedido chega sem ficheiro nenhum.
-  router.post('/prever', upload.single('extrato'), extratosController.prever);
+  router.post('/prever', upload.single('extrato'), reporFrota, extratosController.prever);
 
   router.post('/importar', extratosController.importar);
   router.get('/', extratosController.listar);
