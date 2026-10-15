@@ -2607,9 +2607,7 @@ model TradeEntry {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tranches CreditTranche[]
-  payments CreditPayment[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([fleetId])
   @@index([userId, openedAt])
@@ -2724,7 +2722,9 @@ model Credit {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tranches CreditTranche[]
+  payments CreditPayment[]
 
   @@index([fleetId])
   @@index([userId, startedOn])
