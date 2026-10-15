@@ -200,6 +200,36 @@ export interface CorpoDaDespesa {
 // lá. É a diferença entre uma funcionalidade privada e uma funcionalidade que
 // é privada enquanto ninguém experimentar mudar um número no endereço.
 
+
+/**
+ * Um campo de data vazio é «sem data», e não uma data por escrever.
+ *
+ * ─── PORQUE É QUE ISTO EXISTE AQUI E NÃO SÓ NO SERVIDOR ───────────────────
+ *
+ * O `<input type="date">` por preencher vale `""`, e era isso que o
+ * formulário enviava na data de fecho. O servidor recusava com «Data
+ * inválida», e o resultado era que NENHUM crédito por liquidar e NENHUMA
+ * posição de trading aberta se conseguiam editar.
+ *
+ * O servidor foi corrigido e é lá que a regra manda. Isto fica como segunda
+ * linha: mesmo que um dia alguém volte a apertar a validação do outro lado,
+ * daqui não sai um vazio a fingir de data. Custa três linhas e fecha a porta
+ * aos dois ecrãs de uma vez.
+ */
+function semVazios<T extends object>(corpo: T, campos: (keyof T)[]): T {
+  // `object` e não `Record<string, unknown>`: os corpos são interfaces, e uma
+  // interface não tem índice implícito, por isso não encaixa no Record. O
+  // compilador apanhou isto à primeira.
+  const out = { ...corpo };
+  for (const campo of campos) {
+    const v = out[campo];
+    if (typeof v === 'string' && v.trim() === '') {
+      (out as Record<string, unknown>)[String(campo)] = null;
+    }
+  }
+  return out;
+}
+
 export const pessoalService = {
   // ── Trading ──
   listarOperacoes: (p?: Periodo) =>
@@ -211,10 +241,10 @@ export const pessoalService = {
     ),
 
   criarOperacao: (corpo: CorpoDaOperacao) =>
-    apiClient.post<Operacao>('/pessoal/trading', corpo),
+    apiClient.post<Operacao>('/pessoal/trading', semVazios(corpo, ['closedAt'])),
 
   actualizarOperacao: (id: string, corpo: CorpoDaOperacao) =>
-    apiClient.put<Operacao>(`/pessoal/trading/${id}`, corpo),
+    apiClient.put<Operacao>(`/pessoal/trading/${id}`, semVazios(corpo, ['closedAt'])),
 
   apagarOperacao: (id: string) =>
     apiClient.delete<void>(`/pessoal/trading/${id}`),
@@ -237,10 +267,10 @@ export const pessoalService = {
     apiClient.get<ResumoDeCreditos>('/pessoal/creditos/resumo'),
 
   criarCredito: (corpo: CorpoDeCredito) =>
-    apiClient.post<Credito>('/pessoal/creditos', corpo),
+    apiClient.post<Credito>('/pessoal/creditos', semVazios(corpo, ['closedOn'])),
 
   actualizarCredito: (id: string, corpo: CorpoDeCredito) =>
-    apiClient.put<Credito>(`/pessoal/creditos/${id}`, corpo),
+    apiClient.put<Credito>(`/pessoal/creditos/${id}`, semVazios(corpo, ['closedOn'])),
 
   apagarCredito: (id: string) =>
     apiClient.delete<void>(`/pessoal/creditos/${id}`),

@@ -26,7 +26,30 @@ const dataDoDia = z.string()
   .transform((t) => new Date(`${t}T12:00:00.000Z`))
   .refine((d) => !Number.isNaN(d.getTime()), 'Data inválida.');
 
-const dataOpcional = dataDoDia.nullish();
+/**
+ * Uma data que pode não existir.
+ *
+ * ─── O CAMPO VAZIO É «SEM DATA», NÃO «DATA INVÁLIDA» ───────────────────────
+ *
+ * Um `<input type="date">` por preencher vale `""`, e é isso que o formulário
+ * envia. O `nullish()` sozinho aceita `null` e `undefined` mas NÃO aceita
+ * `""` — e a resposta era «Data inválida (use AAAA-MM-DD)».
+ *
+ * Criar funcionava porque o formulário novo nem enviava o campo. Editar não:
+ * ao abrir um crédito por liquidar ou uma operação de trading ainda aberta, o
+ * formulário carregava `""` no campo da data de fecho, e gravar era
+ * impossível. Qualquer crédito não liquidado e qualquer posição aberta
+ * ficavam impossíveis de editar.
+ *
+ * O `preprocess` trata o vazio como ausência ANTES da validação, que é o que
+ * ele quer dizer. Está aqui num sítio só, por isso vale para a data de fecho
+ * do trading e para a de liquidação do crédito ao mesmo tempo — e para
+ * qualquer campo de data opcional que venha a existir.
+ */
+const dataOpcional = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  dataDoDia.nullish(),
+);
 
 /** Um número que pode vir com vírgula decimal. */
 const numero = z.union([z.number(), z.string()])
@@ -145,11 +168,14 @@ export const criarCategoriaSchema = z.object({
  * meio-dia cortava fora tudo o que tivesse hora depois disso, e as despesas
  * do último dia do período desapareciam da conta.
  */
+/** O mesmo tratamento do vazio: `?de=&ate=` quer dizer «sem filtro». */
+const diaDaQuery = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+);
+
 export const periodoSchema = z.object({
-  query: z.object({
-    de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  }),
+  query: z.object({ de: diaDaQuery, ate: diaDaQuery }),
 });
 
 export function periodoDaQuery(query: unknown): { de: Date | null; ate: Date | null } {
