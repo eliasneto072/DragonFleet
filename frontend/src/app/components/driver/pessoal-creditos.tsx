@@ -147,7 +147,17 @@ function GraficoAcumulado({ credito }: { credito: Credito }) {
           <XAxis dataKey="mes" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
           <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
           <Tooltip
-            formatter={(v: number | null) => (v === null ? '—' : formatCurrency(v))}
+            // ── Porque é que o tipo NÃO é `number | null` ────────────────────
+            //
+            // Porque o recharts declara o valor como `number | string | []`, e
+            // `null` não está lá. Escrever `number | null` fez o build do
+            // Cloudflare recusar o ficheiro inteiro (TS2769), e aqui não se
+            // viu porque os tipos do recharts não estão instalados.
+            //
+            // O dado continua a poder vir nulo — a reta do «pago» acaba onde o
+            // tempo acaba. Mas quem trata disso é o `typeof` em baixo, não a
+            // anotação: `typeof null` é `'object'`, logo cai no travessão.
+            formatter={(v: number | string) => (typeof v === 'number' ? formatCurrency(v) : '—')}
             contentStyle={{
               background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8,
             }}
