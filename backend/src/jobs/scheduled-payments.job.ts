@@ -81,6 +81,10 @@ export async function runScheduledPayments(hoje = new Date()): Promise<void> {
               userId: p.userId,
               createdBy: p.createdById,
               createdAt: data,
+              // A origem, escrita. É daqui que sai o total por categoria, e é
+              // isto que permite ao extrato do motorista dizer de onde veio um
+              // débito em vez de mostrar só o texto.
+              scheduledPaymentId: p.id,
             },
           });
         }

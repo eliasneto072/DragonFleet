@@ -178,3 +178,38 @@ export function decidir(a: Agendamento, hoje: Date): Decisao {
 export function primeiraData(startsOn: Date): Date {
   return soDia(startsOn);
 }
+
+// ─── Quanto é que isto pesa por mês ─────────────────────────────────────────
+//
+// Para o resumo por categoria. Um agendamento semanal de 10 € e um mensal de
+// 40 € custam quase o mesmo ao fim do mês, mas na lista aparecem como 10 e 40
+// — e a leitura natural é que o segundo é quatro vezes mais caro.
+//
+// Pôr tudo na mesma unidade é o que torna a coluna comparável.
+
+/**
+ * O valor normalizado a um mês.
+ *
+ * ─── AS SEMANAS NÃO SÃO QUATRO ──────────────────────────────────────────────
+ *
+ * Um ano tem 52,1775 semanas, logo o mês tem 4,348 — e não 4. A diferença
+ * parece ínfima e não é: num seguro semanal de 15 €, são quase 63 € de
+ * diferença ao ano. Quem compara a coluna com o extrato nota, e a partir
+ * daí deixa de confiar na coluna.
+ *
+ * O UNICO devolve zero: não é um custo por mês, é um pagamento que acontece
+ * uma vez. Metê-lo na média inflacionava o mês em que foi lançado e mentia em
+ * todos os outros. Aparece no total gasto, que é onde ele conta de verdade.
+ */
+export function porMes(valor: number, frequencia: Frequencia): number {
+  const fator: Record<Frequencia, number> = {
+    UNICO: 0,
+    SEMANAL: 52.1775 / 12,
+    QUINZENAL: 26.08875 / 12,
+    MENSAL: 1,
+    TRIMESTRAL: 1 / 3,
+    SEMESTRAL: 1 / 6,
+    ANUAL: 1 / 12,
+  };
+  return Math.round(valor * fator[frequencia] * 100) / 100;
+}

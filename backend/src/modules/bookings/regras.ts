@@ -93,6 +93,36 @@ export function podeResponderOficina(quem: Quem, m: Marcacao): boolean {
 }
 
 /**
+ * A gestão confirma a marcação sem esperar pela oficina.
+ *
+ * ─── PORQUE É QUE ISTO EXISTE ───────────────────────────────────────────────
+ *
+ * Porque a oficina nem sempre está no sistema. Combina-se por telefone, o
+ * mecânico diz "traga o carro na quinta às nove", e depois a marcação fica
+ * PENDENTE à espera de uma confirmação que nunca vai chegar — porque quem a
+ * daria já a deu, pelo telefone.
+ *
+ * Sem esta saída, a administração tinha de escolher entre deixar a marcação
+ * pendente para sempre ou inventar uma conta de mecânico para a confirmar a si
+ * própria. As duas são piores.
+ *
+ * ─── O QUE ISTO NÃO É ───────────────────────────────────────────────────────
+ *
+ * Não é o mecânico a ser dispensado: é a administração a assumir, em nome
+ * dela, que a oficina já concordou. Por isso o serviço marca estas de outra
+ * maneira e o aviso diz "confirmada pela administração" e não "pela oficina" —
+ * quem olhar para o histórico daqui a seis meses tem de conseguir distinguir
+ * uma confirmação que a oficina deu de uma que a administração assumiu.
+ */
+export function podeConfirmarPelaGestao(quem: Quem, m: Marcacao): boolean {
+  if (!ehGestao(quem.role)) return false;
+  // Os mesmos estados em que a oficina poderia responder, e só esses. Uma
+  // marcação já confirmada não se volta a confirmar, e uma concluída ou
+  // cancelada muito menos.
+  return m.status === 'PENDENTE' || m.status === 'NOVA_DATA_PROPOSTA';
+}
+
+/**
  * Quem aceita a hora que a oficina contrapôs?
  *
  * Quem pediu, ou a gestão. O mecânico NÃO: seria ele a propor e ele a aceitar,

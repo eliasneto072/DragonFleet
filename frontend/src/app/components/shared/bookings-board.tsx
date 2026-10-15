@@ -201,8 +201,14 @@ function Detalhe({ m, modo, onFechar, onMudou }: {
     onError: (e: any) => toast.error(e?.message ?? 'Não foi possível.'),
   });
 
+  // A mensagem diz quem confirmou. Quando é a gestão a assumir pela oficina,
+  // convém ficar claro no momento — é diferente de a oficina ter aceitado, e
+  // é essa a distinção que o histórico guarda.
   const confirmar = useMutation(acao(
-    () => bookingsService.confirm(m!.id), 'Marcação confirmada.',
+    () => bookingsService.confirm(m!.id),
+    modo === 'gestao'
+      ? 'Confirmada pela administração. A oficina foi avisada.'
+      : 'Marcação confirmada.',
   ));
   const aceitar = useMutation(acao(
     () => bookingsService.acceptProposal(m!.id), 'Nova hora aceite.',
@@ -574,6 +580,26 @@ function Detalhe({ m, modo, onFechar, onMudou }: {
               {aceitar.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
               Aceitar a nova hora
+            </Button>
+          )}
+
+          {/* ── A gestão confirma sem esperar pela oficina ─────────────────
+              A oficina nem sempre está no sistema: combina-se por telefone, e
+              a marcação ficava PENDENTE à espera de uma confirmação que já
+              tinha sido dada, só que não aqui.
+
+              Fica em `outline` e não em primário de propósito: o caminho
+              normal continua a ser a oficina confirmar. Este é a saída para
+              quando ela não o faz. */}
+          {ehGestao && porResponder && painel === '' && (
+            <Button
+              variant="outline" className="w-full sm:w-auto"
+              disabled={ocupado}
+              onClick={() => confirmar.mutate()}
+            >
+              {confirmar.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Confirmar pela oficina
             </Button>
           )}
 

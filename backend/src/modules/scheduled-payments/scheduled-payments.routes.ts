@@ -33,6 +33,15 @@ const criarSchema = z.object({
 });
 
 /**
+ * A edição.
+ *
+ * Tudo opcional: quem só quer corrigir o valor manda o valor. E `userId` não
+ * está aqui de propósito — mudar o agendamento de motorista é mudar de quem é
+ * o dinheiro, e isso não é uma correcção, é outro agendamento.
+ */
+const editarSchema = criarSchema.omit({ userId: true }).partial();
+
+/**
  * O `:id` do caminho, validado.
  *
  * Passar `req.params.id` directamente não compila: no Express 5 o tipo dele é
@@ -82,10 +91,34 @@ export function scheduledPaymentsRouter(): Router {
     return ok(res, { payment: await scheduledPaymentsService.create(actor(req), corpo) }, 201);
   });
 
+  // O resumo ANTES do `/:id`, senão o Express lê "resumo" como um id e
+  // devolve 404. É o mesmo cuidado que as outras rotas deste projeto têm.
+  router.get('/resumo', async (req: AuthRequest, res: Response) => {
+    const de = typeof req.query.de === 'string' ? req.query.de : null;
+    const ate = typeof req.query.ate === 'string' ? req.query.ate : null;
+    return ok(res, await scheduledPaymentsService.resumoPorCategoria(actor(req), { de, ate }));
+  });
+
   router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const { active } = z.object({ active: z.boolean() }).parse(req.body);
     return ok(res, {
       payment: await scheduledPaymentsService.setActive(actor(req), idParam.parse(req.params).id, active),
+    });
+  });
+
+  /**
+   * A edição vai no PUT e não no PATCH porque o PATCH já é o interruptor.
+   *
+   * Dois corpos diferentes na mesma rota obrigavam a adivinhar qual era pelo
+   * que lá vinha dentro — e um corpo com `active` e `amount` ao mesmo tempo
+   * não teria resposta certa.
+   */
+  router.put('/:id', async (req: AuthRequest, res: Response) => {
+    const corpo = editarSchema.parse(req.body);
+    return ok(res, {
+      payment: await scheduledPaymentsService.update(
+        actor(req), idParam.parse(req.params).id, corpo,
+      ),
     });
   });
 

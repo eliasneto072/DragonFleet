@@ -23,6 +23,7 @@ import { AppError } from '../../shared/errors/AppError';
 import { UserRole } from '../../shared/types/enums';
 import {
   podeVerMarcacao, podeResponderOficina, podeAceitarProposta, podeConcluir,
+  podeConfirmarPelaGestao,
   podeCancelar, podeDesignarAcompanhante, logisticasPermitidas, podeCriar,
   ehGestao, podeVer,
   type Quem, type Marcacao, type Logistica, type Perfil,
@@ -162,6 +163,22 @@ async function avisar(userId: string | null | undefined, title: string, message:
 async function idsDaGestao(): Promise<string[]> {
   const linhas = await prisma.user.findMany({
     where: { role: { in: [UserRole.ADMIN, UserRole.MANAGER] }, status: 'ACTIVE' },
+    select: { id: true },
+  });
+  return linhas.map((l) => l.id);
+}
+
+/**
+ * Os mecânicos de uma oficina.
+ *
+ * Serve para o caso em que a administração confirma uma marcação sem esperar
+ * pela oficina: sem isto, a primeira notícia que a oficina tem é o carro à
+ * porta. Uma oficina sem conta no sistema devolve lista vazia, e está certo —
+ * essa combinou-se pelo telefone e é por lá que fica a saber.
+ */
+async function idsDaOficina(workshopId: string): Promise<string[]> {
+  const linhas = await prisma.user.findMany({
+    where: { role: UserRole.MECHANIC, workshopId, status: 'ACTIVE' },
     select: { id: true },
   });
   return linhas.map((l) => l.id);
@@ -389,10 +406,29 @@ export const bookingsService = {
     return paraPublico(criada);
   },
 
-  /** A oficina confirma o dia e a hora que lhe propuseram. */
+  /**
+   * Confirma o dia e a hora: a oficina, ou a administração em nome dela.
+   *
+   * ─── AS DUAS PORTAS, E PORQUE SÃO DISTINGUÍVEIS ─────────────────────────
+   *
+   * A oficina confirma o que lhe propuseram — é o caminho normal.
+   *
+   * A administração também pode, porque a oficina nem sempre está no sistema:
+   * combina-se por telefone e a marcação ficaria PENDENTE à espera de uma
+   * confirmação que já foi dada, só que não ali. Ver `podeConfirmarPelaGestao`.
+   *
+   * Mas as duas NÃO ficam iguais no registo. O aviso diz quem confirmou, e
+   * isso não é cosmética: daqui a seis meses, perante um carro que apareceu na
+   * oficina sem eles contarem com ele, a pergunta é «quem confirmou isto?» — e
+   * «a administração assumiu» é uma resposta diferente de «a oficina aceitou».
+   */
   async confirm(actor: Actor, id: string) {
     const { quem, b } = await carregar(actor, id);
-    if (!podeResponderOficina(quem, b as unknown as Marcacao)) {
+
+    const peloMecanico = podeResponderOficina(quem, b as unknown as Marcacao);
+    const pelaGestao = podeConfirmarPelaGestao(quem, b as unknown as Marcacao);
+
+    if (!peloMecanico && !pelaGestao) {
       throw new AppError('Não pode confirmar esta marcação.', 403, 'FORBIDDEN');
     }
 
@@ -404,8 +440,23 @@ export const bookingsService = {
 
     const texto = `${atualizada.vehicle.plate} · ${atualizada.serviceType.label} · `
       + `${atualizada.workshop.name} · ${quando(atualizada.scheduledAt)}`;
-    await avisar(atualizada.driverId, 'Marcação confirmada pela oficina', texto);
-    for (const g of await idsDaGestao()) await avisar(g, 'Marcação confirmada', texto);
+
+    // `peloMecanico` primeiro: quando a gestão TAMBÉM é mecânico da oficina
+    // (acontece numa oficina própria), a confirmação é dela enquanto oficina.
+    const porQuem = peloMecanico ? 'pela oficina' : 'pela administração';
+
+    await avisar(atualizada.driverId, `Marcação confirmada ${porQuem}`, texto);
+    for (const g of await idsDaGestao()) {
+      await avisar(g, `Marcação confirmada ${porQuem}`, texto);
+    }
+
+    // E a oficina fica a saber que a marcação dela foi dada por confirmada
+    // sem ela ter tocado — senão a primeira notícia é o carro à porta.
+    if (pelaGestao && !peloMecanico) {
+      for (const m of await idsDaOficina(atualizada.workshopId)) {
+        await avisar(m, 'Marcação confirmada pela administração', texto);
+      }
+    }
 
     return paraPublico(atualizada);
   },

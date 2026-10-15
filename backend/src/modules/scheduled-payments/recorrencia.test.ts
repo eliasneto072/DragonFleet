@@ -9,7 +9,7 @@
 // o ano errado.
 
 import { describe, it, expect } from 'vitest';
-import { proximaData, decidir, comoDia, type Agendamento } from './recorrencia';
+import { proximaData, decidir, comoDia, porMes, type Agendamento } from './recorrencia';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -157,5 +157,54 @@ describe('quando é que para', () => {
     expect(r.lancarEm.map(comoDia)).toEqual(['2026-01-10']);
     expect(r.proximo.nextRunOn).toBe(null);
     expect(r.proximo.active).toBe(false);
+  });
+});
+
+// ─── porMes ─────────────────────────────────────────────────────────────────
+//
+// A coluna do resumo põe todas as frequências na mesma unidade. Sem isso, um
+// semanal de 10 € e um mensal de 40 € aparecem como 10 e 40, e lê-se ao
+// contrário da verdade.
+
+describe('porMes: todas as frequências na mesma unidade', () => {
+  it('o mensal é ele próprio', () => {
+    expect(porMes(40, 'MENSAL')).toBe(40);
+  });
+
+  it('o semanal custa MAIS do que quatro vezes — o mês tem 4,348 semanas', () => {
+    // 10 × 52,1775 / 12 = 43,48, e não 40.
+    expect(porMes(10, 'SEMANAL')).toBe(43.48);
+    // A diferença parece ínfima e não é: são 41,76 € ao ano.
+    expect(porMes(10, 'SEMANAL') * 12 - 10 * 48).toBeCloseTo(41.76, 1);
+  });
+
+  it('o quinzenal é metade do semanal', () => {
+    expect(porMes(20, 'QUINZENAL')).toBeCloseTo(porMes(10, 'SEMANAL'), 1);
+  });
+
+  it('o trimestral, o semestral e o anual dividem-se', () => {
+    expect(porMes(300, 'TRIMESTRAL')).toBe(100);
+    expect(porMes(300, 'SEMESTRAL')).toBe(50);
+    expect(porMes(300, 'ANUAL')).toBe(25);
+  });
+
+  it('o ÚNICO é zero: não é um custo por mês, é um pagamento que acontece uma vez', () => {
+    // Metê-lo na média inflacionava o mês em que saiu e mentia em todos os
+    // outros. Conta no total gasto, que é onde ele é verdade.
+    expect(porMes(500, 'UNICO')).toBe(0);
+  });
+
+  it('arredonda ao cêntimo e nunca devolve fracções de cêntimo', () => {
+    // A asserção tem de ser tolerante: `v * 100` reintroduz o erro de vírgula
+    // flutuante que o arredondamento acabou de tirar (144.92 * 100 dá
+    // 14491.999999999998). O que se verifica é que o valor ESTÁ nos cêntimos,
+    // não que a multiplicação seja exacta.
+    const v = porMes(33.33, 'SEMANAL');
+    expect(Math.abs(v * 100 - Math.round(v * 100))).toBeLessThan(1e-6);
+  });
+
+  it('um seguro semanal de 15 € pesa mais de 65 € por mês', () => {
+    // O caso que ele descreveu. 15 × 4,348 = 65,22.
+    expect(porMes(15, 'SEMANAL')).toBe(65.22);
   });
 });

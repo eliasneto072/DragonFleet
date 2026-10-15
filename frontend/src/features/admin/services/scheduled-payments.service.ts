@@ -66,6 +66,44 @@ export interface NovoAgendamento {
   remaining?: number | null;
 }
 
+/** Uma linha do resumo por categoria. */
+export interface LinhaDeCategoria {
+  categoriaId: string | null;
+  categoria: string;
+  /** O que JÁ SAIU: soma dos lançamentos reais, cada um com o valor da altura. */
+  gastoDebito: number;
+  /** O que já entrou, pelos agendamentos de crédito. */
+  gastoCredito: number;
+  lancamentos: number;
+  /**
+   * O que está COMPROMETIDO por mês, com as frequências todas na mesma
+   * unidade. Um semanal de 10 € conta 43,48 e não 40: o mês tem 4,348 semanas.
+   */
+  porMesDebito: number;
+  porMesCredito: number;
+  agendamentosActivos: number;
+}
+
+export interface ResumoPorCategoria {
+  periodo: { de: string | null; ate: string | null };
+  categorias: LinhaDeCategoria[];
+  total: {
+    gastoDebito: number;
+    gastoCredito: number;
+    porMesDebito: number;
+    porMesCredito: number;
+    lancamentos: number;
+  };
+}
+
+/**
+ * A edição. Tudo opcional — quem só quer corrigir o valor manda o valor.
+ *
+ * `userId` não entra: mudar o agendamento de motorista é mudar de quem é o
+ * dinheiro, e isso não é uma correcção.
+ */
+export type EdicaoDeAgendamento = Partial<Omit<NovoAgendamento, 'userId'>>;
+
 export const scheduledPaymentsService = {
   list(params: { userId?: string; active?: boolean } = {}): Promise<{ payments: ScheduledPayment[] }> {
     const q = new URLSearchParams();
@@ -82,6 +120,27 @@ export const scheduledPaymentsService = {
   /** Ligar e desligar. Ao religar, a próxima data salta para a primeira futura. */
   setActive(id: string, active: boolean): Promise<{ payment: ScheduledPayment }> {
     return apiClient.patch(`/scheduled-payments/${id}`, { active });
+  },
+
+  /**
+   * Corrigir sem apagar e refazer.
+   *
+   * O que já foi lançado NÃO muda: um seguro que foi 15 € em Janeiro continua
+   * a ser 15 € em Janeiro depois de o valor passar a 25 €. A data de início
+   * deixa de se poder mudar assim que houver lançamentos — passa a ser
+   * histórico, e recuá-la faria o sistema lançar outra vez o que já lançou.
+   */
+  update(id: string, input: EdicaoDeAgendamento): Promise<{ payment: ScheduledPayment }> {
+    return apiClient.put(`/scheduled-payments/${id}`, input);
+  },
+
+  /** O total por categoria: o que já saiu e o que está comprometido por mês. */
+  resumo(periodo: { de?: string | null; ate?: string | null } = {}): Promise<ResumoPorCategoria> {
+    const q = new URLSearchParams();
+    if (periodo.de) q.set('de', periodo.de);
+    if (periodo.ate) q.set('ate', periodo.ate);
+    const s = q.toString();
+    return apiClient.get(`/scheduled-payments/resumo${s ? `?${s}` : ''}`);
   },
 
   /** Apaga a REGRA. Os movimentos que ela já fez ficam — o saldo depende deles. */

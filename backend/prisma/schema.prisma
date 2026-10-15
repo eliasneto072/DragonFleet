@@ -642,6 +642,15 @@ model BalanceAdjustment {
   admin  User? @relation("adjustmentsMade", fields: [createdBy], references: [id], onDelete: SetNull)
   editor User? @relation("adjustmentsEdited", fields: [editedBy], references: [id], onDelete: SetNull)
 
+  /// O agendamento que gerou este lançamento, quando foi um.
+  ///
+  /// Nulo na esmagadora maioria: os ajustes da administração não vêm de
+  /// agendamento nenhum. Serve para somar o gasto por categoria a partir dos
+  /// movimentos REAIS — cada um com o valor que tinha no dia em que saiu, e
+  /// não com o valor que o agendamento tem hoje.
+  scheduledPaymentId String?          @map("scheduled_payment_id")
+  scheduledPayment   ScheduledPayment? @relation(fields: [scheduledPaymentId], references: [id], onDelete: SetNull)
+
   /// A despesa pessoal que escreveu este débito, quando foi uma.
   ///
   /// A esmagadora maioria dos ajustes não tem nenhuma: são lançamentos da
@@ -751,6 +760,11 @@ model ScheduledPayment {
   user      User             @relation("scheduledPaymentsReceived", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User             @relation("scheduledPaymentsCreated", fields: [createdById], references: [id])
   category  PaymentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  /// Os lançamentos que este agendamento já fez. É daqui que sai o total
+  /// gasto por categoria, e não de `runCount × amount`: essa conta mente no
+  /// momento em que alguém edita o valor.
+  adjustments BalanceAdjustment[]
 
   @@index([userId])
   // O job pergunta sempre a mesma coisa: quais os activos com data vencida.

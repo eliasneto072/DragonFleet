@@ -28,7 +28,7 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import {
-  CalendarClock, Plus, Power, Trash2, Loader2, ArrowDownRight, ArrowUpRight, X,
+  CalendarClock, Plus, Power, Trash2, Loader2, ArrowDownRight, ArrowUpRight, X, Pencil, PieChart,
 } from 'lucide-react';
 import {
   scheduledPaymentsService, FREQUENCIAS,
@@ -62,6 +62,7 @@ const rotuloFrequencia = (f: PaymentFrequency) =>
 export function ScheduledPayments() {
   const queryClient = useQueryClient();
   const [aCriar, setACriar] = useState(false);
+  const [aEditar, setAEditar] = useState<ScheduledPayment | null>(null);
   const [apagar, setApagar] = useState<ScheduledPayment | null>(null);
 
   const q = useQuery({
@@ -108,7 +109,23 @@ export function ScheduledPayments() {
         </Button>
       </div>
 
-      {aCriar && <Formulario onPronto={() => { setACriar(false); invalidar(); }} onCancelar={() => setACriar(false)} />}
+      {aCriar && (
+        <Formulario
+          onPronto={() => { setACriar(false); invalidar(); }}
+          onCancelar={() => setACriar(false)}
+        />
+      )}
+
+      {/* `key` no id: sem ela, passar de um agendamento para outro reaproveita
+          o componente e os campos ficam com os valores do anterior. */}
+      {aEditar && (
+        <Formulario
+          key={aEditar.id}
+          editar={aEditar}
+          onPronto={() => { setAEditar(null); invalidar(); }}
+          onCancelar={() => setAEditar(null)}
+        />
+      )}
 
       {q.isLoading && <Skeleton className="h-40 w-full rounded-xl" />}
 
@@ -125,8 +142,10 @@ export function ScheduledPayments() {
         </Card>
       )}
 
-      {ativos.length > 0 && <Lista titulo="Activos" linhas={ativos} onAlternar={alternar} onApagar={setApagar} ocupado={aAlternar} />}
-      {parados.length > 0 && <Lista titulo="Parados" linhas={parados} onAlternar={alternar} onApagar={setApagar} ocupado={aAlternar} />}
+      {agendamentos.length > 0 && <ResumoPorCategoria />}
+
+      {ativos.length > 0 && <Lista titulo="Activos" linhas={ativos} onAlternar={alternar} onApagar={setApagar} onEditar={setAEditar} ocupado={aAlternar} />}
+      {parados.length > 0 && <Lista titulo="Parados" linhas={parados} onAlternar={alternar} onApagar={setApagar} onEditar={setAEditar} ocupado={aAlternar} />}
 
       <AlertDialog open={!!apagar} onOpenChange={(o) => { if (!o) setApagar(null); }}>
         <AlertDialogContent>
@@ -164,11 +183,105 @@ export function ScheduledPayments() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Lista({ titulo, linhas, onAlternar, onApagar, ocupado }: {
+/**
+ * O total por categoria.
+ *
+ * ─── PORQUE SÃO DUAS COLUNAS E NÃO UMA ──────────────────────────────────────
+ *
+ * «Já saiu» é o passado: a soma dos lançamentos reais, cada um com o valor que
+ * tinha no dia em que saiu. Um seguro que foi 15 € em Janeiro conta 15 € em
+ * Janeiro, mesmo depois de alguém corrigir o agendamento para 25 €.
+ *
+ * «Por mês» é o futuro: o que está comprometido daqui para a frente, com as
+ * frequências todas postas na mesma unidade. Um semanal de 10 € conta 43,48 e
+ * não 40 — o mês tem 4,348 semanas, e a diferença são quase 42 € ao ano.
+ *
+ * As duas respondem às duas perguntas que se fazem a esta tela, e nenhuma
+ * delas responde à outra.
+ */
+function ResumoPorCategoria() {
+  const q = useQuery({
+    queryKey: ['scheduled-payments', 'resumo'],
+    queryFn: () => scheduledPaymentsService.resumo(),
+  });
+
+  if (q.isLoading) return <Skeleton className="h-36 w-full rounded-xl" />;
+
+  const r = q.data;
+  if (!r || r.categorias.length === 0) return null;
+
+  // O maior gasto manda na largura das barras. Sem um máximo, uma categoria
+  // sozinha ocupava a barra toda e parecia o total de tudo.
+  const maior = Math.max(...r.categorias.map((c) => c.gastoDebito), 0.01);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground">
+          <PieChart className="h-4 w-4" aria-hidden="true" />
+          Por categoria
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <ul className="space-y-2.5">
+          {r.categorias.map((c) => (
+            <li key={c.categoriaId ?? 'sem'} className="space-y-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <span className="truncate text-sm font-medium">{c.categoria}</span>
+                <span className="flex items-baseline gap-3 text-sm tabular-nums">
+                  <span className="font-semibold text-destructive">
+                    {formatCurrency(c.gastoDebito)}
+                  </span>
+                  {c.porMesDebito > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatCurrency(c.porMesDebito)}/mês
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-destructive/70"
+                  style={{ width: `${Math.min(100, (c.gastoDebito / maior) * 100)}%` }}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {c.lancamentos} lançamento{c.lancamentos === 1 ? '' : 's'}
+                {c.agendamentosActivos > 0 && <> · {c.agendamentosActivos} activo{c.agendamentosActivos === 1 ? '' : 's'}</>}
+                {c.gastoCredito > 0 && <> · {formatCurrency(c.gastoCredito)} creditados</>}
+              </p>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-t pt-3 text-sm">
+          <span className="font-medium">Total descontado</span>
+          <span className="flex items-baseline gap-3 tabular-nums">
+            <span className="font-semibold text-destructive">
+              {formatCurrency(r.total.gastoDebito)}
+            </span>
+            {r.total.porMesDebito > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {formatCurrency(r.total.porMesDebito)}/mês comprometidos
+              </span>
+            )}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Lista({ titulo, linhas, onAlternar, onApagar, onEditar, ocupado }: {
   titulo: string;
   linhas: ScheduledPayment[];
   onAlternar: (v: { id: string; active: boolean }) => void;
   onApagar: (p: ScheduledPayment) => void;
+  onEditar: (p: ScheduledPayment) => void;
   ocupado: boolean;
 }) {
   return (
@@ -214,6 +327,15 @@ function Lista({ titulo, linhas, onAlternar, onApagar, ocupado }: {
                 </span>
 
                 <span className="flex shrink-0 items-center gap-1.5">
+                  {/* Corrigir em vez de apagar e refazer: o engano mais comum
+                      é o valor, e refazer perdia o histórico de lançamentos. */}
+                  <Button
+                    size="sm" variant="outline" className="h-8"
+                    onClick={() => onEditar(p)}
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    Editar
+                  </Button>
                   <Button
                     size="sm" variant="outline" className="h-8"
                     disabled={ocupado}
@@ -244,19 +366,38 @@ function Lista({ titulo, linhas, onAlternar, onApagar, ocupado }: {
 
 type Limite = 'sempre' | 'vezes' | 'data';
 
-function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar: () => void }) {
+/**
+ * O mesmo formulário cria e edita.
+ *
+ * Dois formulários quase iguais divergem ao primeiro campo novo: acrescenta-se
+ * ao de criar, esquece-se no de editar, e passa a haver uma coisa que só se
+ * consegue pôr de uma maneira. Um só não tem esse problema.
+ */
+function Formulario({ onPronto, onCancelar, editar }: {
+  onPronto: () => void;
+  onCancelar: () => void;
+  /** Presente = está a corrigir este. Ausente = está a criar. */
+  editar?: ScheduledPayment | null;
+}) {
   const queryClient = useQueryClient();
+  const aEditar = !!editar;
 
-  const [userId, setUserId] = useState('');
-  const [tipo, setTipo] = useState<AdjustmentType>('DEBIT');
-  const [valor, setValor] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [categoriaId, setCategoriaId] = useState<string>('');
-  const [frequencia, setFrequencia] = useState<PaymentFrequency>('MENSAL');
-  const [inicio, setInicio] = useState(hojeISO());
-  const [limite, setLimite] = useState<Limite>('sempre');
-  const [vezes, setVezes] = useState('6');
-  const [fim, setFim] = useState('');
+  // Já lançou alguma vez? Então a data de início é história, e o servidor
+  // recusa mudá-la. O ecrã desactiva-a para o engano não chegar lá.
+  const jaCorreu = (editar?.runCount ?? 0) > 0;
+
+  const [userId, setUserId] = useState(editar?.userId ?? '');
+  const [tipo, setTipo] = useState<AdjustmentType>(editar?.type ?? 'DEBIT');
+  const [valor, setValor] = useState(editar ? String(editar.amount) : '');
+  const [descricao, setDescricao] = useState(editar?.description ?? '');
+  const [categoriaId, setCategoriaId] = useState<string>(editar?.categoryId ?? '');
+  const [frequencia, setFrequencia] = useState<PaymentFrequency>(editar?.frequency ?? 'MENSAL');
+  const [inicio, setInicio] = useState(editar ? editar.startsOn.slice(0, 10) : hojeISO());
+  const [limite, setLimite] = useState<Limite>(
+    editar?.remaining != null ? 'vezes' : editar?.endsOn ? 'data' : 'sempre',
+  );
+  const [vezes, setVezes] = useState(editar?.remaining != null ? String(editar.remaining) : '6');
+  const [fim, setFim] = useState(editar?.endsOn ? editar.endsOn.slice(0, 10) : '');
   const [novaCategoria, setNovaCategoria] = useState('');
   const [aAdicionarTipo, setAAdicionarTipo] = useState(false);
 
@@ -290,21 +431,36 @@ function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar
   });
 
   const { mutate: gravar, isPending } = useMutation({
-    mutationFn: () => scheduledPaymentsService.create({
-      userId,
-      type: tipo,
-      amount: Number(valor),
-      description: descricao.trim(),
-      categoryId: categoriaId || null,
-      frequency: frequencia,
-      startsOn: inicio,
-      // Um pagamento único não tem fim nem contagem — seria dizer duas vezes a
-      // mesma coisa, e o servidor desligava-o à mesma depois do primeiro.
-      endsOn: frequencia !== 'UNICO' && limite === 'data' && fim ? fim : null,
-      remaining: frequencia !== 'UNICO' && limite === 'vezes' ? Number(vezes) : null,
-    }),
-    onSuccess: () => { toast.success('Agendamento criado.'); onPronto(); },
-    onError: (e: any) => toast.error(e?.message ?? 'Não foi possível criar.'),
+    mutationFn: () => {
+      const campos = {
+        type: tipo,
+        amount: Number(valor),
+        description: descricao.trim(),
+        categoryId: categoriaId || null,
+        frequency: frequencia,
+        // Um pagamento único não tem fim nem contagem — seria dizer duas vezes
+        // a mesma coisa, e o servidor desligava-o à mesma depois do primeiro.
+        endsOn: frequencia !== 'UNICO' && limite === 'data' && fim ? fim : null,
+        remaining: frequencia !== 'UNICO' && limite === 'vezes' ? Number(vezes) : null,
+      };
+      if (editar) {
+        // A data de início só vai quando ainda se pode mudar. Mandá-la igual
+        // ao que já lá está daria no mesmo, mas mandá-la depois de ter corrido
+        // trazia um 409 do servidor por uma coisa que o utilizador não tocou.
+        return scheduledPaymentsService.update(editar.id, {
+          ...campos,
+          ...(jaCorreu ? {} : { startsOn: inicio }),
+        });
+      }
+      return scheduledPaymentsService.create({ ...campos, userId, startsOn: inicio });
+    },
+    onSuccess: () => {
+      toast.success(aEditar ? 'Agendamento corrigido.' : 'Agendamento criado.');
+      onPronto();
+    },
+    onError: (e: any) => toast.error(
+      e?.message ?? (aEditar ? 'Não foi possível corrigir.' : 'Não foi possível criar.'),
+    ),
   });
 
   const motorista = motoristas.find((m: any) => m.id === userId);
@@ -332,7 +488,9 @@ function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar
   return (
     <Card className="border-primary/40">
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-base">Novo agendamento</CardTitle>
+        <CardTitle className="text-base">
+          {aEditar ? 'Corrigir agendamento' : 'Novo agendamento'}
+        </CardTitle>
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onCancelar} aria-label="Fechar">
           <X className="h-4 w-4" aria-hidden="true" />
         </Button>
@@ -342,7 +500,10 @@ function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ag-motorista">Motorista</Label>
-            <Select value={userId} onValueChange={setUserId}>
+            {/* A editar, o motorista fica preso: mudar de motorista é mudar
+                de quem é o dinheiro, e isso não é uma correcção — é outro
+                agendamento. O servidor nem aceita o campo. */}
+            <Select value={userId} onValueChange={setUserId} disabled={aEditar}>
               <SelectTrigger id="ag-motorista"><SelectValue placeholder="Escolha o motorista" /></SelectTrigger>
               <SelectContent>
                 {motoristas.map((m: any) => (
@@ -445,7 +606,21 @@ function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar
 
           <div className="space-y-1.5">
             <Label htmlFor="ag-inicio">Primeira data</Label>
-            <Input id="ag-inicio" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+            <Input
+              id="ag-inicio" type="date" value={inicio}
+              onChange={(e) => setInicio(e.target.value)}
+              disabled={jaCorreu}
+            />
+            {jaCorreu && (
+              /* Dito por palavras, porque um campo cinzento sem explicação lê-se
+                 como avaria. Recuar a data faria o sistema lançar outra vez o
+                 que já lançou — dois descontos iguais no saldo de alguém. */
+              <p className="text-xs text-muted-foreground">
+                Já fez {editar?.runCount} lançamento(s), por isso a primeira data
+                passou a fazer parte do histórico. O valor, a descrição, o tipo,
+                a frequência e o fim corrigem-se à mesma.
+              </p>
+            )}
           </div>
 
           {frequencia !== 'UNICO' && (
@@ -487,7 +662,7 @@ function Formulario({ onPronto, onCancelar }: { onPronto: () => void; onCancelar
           <Button variant="outline" onClick={onCancelar} disabled={isPending}>Cancelar</Button>
           <Button onClick={() => gravar()} disabled={!completo || isPending}>
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Criar agendamento
+            {aEditar ? 'Gravar alterações' : 'Criar agendamento'}
           </Button>
         </div>
       </CardContent>

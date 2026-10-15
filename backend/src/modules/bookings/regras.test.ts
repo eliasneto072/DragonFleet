@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import {
   podeVerMarcacao, podeResponderOficina, podeAceitarProposta, podeConcluir,
   podeCancelar, podeDesignarAcompanhante, logisticasPermitidas, podeCriar,
+  podeConfirmarPelaGestao,
   type Quem, type Marcacao, type Estado,
 } from './regras';
 
@@ -201,5 +202,55 @@ describe('acompanhamento e logística', () => {
   it('a gestão e o motorista marcam', () => {
     expect(podeCriar('ADMIN')).toBe(true);
     expect(podeCriar('DRIVER')).toBe(true);
+  });
+});
+
+// ─── O bypass da administração ──────────────────────────────────────────────
+//
+// A oficina nem sempre está no sistema: combina-se por telefone e a marcação
+// ficava PENDENTE para sempre, à espera de uma confirmação que já tinha sido
+// dada, só que não ali.
+
+describe('podeConfirmarPelaGestao', () => {
+  const marcacao = (status: Estado): Marcacao => ({
+    status, workshopId: 'of1', driverId: 'd1', createdById: 'd1',
+  });
+
+  it('o admin confirma uma marcação pendente sem a oficina tocar nela', () => {
+    expect(podeConfirmarPelaGestao({ id: 'a', role: 'ADMIN' }, marcacao('PENDENTE'))).toBe(true);
+  });
+
+  it('o gestor também', () => {
+    expect(podeConfirmarPelaGestao({ id: 'g', role: 'MANAGER' }, marcacao('PENDENTE'))).toBe(true);
+  });
+
+  it('e também quando a oficina contrapôs outra hora', () => {
+    expect(
+      podeConfirmarPelaGestao({ id: 'a', role: 'ADMIN' }, marcacao('NOVA_DATA_PROPOSTA')),
+    ).toBe(true);
+  });
+
+  it('o suporte NÃO: vê os tickets, não marca trabalho em carros', () => {
+    expect(podeConfirmarPelaGestao({ id: 's', role: 'SUPPORT' }, marcacao('PENDENTE'))).toBe(false);
+  });
+
+  it('o motorista NÃO: seria ele a pedir e ele a confirmar', () => {
+    expect(podeConfirmarPelaGestao({ id: 'd1', role: 'DRIVER' }, marcacao('PENDENTE'))).toBe(false);
+  });
+
+  it('o mecânico passa pela porta dele, não por esta', () => {
+    expect(
+      podeConfirmarPelaGestao({ id: 'm', role: 'MECHANIC', workshopId: 'of1' }, marcacao('PENDENTE')),
+    ).toBe(false);
+  });
+
+  it('uma marcação já confirmada não se volta a confirmar', () => {
+    expect(podeConfirmarPelaGestao({ id: 'a', role: 'ADMIN' }, marcacao('CONFIRMADA'))).toBe(false);
+  });
+
+  it('uma concluída, cancelada ou recusada também não', () => {
+    for (const e of ['CONCLUIDA', 'CANCELADA', 'RECUSADA'] as Estado[]) {
+      expect(podeConfirmarPelaGestao({ id: 'a', role: 'ADMIN' }, marcacao(e))).toBe(false);
+    }
   });
 });
