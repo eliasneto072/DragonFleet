@@ -27,87 +27,363 @@ export function configurarApi(ponte) { api = ponte; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function aviso(msg) {
-  $('semana-erro').textContent = msg ?? '';
-  $('semana-erro').hidden = !msg;
+// ── Interface (v0.9) ────────────────────────────────────────────────────────
+//
+// Daqui até à recolha é só desenho. Nada nesta parte fala com os portais nem
+// com o servidor: lê o `estado` e o `plano` e mostra-os. A recolha, a análise
+// e a criação continuam nas mesmas funções, com os mesmos pedidos.
+
+/** Os cinco sítios a visitar, pela ordem em que aparecem na lista. */
+const PORTAIS = [
+  { fonte: 'VIA_VERDE',     nome: 'Via Verde',            det: 'Portagens · semana anterior', url: 'https://www.viaverde.pt/' },
+  { fonte: 'PRIO_FROTA',    nome: 'Prio — combustível',   det: 'Transações de cartões',       url: 'https://www.myprio.com/Transactions/Transactions' },
+  { fonte: 'PRIO_ELECTRIC', nome: 'Prio — carregamentos', det: 'Transações elétricas',        url: 'https://www.myprio.com/Transactions/Transactions?TradIsElectric=True' },
+  { fonte: 'UBER',          nome: 'Uber',                 det: 'Rendimentos',                 url: 'https://fleethub.uber.com/' },
+  { fonte: 'BOLT',          nome: 'Bolt',                 det: 'Earnings per driver',         url: 'https://fleets.bolt.eu/' },
+];
+const nomeDoPortal = (fonte) => PORTAIS.find((p) => p.fonte === fonte)?.nome ?? fonte;
+
+const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const diaDaSemana = (dia) => { const [a, m, d] = dia.split('-').map(Number); return DIAS[new Date(a, m - 1, d).getDay()]; };
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** Depois de criar: o ecrã de conclusão, até se começar outra semana. */
+let sucesso = null;
+
+/** Depois de analisar, a lista dos portais dobra-se; isto abre-a de novo. */
+let verLista = false;
+
+/**
+ * A faixa de mensagens, no topo. `tipo`: 'aviso' (âmbar), 'mau' (vermelho) ou
+ * 'bom' (verde).
+ */
+function aviso(msg, tipo = 'aviso') {
+  const el = $('semana-erro');
+  el.textContent = msg ?? '';
+  el.className = `faixa-aviso${tipo === 'mau' ? ' mau' : tipo === 'bom' ? ' bom' : ''}`;
+  el.hidden = !msg;
+}
+
+/** Onde está a Faturação, a partir do endereço da API. */
+function enderecoDaFaturacao() {
+  try {
+    const u = new URL(api.base);
+    if (u.hostname.startsWith('api.')) u.hostname = u.hostname.slice(4);
+    if (u.port === '3000') u.port = '';
+    u.pathname = '/app/admin/settlements';
+    u.search = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function abrirSeparador(url) {
+  if (url) chrome.tabs.create({ url });
+}
+
+/** O que já foi recolhido de um portal, para a linha da lista. */
+function situacaoDe(fonte) {
+  if (fonte === 'UBER' || fonte === 'BOLT') {
+    const campo = fonte === 'UBER' ? 'uberAmount' : 'boltAmount';
+    const deste = Object.values(estado.ganhos ?? {}).filter((g) => g?.[campo] !== undefined);
+    if (!deste.length) return null;
+    const total = deste.reduce((s, g) => s + (g[campo] ?? 0), 0);
+    return { texto: `${plural(deste.length, 'motorista', 'motoristas')} · ${eur(total)}`, vazio: false };
+  }
+  const r = estado.recolhido[fonte];
+  if (!r) return null;
+  if (r.vazio) return { texto: 'Sem movimentos — 0 €', vazio: true };
+  const n = Number(r.movimentos);
+  return { texto: Number.isFinite(n) && n > 0 ? `Recolhido · ${plural(n, 'movimento', 'movimentos')}` : 'Recolhido', vazio: false };
+}
+
+function desenharPassos(atual) {
+  const nomes = ['Semana', 'Recolher', 'Analisar', 'Criar'];
+  $('passos').innerHTML = nomes.map((n, i) => {
+    const num = i + 1;
+    const cls = num < atual ? 'feito' : num === atual ? 'atual' : '';
+    return `<div class="passo ${cls}"><div class="barra"></div>${num} ${n}</div>`;
+  }).join('');
+}
+
+function desenharSucesso() {
+  const alvo = $('semana-sucesso');
+  const { criados, ignorados, falhas } = sucesso;
+  const detalhes = [
+    ignorados ? `${plural(ignorados, 'ignorado', 'ignorados')} (já tinham fecho).` : '',
+    falhas ? `Falhas: ${falhas}` : '',
+    'Nada foi creditado.',
+  ].filter(Boolean).map(esc).join('<br>');
+  alvo.innerHTML = `
+    <div class="grande">✓</div>
+    <h2>${esc(plural(criados, 'rascunho criado', 'rascunhos criados'))}</h2>
+    <p>${detalhes}</p>
+    <button class="principal" id="sucesso-faturacao">Abrir a Faturação ↗</button>
+    <button class="secundario" id="sucesso-outra">Fechar outra semana</button>`;
+  const url = enderecoDaFaturacao();
+  $('sucesso-faturacao').hidden = !url;
+  $('sucesso-faturacao').addEventListener('click', () => abrirSeparador(url));
+  $('sucesso-outra').addEventListener('click', async () => {
+    sucesso = null;
+    aviso('');
+    const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
+    desenhar(S.portalDe(aba?.url ?? ''));
+  });
 }
 
 function desenhar(portalAtual) {
   const { inicio, fim } = estado.semana;
   $('semana-de').value = inicio;
   $('semana-ate').value = fim;
+  $('semana-resumo').textContent = `${diaDaSemana(inicio)} ${S.curto(inicio)} – ${diaDaSemana(fim)} ${S.curto(fim)}`;
 
-  // O atraso da Via Verde, com as datas já calculadas e à vista.
+  // Os atalhos acendem quando a semana escolhida é a deles.
+  const passada = S.segundaPassada();
+  document.querySelectorAll('.chip[data-recuar]').forEach((c) => {
+    c.classList.toggle('on', S.maisDias(passada, -Number(c.dataset.recuar)) === inicio);
+  });
+
+  // O atraso da Via Verde, com as datas já calculadas — agora num selo na
+  // própria linha da Via Verde, em vez de um parágrafo.
   const vv = S.semanaDoPortal(estado.semana, true);
   $('semana-atraso').textContent =
     `Para fechar ${S.curto(inicio)} a ${S.curto(fim)}, à Via Verde pede-se `
     + `${S.curto(vv.inicio)} a ${S.curto(vv.fim)} — ela publica com 4 a 5 dias de atraso.`;
 
-  const linhas = Object.entries(S.FONTES).map(([fonte, cfg]) => {
-    const r = estado.recolhido[fonte];
-    const estaAqui = portalAtual === fonte;
-    // "sem movimentos" e "recolhido" dizem coisas diferentes, e a diferença
-    // importa: o primeiro afirma que a semana não teve despesa nenhuma neste
-    // portal, e é por isso que não há PDF. Mostrar "recolhido" nos dois casos
-    // deixava a dúvida de se o ficheiro se perdeu.
-    const estadoTexto = r
-      ? (r.vazio ? 'sem movimentos — 0 €' : 'recolhido')
-      : (estaAqui ? 'nesta página' : 'em falta');
-    return `<tr class="${estaAqui ? 'atual' : ''}">
-      <td>${r ? '✓' : '·'}</td>
-      <td>${cfg.rotulo}</td>
-      <td class="direita">${estadoTexto}</td>
-    </tr>`;
-  });
+  $('portal').innerHTML = portalAtual
+    ? `Está em <i>${esc(nomeDoPortal(portalAtual))}</i>`
+    : 'Fora dos portais';
 
-  const nomes = Object.keys(estado.ganhos ?? {});
-  const totalGanhos = Object.values(estado.ganhos ?? {})
-    .reduce((s, g) => s + (g.uberAmount ?? 0) + (g.boltAmount ?? 0), 0);
-  linhas.push(`<tr>
-    <td>${nomes.length ? '✓' : '·'}</td>
-    <td>Uber e Bolt</td>
-    <td class="direita">${nomes.length
-      ? `${nomes.length} motorista(s), ${eur(totalGanhos)}`
-      : (portalAtual === 'UBER' || portalAtual === 'BOLT' ? 'nesta página' : 'em falta')}</td>
-  </tr>`);
+  // ── Concluído ────────────────────────────────────────────────────────────
+  if (sucesso) {
+    desenharPassos(5);
+    $('semana-trabalho').hidden = true;
+    $('semana-sucesso').hidden = false;
+    desenharSucesso();
+    return;
+  }
+  $('semana-trabalho').hidden = false;
+  $('semana-sucesso').hidden = true;
 
-  $('semana-lista').innerHTML = linhas.join('');
   // Duas voltas de relógio da recolha mais lenta. Passado isso, o worker
   // morreu algures e o botão tem de voltar a destrancar-se sozinho.
   const PRESO = 120_000;
   const aDecorrer = Boolean(estado.aDecorrer)
     && Date.now() - (estado.aDecorrerDesde ?? 0) < PRESO;
-  $('semana-recolher').disabled = !portalAtual || aDecorrer;
-  $('semana-recolher').textContent = aDecorrer
-    ? 'A recolher…'
-    : (portalAtual ? 'Recolher desta página' : 'Abra um dos portais');
 
+  // ── A lista dos cinco portais ────────────────────────────────────────────
+  //
+  // Três tipos de linha:
+  //   · a do portal que está aberto — abre-se num cartão com o que a extensão
+  //     vai fazer e o botão "Recolher desta página" (o mesmo nome que as
+  //     mensagens de erro usam);
+  //   · a do PRÓXIMO portal sugerido (o primeiro em falta) — com o "Abrir ↗"
+  //     em destaque, para nunca haver dúvida sobre o que fazer a seguir;
+  //   · as outras — só o estado e um "Abrir ↗" discreto.
+  const btnRecolher = $('semana-recolher');
+  const lista = $('semana-lista');
+  const situacoes = PORTAIS.map((p) => situacaoDe(p.fonte));
+  const feitos = situacoes.filter(Boolean).length;
+  const emFalta = PORTAIS.filter((_, i) => !situacoes[i]);
+  const aquiPorRecolher = Boolean(portalAtual) && !situacaoDe(portalAtual);
+  const proximo = aquiPorRecolher ? null : (emFalta[0]?.fonte ?? null);
+  const daSemana = `${S.curto(inicio)} a ${S.curto(fim)}`;
+  const mesmoSiteDaPrio = (fonte) =>
+    (fonte === 'PRIO_ELECTRIC' && portalAtual === 'PRIO_FROTA')
+    || (fonte === 'PRIO_FROTA' && portalAtual === 'PRIO_ELECTRIC');
+
+  /** O que a extensão faz em cada portal, dito antes de se carregar. */
+  const oQueFaz = (fonte) => ({
+    VIA_VERDE: `Ponho o filtro em ${S.curto(vv.inicio)} a ${S.curto(vv.fim)} (a semana anterior — a Via Verde publica com atraso) e descarrego o PDF.`,
+    PRIO_FROTA: `Ponho o filtro em ${daSemana} e descarrego o PDF do combustível.`,
+    PRIO_ELECTRIC: `Ponho o filtro em ${daSemana} e descarrego o PDF dos carregamentos.`,
+    UBER: `Tento pôr ${daSemana} no filtro e leio a tabela. A Uber mostra até ${S.curto(S.maisDias(fim, 1))}: é normal, a semana dela acaba segunda de madrugada.`,
+    BOLT: `Tento pôr ${daSemana} no filtro e leio a tabela por motorista.`,
+  }[fonte] ?? '');
+
+  let botaoColocado = false;
+  const linhas = PORTAIS.map((p, i) => {
+    const sit = situacoes[i];
+    const aqui = portalAtual === p.fonte;
+    const corre = aDecorrer && estado.aDecorrer === p.fonte;
+    const eProximo = p.fonte === proximo;
+
+    const item = document.createElement('div');
+    item.className = `item${aqui ? ' aqui' : ''}${eProximo ? ' proximo' : ''}`;
+
+    const ic = document.createElement('div');
+    ic.className = `ic ${corre ? 'corre' : sit ? (sit.vazio ? 'zero' : 'ok') : aqui ? 'aqui' : 'falta'}`;
+    ic.textContent = !corre && sit ? '✓' : '';
+
+    const txt = document.createElement('div');
+    txt.className = 'txt';
+    const nome = document.createElement('div');
+    nome.className = 'nome';
+    nome.textContent = p.nome;
+    if (p.fonte === 'VIA_VERDE') {
+      const selo = document.createElement('span');
+      selo.className = 'selo';
+      selo.textContent = `${S.curto(vv.inicio)} – ${S.curto(vv.fim)}`;
+      selo.title = 'A Via Verde publica com 4 a 5 dias de atraso: pede-se a semana anterior.';
+      nome.append(' ', selo);
+    }
+    if (aqui || eProximo) {
+      const marca = document.createElement('span');
+      marca.className = aqui ? 'marca-aqui' : 'marca-proximo';
+      marca.textContent = aqui ? 'Está aqui' : 'Próximo';
+      nome.append(' ', marca);
+    }
+    const det = document.createElement('div');
+    det.className = `det${sit && !corre ? ' feito' : ''}`;
+    det.textContent = corre ? 'A recolher…'
+      : sit ? (sit.vazio ? 'Sem movimentos — 0 € · conta como feito' : sit.texto)
+      : aqui ? 'Falta recolher'
+      : mesmoSiteDaPrio(p.fonte) ? 'Mesmo site, outra página — o Abrir ↗ leva lá'
+      : eProximo ? `${p.det} · abra e inicie sessão`
+      : p.det;
+    txt.append(nome, det);
+
+    const acao = document.createElement('div');
+    acao.className = 'acao';
+
+    if (aqui && sit && !corre) {
+      // Já recolhido: a linha fica compacta, para o destaque ir para o próximo.
+      btnRecolher.textContent = 'Recolher de novo';
+      btnRecolher.className = 'btn-mini';
+      btnRecolher.disabled = aDecorrer;
+      btnRecolher.hidden = false;
+      acao.append(btnRecolher);
+      botaoColocado = true;
+      item.append(ic, txt, acao);
+      return item;
+    }
+
+    if (aqui) {
+      // O cartão do portal aberto: o que vai acontecer, e o botão por baixo.
+      const mais = document.createElement('div');
+      mais.className = 'mais';
+      const explica = document.createElement('p');
+      explica.className = 'explica';
+      explica.textContent = corre
+        ? 'Pode levar até um minuto. Se esta janela se fechar, volte a abri-la: o resultado fica guardado.'
+        : estado.ultimoErro
+            ? 'Se apareceu uma mensagem em cima, siga o que ela diz e carregue outra vez.'
+            : oQueFaz(p.fonte);
+      // O botão de recolher é sempre o mesmo elemento — muda-se de sítio,
+      // não se recria, para não perder o que está ligado a ele.
+      btnRecolher.textContent = corre ? 'A recolher…' : 'Recolher desta página';
+      btnRecolher.className = 'principal';
+      btnRecolher.disabled = aDecorrer;
+      btnRecolher.hidden = false;
+      mais.append(explica, btnRecolher);
+      botaoColocado = true;
+      item.append(ic, txt, mais);
+      return item;
+    }
+
+    const abrir = document.createElement('button');
+    abrir.className = eProximo ? 'btn-mini ver' : sit ? 'btn-mini suave' : 'btn-mini';
+    abrir.textContent = 'Abrir ↗';
+    abrir.title = `Abrir ${p.nome} num separador novo`;
+    abrir.addEventListener('click', () => abrirSeparador(p.url));
+    acao.append(abrir);
+
+    item.append(ic, txt, acao);
+    return item;
+  });
+  if (!botaoColocado) {
+    btnRecolher.hidden = true;
+    lista.after(btnRecolher);
+  }
+  lista.replaceChildren(...linhas);
+
+  // ── Como se faz (só enquanto não há nada recolhido) ─────────────────────
+  const como = $('semana-como');
+  // Só antes de começar, e fora dos portais: lá dentro, o cartão do portal
+  // já diz o que fazer.
+  como.hidden = feitos > 0 || Boolean(plano) || Boolean(portalAtual);
+  como.innerHTML = `
+    <h4>Como se recolhe</h4>
+    <ol>
+      <li><b>Abra o portal</b> com o botão <span class="tecla">Abrir ↗</span> e inicie sessão.</li>
+      <li>Já nessa página, <b>abra esta extensão</b> outra vez.</li>
+      <li>Carregue em <span class="tecla verde">Recolher desta página</span>. As datas são postas sozinhas.</li>
+    </ol>
+    <p>Repita nos 5 portais, pela ordem que quiser. O que recolher fica guardado.</p>`;
+
+  // ── Progresso, com o que falta dito por nome ────────────────────────────
+  //
+  // Depois de analisar, o que interessa é o resultado: a lista dos portais
+  // dobra-se numa linha, e abre-se de novo com um clique.
+  const dobrada = Boolean(plano) && !verLista;
+  lista.hidden = dobrada;
+  const falta = emFalta.map((p) => p.nome).join(', ');
+  if (plano) {
+    $('semana-progresso').className = 'progresso dobra';
+    $('semana-progresso').innerHTML =
+      `<span class="${feitos === PORTAIS.length ? 'tudo' : ''}">${feitos === PORTAIS.length ? '✓ ' : ''}`
+      + `${feitos} de ${PORTAIS.length} portais recolhidos</span>`
+      + `<button class="ligacao" id="ver-lista">${dobrada ? 'Ver os portais' : 'Esconder'}</button>`;
+    $('ver-lista').addEventListener('click', () => { verLista = !verLista; desenhar(portalAtual); });
+  } else {
+    $('semana-progresso').className = `progresso${feitos === PORTAIS.length ? ' completo' : ''}`;
+    $('semana-progresso').innerHTML = feitos === PORTAIS.length
+    ? '<span class="tudo">✓ Os 5 portais estão recolhidos</span>'
+      + '<div class="trilho"><span style="width:100%"></span></div>'
+    : `<div class="cima"><span><b>${feitos} de ${PORTAIS.length}</b> recolhidos</span>`
+      + `<div class="trilho"><span style="width:${Math.round((feitos / PORTAIS.length) * 100)}%"></span></div></div>`
+      + (feitos > 0 ? `<small>Falta: ${esc(falta)}</small>` : '');
+  }
+
+  // ── Analisar e criar ─────────────────────────────────────────────────────
   const temAlgo = Object.keys(estado.recolhido).length > 0
     || Object.keys(estado.ganhos ?? {}).length > 0;
-  $('semana-analisar').disabled = !temAlgo;
-  // Só destranca havendo um plano COM linhas por criar. Antes bastava haver
-  // plano, e dava para carregar com nada recolhido e receber um zero que
-  // parecia avaria.
+  const analisar = $('semana-analisar');
+  analisar.disabled = !temAlgo;
+  analisar.textContent = plano
+    ? 'Analisar de novo'
+    : feitos === PORTAIS.length ? 'Analisar' : 'Analisar o que já tenho';
+  analisar.className = !plano && feitos === PORTAIS.length ? 'principal' : 'secundario';
+
+  // Só destranca havendo um plano COM linhas por criar, e com todas as
+  // leituras a conferir. O servidor recusa na mesma; aqui evita-se o clique
+  // que não ia dar em nada.
   const porCriarAgora = (plano?.linhas ?? []).filter((l) => !l.bloqueio).length;
-  $('semana-criar').disabled = !plano || porCriarAgora === 0;
+  const naoConfere = (plano?.fontes ?? []).some((f) => f.presente && !f.confere);
+  const criar = $('semana-criar');
+  criar.hidden = !plano;
+  criar.disabled = !plano || porCriarAgora === 0 || naoConfere;
+  criar.textContent = porCriarAgora > 0
+    ? `Criar ${plural(porCriarAgora, 'rascunho', 'rascunhos')}`
+    : 'Criar rascunhos';
 
   // ── O botão de forçar ────────────────────────────────────────────────────
   //
   // Aparece sempre que houver um plano com problemas: uma leitura que não
   // confere, ou um plano sem nada para criar apesar de haver material.
-  //
-  // Existe porque a recusa sozinha era um beco. Uma semana sem abastecimentos
+  // Existe porque a recusa sozinha era um beco: uma semana sem abastecimentos
   // faz o leitor dizer "não encontrei nada", que é indistinguível de um
-  // ficheiro mal lido — e travava o fecho inteiro sem saída.
-  const algoMal = plano
-    && ((plano.fontes ?? []).some((f) => f.presente && !f.confere) || porCriarAgora === 0);
+  // ficheiro mal lido.
+  const algoMal = plano && (naoConfere || porCriarAgora === 0);
   $('semana-forcar').hidden = !algoMal;
 
-  // ── Limpar só o que veio DESTA página ────────────────────────────────────
-  //
-  // Refazer um portal não devia custar os outros quatro. O rótulo nomeia o
-  // portal de propósito: "Limpar" sozinho, num popup que tem outro botão de
-  // limpar, não diz o que vai desaparecer.
+  $('semana-dica').textContent = plano
+    ? (porCriarAgora > 0 && !naoConfere
+      ? 'Criar não credita nada: os rascunhos ficam na Faturação para confirmar.'
+      : '')
+    : feitos === PORTAIS.length
+      ? 'Passo seguinte: Analisar mostra o que vai ser criado, sem gravar nada.'
+      : feitos > 0
+        ? 'Pode analisar já o que tem, para ver como está a ficar. Analisar não grava nada.'
+        : '';
+
+  desenharPassos(plano || feitos === PORTAIS.length ? 3 : 2);
+  // Com o plano à vista, o "Analisar de novo" desce para o fim (só CSS).
+  $('semana-trabalho').classList.toggle('com-plano', Boolean(plano));
+
+  // ── Limpar só o que veio DESTA página (no menu "Mais opções") ────────────
   const limparPagina = $('semana-limpar-pagina');
   const temParaLimpar = portalAtual && (
     estado.recolhido[portalAtual]
@@ -116,11 +392,7 @@ function desenhar(portalAtual) {
           (g) => (portalAtual === 'UBER' ? g.uberAmount : g.boltAmount) !== undefined))
   );
   limparPagina.hidden = !temParaLimpar;
-  if (temParaLimpar) {
-    const nome = S.FONTES[portalAtual]?.rotulo
-      ?? (portalAtual === 'UBER' ? 'Uber' : 'Bolt');
-    limparPagina.textContent = `Limpar só ${nome}`;
-  }
+  if (temParaLimpar) limparPagina.textContent = `Limpar só ${nomeDoPortal(portalAtual)}`;
 
   desenharPlano();
 }
@@ -130,27 +402,94 @@ function desenharPlano() {
   // sempre: um nome que passou a ter dono tem de deixar de aparecer aqui.
   void desenharEmparelhar();
 
-  if (!plano) { $('semana-plano').hidden = true; return; }
-  $('semana-plano').hidden = false;
+  const alvo = $('semana-plano');
+  const veredito = $('semana-veredito');
+  if (!plano) {
+    alvo.hidden = true; alvo.innerHTML = '';
+    veredito.hidden = true; veredito.innerHTML = '';
+    return;
+  }
+  alvo.hidden = false;
 
-  const fontes = (plano.fontes ?? []).filter((f) => f.presente).map((f) =>
-    `<li>${f.nome}: <strong>${eur(f.totalLido)}</strong> ${f.confere ? '✓' : '— NÃO CONFERE'}</li>`).join('');
+  const linhas = plano.linhas ?? [];
+  const porCriar = linhas.filter((l) => !l.bloqueio);
+  const bloqueadas = linhas.filter((l) => l.bloqueio);
+  const nomes = (plano.naoEmparelhados ?? []).length;
+  const avisos = plano.avisos ?? [];
+  const fontes = (plano.fontes ?? []).filter((f) => f.presente);
+  const mas = fontes.filter((f) => !f.confere);
+  const semDono = Number(plano.porAtribuir) || 0;
 
-  const porCriar = (plano.linhas ?? []).filter((l) => !l.bloqueio);
-  const linhas = (plano.linhas ?? []).map((l) =>
-    `<li${l.bloqueio ? ' class="bloqueado"' : ''}>${l.userName} (${l.plate}) —
-      portagens ${eur(l.tollsAmount)}, combustível ${eur(l.fuelAmount)},
-      carregamento ${eur(l.chargeAmount)}
-      ${l.bloqueio ? `<br><em>${l.bloqueio}</em>` : ''}</li>`).join('');
+  // ── O veredito: uma frase que diz se dá para criar, e o que fazer ───────
+  const urlDaFonte = (nome) => PORTAIS.find((p) => p.nome === nome)?.url ?? null;
+  if (mas.length) {
+    const m = mas[0];
+    const declarado = Number.isFinite(Number(m.totalDeclarado)) && m.totalDeclarado !== null
+      ? ` mas o documento diz ${eur(m.totalDeclarado)}` : '';
+    veredito.className = 'veredito mau';
+    veredito.innerHTML = `
+      <b>✕ Ainda não dá para criar</b>
+      <p>O PDF da ${esc(m.nome)} foi lido com ${eur(m.totalLido)}${esc(declarado)}. Volte a esse portal e carregue em <i>Recolher de novo</i>; depois, <i>Analisar de novo</i>.</p>
+      ${urlDaFonte(m.nome) ? '<button class="btn-mini" id="veredito-abrir">Abrir ' + esc(m.nome) + ' ↗</button>' : ''}`;
+    $('veredito-abrir')?.addEventListener('click', () => abrirSeparador(urlDaFonte(m.nome)));
+  } else if (!porCriar.length) {
+    veredito.className = 'veredito aten';
+    veredito.innerHTML = `
+      <b>Não há rascunhos para criar</b>
+      <p>${linhas.length ? 'Todos os motoristas lidos já têm fecho nesta semana.' : 'Com o que foi recolhido, não encontrei nenhum motorista com valores nesta semana.'} Veja os detalhes em baixo.</p>`;
+  } else {
+    veredito.className = 'veredito bom';
+    const extra = [
+      nomes ? `Opcional: ${nomes === 1 ? 'há um nome' : `há ${nomes} nomes`} por reconhecer, logo abaixo.` : '',
+      avisos.length || semDono ? 'No fim há lembretes para tratar à mão — não impedem nada.' : '',
+    ].filter(Boolean);
+    veredito.innerHTML = `
+      <b>✓ Pronto para criar ${esc(plural(porCriar.length, 'rascunho', 'rascunhos'))}</b>
+      <p>Confira a lista e carregue em <i>Criar</i>, no fim.</p>
+      ${extra.map((t) => `<p class="extra">${esc(t)}</p>`).join('')}`;
+  }
+  veredito.hidden = false;
 
-  const avisos = (plano.avisos ?? []).map((a) => `<li>${a}</li>`).join('');
+  // ── As linhas, com ganhos e despesas separados ──────────────────────────
+  const valores = (pares) => pares.filter(([, v]) => Number(v) > 0)
+    .map(([r, v]) => `${r} <b>${eur(v)}</b>`).join(' · ');
+  const linhaDe = (l) => {
+    const ganhos = valores([['Uber', l.uberAmount], ['Bolt', l.boltAmount]]);
+    const despesas = valores([['Portagens', l.tollsAmount], ['Combustível', l.fuelAmount], ['Carregamento', l.chargeAmount]]);
+    return `
+      <div class="pessoa">
+        <div class="quem"><span>${esc(l.userName)}</span>${l.plate && l.plate !== '—' ? `<span class="matricula">${esc(l.plate)}</span>` : '<span class="matricula falta">sem carro</span>'}</div>
+        ${ganhos ? `<div class="vals"><span class="rot g">Ganhos</span>${ganhos}</div>` : ''}
+        <div class="vals"><span class="rot d">Despesas</span>${despesas || '<span class="nada">nenhuma lida</span>'}</div>
+      </div>`;
+  };
 
-  $('semana-plano').innerHTML = `
-    <h4>O que cada ficheiro disse</h4><ul>${fontes}</ul>
-    <h4>Vai criar ${porCriar.length} rascunho(s)</h4><ul>${linhas}</ul>
-    ${plano.porAtribuir > 0
-      ? `<p class="aviso">${eur(plano.porAtribuir)} lidos e não atribuídos a ninguém.</p>` : ''}
-    ${avisos ? `<h4>Para rever à mão</h4><ul class="avisos">${avisos}</ul>` : ''}`;
+  const tratar = [
+    ...(semDono > 0 ? [`${eur(semDono)} de despesas sem carro ou motorista — não entram em nenhum rascunho.`] : []),
+    ...avisos,
+  ];
+
+  const leitura = fontes.length
+    ? (mas.length
+      ? `<div class="caixa"><h4>Leitura dos PDFs</h4>${fontes.map((f) => `<div class="linha"><span>${esc(f.nome)}</span><span class="val ${f.confere ? 'ok' : 'mal'}">${eur(f.totalLido)} ${f.confere ? '✓ bate certo' : '✕ não bate'}</span></div>`).join('')}</div>`
+      : `<p class="leitura-ok">✓ PDFs lidos e totais a bater certo: ${fontes.map((f) => `${esc(f.nome)} ${eur(f.totalLido)}`).join(' · ')}</p>`)
+    : '';
+
+  alvo.innerHTML = `
+    ${porCriar.length ? `<div class="caixa">
+      <h4>Vão ser criados <span class="conta">${porCriar.length}</span></h4>
+      ${porCriar.map(linhaDe).join('')}
+    </div>` : ''}
+    ${bloqueadas.length ? `<div class="caixa calma">
+      <h4>Não vão ser criados <span class="conta">${bloqueadas.length}</span></h4>
+      ${bloqueadas.map((l) => `<div class="linha bloq"><span>${esc(l.userName)}<small>${esc(l.bloqueio)}</small></span></div>`).join('')}
+    </div>` : ''}
+    ${tratar.length ? `<div class="caixa">
+      <h4>Para tratar à mão, na Faturação <span class="conta aten">${tratar.length}</span></h4>
+      <p class="nota">Não impede a criação. Fica só como lembrete.</p>
+      <ul class="av">${tratar.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
+    </div>` : ''}
+    ${leitura}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +522,7 @@ async function recolher() {
     await S.gravarEstado(estado);
     desenhar(portal);
   } catch (e) {
-    aviso(e.message);
+    aviso(e.message, 'mau');
   } finally {
     $('semana-recolher').disabled = false;
   }
@@ -354,7 +693,9 @@ async function desenharEmparelhar() {
   if (pendentes.length === 0) { alvo.hidden = true; alvo.innerHTML = ''; return; }
 
   alvo.hidden = false;
-  alvo.innerHTML = '<h4>Nomes sem motorista</h4><p class="nota">Escolha a pessoa e o valor passa a ser lançado nela, esta semana e nas próximas.</p>';
+  alvo.innerHTML = `<h4>${pendentes.length === 1 ? 'Um nome que não reconheci' : `${pendentes.length} nomes que não reconheci`}</h4>`
+    + '<p class="nota">Estes nomes vêm da Uber ou da Bolt e não batem com nenhum motorista. '
+    + 'Escolha quem é e eu lembro-me nas próximas semanas. Se deixar em branco, o valor fica de fora.</p>';
 
   let motoristas;
   try {
@@ -372,11 +713,22 @@ async function desenharEmparelhar() {
     linha.className = 'emparelhar-linha';
 
     const etiqueta = document.createElement('span');
-    etiqueta.textContent = `${p.driverName} — ${eur(total)}`;
+    const deOnde = [
+      p.uberAmount ? `Uber ${eur(p.uberAmount)}` : '',
+      p.boltAmount ? `Bolt ${eur(p.boltAmount)}` : '',
+    ].filter(Boolean).join(' · ') || eur(total);
+    etiqueta.innerHTML = `<b>${esc(p.driverName)}</b> <span class="de-onde">${esc(deOnde)}</span>`;
 
+    // Os parecidos (quando o servidor os manda) vão primeiro. A lista e os
+    // valores são os mesmos de sempre; só muda a ordem em que aparecem.
+    const parecidos = (p.candidatos ?? []).filter((c) => c?.id && c?.name);
+    const opcao = (m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`;
     const caixa = document.createElement('select');
-    caixa.innerHTML = '<option value="">— ignorar este nome —</option>'
-      + motoristas.map((m) => `<option value="${m.id}">${m.name}</option>`).join('');
+    caixa.innerHTML = '<option value="">— deixar de fora —</option>'
+      + (parecidos.length
+        ? `<optgroup label="Parecidos">${parecidos.map(opcao).join('')}</optgroup>`
+          + `<optgroup label="Todos os motoristas">${motoristas.map(opcao).join('')}</optgroup>`
+        : motoristas.map(opcao).join(''));
     caixa.value = estado.emparelhamentos?.[chave] ?? '';
 
     // Guardar e voltar a analisar. O plano muda — passa a haver mais um
@@ -430,11 +782,11 @@ async function analisar() {
     // Uma fonte que não confere trava tudo do lado do servidor. Aqui só se
     // impede o clique, para não haver a experiência de carregar e não
     // acontecer nada.
-    const má = (plano.fontes ?? []).find((f) => f.presente && !f.confere);
-    if (má) aviso(`A leitura da ${má.nome} não confere. Nada vai ser criado até isso ficar resolvido.`);
+    // (O aviso de "não confere" passou para o veredito do plano, por cima da
+    // lista — ver desenharPlano.)
   } catch (e) {
     plano = null;
-    aviso(e.message);
+    aviso(e.message, 'mau');
   } finally {
     const portal = S.portalDe((await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.url ?? '');
     desenhar(portal);
@@ -475,8 +827,8 @@ async function criar(forcado) {
       return;
     }
 
-    aviso(`${r.criados} rascunho(s) criado(s)${r.ignorados ? `, ${r.ignorados} ignorado(s)` : ''}. `
-      + `Nada foi creditado — confirme na faturação. ${falhas}`);
+    // O sucesso tem ecrã próprio, com a ligação para a Faturação.
+    sucesso = { criados: r.criados, ignorados: r.ignorados ?? 0, falhas };
 
     // Só agora se limpa. Deixar a recolha depois de criar convidaria a
     // carregar outra vez e a tentar criar a mesma semana duas vezes.
@@ -485,7 +837,7 @@ async function criar(forcado) {
     plano = null;
     await S.gravarEstado(estado);
   } catch (e) {
-    aviso(e.message);
+    aviso(e.message, 'mau');
   } finally {
     const portal = S.portalDe((await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.url ?? '');
     desenhar(portal);
@@ -522,11 +874,47 @@ export async function iniciarSemana() {
     desenhar(S.portalDe(aba?.url ?? ''));
   };
 
+  // ── Escolher a semana ───────────────────────────────────────────────────
+  //
+  // Mudar a semana apaga o que foi recolhido (ver acima, é de propósito).
+  // Por isso pergunta-se antes, quando há alguma coisa a perder.
+  const podeMudar = () => {
+    const quantos = Object.keys(estado.recolhido).length
+      + (Object.keys(estado.ganhos ?? {}).length ? 1 : 0);
+    if (!quantos) return true;
+    const ok = confirm('Mudar a semana apaga o que já recolheu desta semana. Continuar?');
+    if (!ok) {
+      $('semana-de').value = estado.semana.inicio;
+      $('semana-ate').value = estado.semana.fim;
+    }
+    return ok;
+  };
+
   $('semana-de').addEventListener('change', async () => {
+    if (!podeMudar()) return;
     $('semana-ate').value = S.maisDias($('semana-de').value, 6);
     await mudarSemana();
   });
-  $('semana-ate').addEventListener('change', mudarSemana);
+  $('semana-ate').addEventListener('change', async () => {
+    if (!podeMudar()) return;
+    await mudarSemana();
+  });
+  $('semana-mudar').addEventListener('click', () => {
+    $('semana-escolher').hidden = !$('semana-escolher').hidden;
+    $('semana-atraso').hidden = $('semana-escolher').hidden;
+  });
+  document.querySelectorAll('.chip[data-recuar]').forEach((chip) => {
+    chip.addEventListener('click', async () => {
+      const inicio = S.maisDias(S.segundaPassada(), -Number(chip.dataset.recuar));
+      if (inicio === estado.semana.inicio) { $('semana-escolher').hidden = true; $('semana-atraso').hidden = true; return; }
+      if (!podeMudar()) return;
+      $('semana-de').value = inicio;
+      $('semana-ate').value = S.maisDias(inicio, 6);
+      await mudarSemana();
+      $('semana-escolher').hidden = true;
+      $('semana-atraso').hidden = true;
+    });
+  });
   $('semana-recolher').addEventListener('click', recolher);
   $('semana-analisar').addEventListener('click', analisar);
   $('semana-criar').addEventListener('click', () => criar(false));
@@ -700,9 +1088,9 @@ export async function iniciarSemana() {
       }
 
       await navigator.clipboard.writeText(JSON.stringify(relatorio, null, 1));
-      aviso('Diagnóstico copiado. Cole-o na conversa.');
+      aviso('Diagnóstico copiado. Cole-o na conversa.', 'bom');
     } catch (e) {
-      aviso(`Não consegui recolher o diagnóstico: ${e.message}`);
+      aviso(`Não consegui recolher o diagnóstico: ${e.message}`, 'mau');
     }
   });
 
@@ -754,10 +1142,10 @@ export async function iniciarSemana() {
     estado = await S.lerEstado();
     const [atual] = await chrome.tabs.query({ active: true, currentWindow: true });
     desenhar(S.portalDe(atual?.url ?? ''));
-    if (estado.ultimoErro) aviso(estado.ultimoErro);
+    if (estado.ultimoErro) aviso(estado.ultimoErro, 'mau');
   });
 
   const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
   desenhar(S.portalDe(aba?.url ?? ''));
-  if (estado.ultimoErro) aviso(estado.ultimoErro);
+  if (estado.ultimoErro) aviso(estado.ultimoErro, 'mau');
 }

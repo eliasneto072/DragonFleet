@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DragonFleet — fecho da semana",
-  "version": "0.8.2",
+  "version": "0.9.1",
   "description": "Recolhe os ganhos da Uber e da Bolt e as despesas da Via Verde e da Prio, e cria os rascunhos do fecho semanal no DragonFleet.",
   "permissions": [
     "activeTab",

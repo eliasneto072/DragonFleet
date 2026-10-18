@@ -17,24 +17,34 @@ cartão da extensão.
 
 ## Usar
 
-1. Abrir a extensão e **escolher a semana a fechar** (segunda a domingo)
-2. Passar pelos portais, e em cada um carregar em **Recolher desta página**:
+O popup mostra quatro passos: **Semana → Recolher → Analisar → Criar**.
 
-   | Portal | Página |
-   |---|---|
-   | Via Verde | Consultar extratos › Movimentos |
-   | Prio — combustível | `myprio.com/Transactions/Transactions` |
-   | Prio — carregamentos | `myprio.com/Transactions/Transactions?TradIsElectric=True` |
-   | Uber | `fleethub.uber.com` → Earnings |
-   | Bolt | `fleets.bolt.eu` → Finances › Earnings per driver |
+1. **Semana.** Por omissão é a semana passada. Para outra, carregar em
+   *Mudar* (atalhos "Semana passada" e "Há duas semanas", ou as datas à mão).
+2. **Recolher.** A lista tem os cinco sítios — Via Verde, Prio combustível,
+   Prio carregamentos, Uber e Bolt — cada um com o seu estado; o primeiro em
+   falta vem marcado como *Próximo*. *Abrir ↗* abre o portal num separador novo;
+   o portal que está aberto vira um cartão que diz o que a extensão vai fazer,
+   com o botão **Recolher desta página**. A ordem não importa e o popup pode
+   fechar-se pelo caminho.
+3. **Analisar** — sem gravar nada. Primeiro, uma frase diz se dá para criar
+   (ou qual PDF não bate e onde o recolher de novo). Depois: os nomes que não
+   emparelham (a escolha fica guardada), os rascunhos que vão ser criados com
+   ganhos e despesas de cada motorista, os que não vão, e o que fica para tratar
+   à mão na Faturação.
+4. **Criar rascunhos**, e depois *Abrir a Faturação* para conferir e creditar.
 
-3. **Analisar** — mostra o que vai ser criado e todos os avisos, sem gravar nada
-4. **Criar rascunhos**
-5. Conferir na Faturação e creditar
+O que é menos frequente está no menu **⋯** (Mais opções): o envio antigo dos
+ganhos da Uber e da Bolt para *Por confirmar*, limpar só um portal, copiar o
+diagnóstico, esquecer tudo e terminar sessão.
 
-A ordem não importa e o popup pode fechar-se pelo caminho: o que já foi
-recolhido fica guardado até se criar os rascunhos, ou até se carregar em
-*Esquecer o que foi recolhido*.
+| Portal | Página |
+|---|---|
+| Via Verde | Consultar extratos › Movimentos |
+| Prio — combustível | `myprio.com/Transactions/Transactions` |
+| Prio — carregamentos | `myprio.com/Transactions/Transactions?TradIsElectric=True` |
+| Uber | `fleethub.uber.com` → Earnings |
+| Bolt | `fleets.bolt.eu` → Finances › Earnings per driver |
 
 ## A semana da Via Verde é outra
 
@@ -102,6 +112,7 @@ A única conta que pede é a do DragonFleet, e dela guarda só o token, que expi
 
 | Onde | O que escrever |
 |---|---|
+| Produção (por omissão) | `https://api.dragonfleet.pt` |
 | Docker local | `http://localhost:3000` |
 | Túnel do ngrok | `https://<subdominio>.ngrok-free.dev/api` |
 | Render | `https://<servico>.onrender.com` |

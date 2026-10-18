@@ -5,63 +5,123 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <header>
-    <strong>DragonFleet</strong>
-    <span id="versao" class="etiqueta"></span>
-    <span id="portal" class="etiqueta"></span>
+  <!-- Os IDs são os mesmos de antes: a lógica (popup.js, popup-semana.js)
+       procura-os por nome. Mudou a arrumação, não os nomes. -->
+  <header class="topo">
+    <span class="marca">Dragon<b>Fleet</b></span>
+    <span id="portal" class="onde"></span>
+    <span id="versao" class="versao"></span>
+    <button id="menu-abrir" class="menu-botao" title="Mais opções" hidden>⋯</button>
   </header>
 
+  <!-- Mais opções: o que é raro, ou para quando algo corre mal -->
+  <section id="menu" class="menu" hidden>
+    <h3>Mais opções</h3>
+    <div class="menu-lista">
+      <button id="menu-ganhos" class="menu-item" hidden>
+        Enviar só os ganhos para "Por confirmar"
+        <small>O envio antigo da Uber e da Bolt, sem criar fechos</small>
+      </button>
+      <button id="semana-limpar-pagina" class="menu-item" hidden></button>
+      <button id="semana-diagnostico" class="menu-item">
+        Copiar diagnóstico desta página
+        <small>Para mandar ao suporte quando algo falha</small>
+      </button>
+      <button id="semana-limpar" class="menu-item perigo">Esquecer tudo o que foi recolhido</button>
+      <button id="sair" class="menu-item" hidden>Terminar sessão</button>
+    </div>
+    <button id="menu-fechar" class="secundario">Voltar</button>
+  </section>
+
   <!-- Sessão -->
-  <section id="login" hidden>
-    <p class="ajuda">Entre com a conta de administrador do DragonFleet.</p>
-    <label>Endereço do servidor
-      <input id="api" type="url" placeholder="http://localhost:3000" />
-    </label>
+  <section id="login" class="corpo" hidden>
+    <div>
+      <h3>Entrar</h3>
+      <p class="ajuda">Use a conta de administrador do DragonFleet.</p>
+    </div>
     <label>Email <input id="email" type="email" autocomplete="username" /></label>
     <label>Palavra-passe <input id="password" type="password" autocomplete="current-password" /></label>
     <button id="entrar" class="principal">Entrar</button>
+    <div class="servidor">
+      <span>Servidor: <span id="api-mostrar"></span></span>
+      <button id="api-alterar" class="ligacao">alterar</button>
+    </div>
+    <label id="api-campo" hidden>Endereço do servidor
+      <input id="api" type="url" placeholder="https://api.dragonfleet.pt" />
+    </label>
   </section>
 
   <!-- Fecho da semana -->
   <section id="semana" hidden>
-    <div class="periodo">
-      <label>Semana de <input id="semana-de" type="date" /></label>
-      <label>a <input id="semana-ate" type="date" /></label>
-    </div>
-    <p id="semana-atraso" class="ajuda"></p>
+    <nav id="passos" class="passos" aria-label="Passos"></nav>
 
-    <table id="semana-lista"></table>
+    <div class="corpo">
+      <p id="semana-erro" class="faixa-aviso" hidden></p>
 
-    <div class="botoes">
-      <button id="semana-recolher" class="secundario">Recolher desta página</button>
-      <button id="semana-analisar" class="secundario" disabled>Analisar</button>
-      <button id="semana-criar" class="principal" disabled>Criar rascunhos</button>
+      <!-- Passo 4 concluído -->
+      <div id="semana-sucesso" class="sucesso" hidden></div>
+
+      <div id="semana-trabalho" class="trabalho">
+        <!-- 1 · Semana -->
+        <div class="cartao-semana">
+          <div>
+            <small>Semana a fechar</small>
+            <strong id="semana-resumo"></strong>
+          </div>
+          <button id="semana-mudar" class="btn-mini">Mudar</button>
+        </div>
+        <div id="semana-escolher" class="escolher" hidden>
+          <div class="chips">
+            <button class="chip" data-recuar="0">Semana passada</button>
+            <button class="chip" data-recuar="7">Há duas semanas</button>
+          </div>
+          <div class="datas">
+            <label>De <input id="semana-de" type="date" /></label>
+            <label>a <input id="semana-ate" type="date" /></label>
+          </div>
+        </div>
+        <p id="semana-atraso" class="ajuda" hidden></p>
+
+        <!-- 2 · Recolher -->
+        <div id="semana-como" class="como" hidden></div>
+        <div id="semana-progresso" class="progresso"></div>
+        <div id="semana-lista" class="lista"></div>
+        <!-- O botão de recolher é um só. O popup-semana.js muda-o para a linha
+             do portal que está aberto. -->
+        <button id="semana-recolher" class="btn-mini ver">Recolher</button>
+
+        <!-- 3 · Analisar -->
+        <div id="semana-veredito" class="veredito" hidden></div>
+        <div id="semana-emparelhar" class="caixa decide" hidden></div>
+        <div id="semana-plano" class="plano" hidden></div>
+        <button id="semana-analisar" class="secundario" disabled>Analisar</button>
+
+        <!-- 4 · Criar -->
+        <button id="semana-criar" class="principal" disabled>Criar rascunhos</button>
+        <button id="semana-forcar" class="forcar" hidden>Criar mesmo assim, apesar dos avisos…</button>
+        <p id="semana-dica" class="dica"></p>
+      </div>
     </div>
-    <button id="semana-forcar" class="forcar" hidden>Criar mesmo assim, apesar dos avisos</button>
-    <div id="semana-emparelhar" class="emparelhar" hidden></div>
-    <div id="semana-plano" class="plano" hidden></div>
-    <p id="semana-erro" class="aviso" hidden></p>
-    <button id="semana-limpar-pagina" class="ligacao" hidden></button>
-    <button id="semana-limpar" class="ligacao">Esquecer tudo o que foi recolhido</button>
-    <button id="semana-diagnostico" class="ligacao">Copiar diagnóstico desta página</button>
   </section>
 
-  <!-- Recolha (lançamentos comunicados — Uber e Bolt) -->
-  <section id="recolha" hidden>
+  <!-- Envio antigo: lançamentos comunicados (Uber e Bolt) → Por confirmar -->
+  <section id="recolha" class="corpo recolha" hidden>
+    <h3>Enviar ganhos para "Por confirmar"</h3>
+    <p class="ajuda">Envia só os valores desta página para a Faturação › Por confirmar. Não cria fechos.</p>
     <div id="periodo" class="periodo"></div>
     <div id="resumo" class="resumo"></div>
     <table id="linhas"></table>
 
-    <div id="porEmparelhar" class="aviso" hidden></div>
+    <div id="porEmparelhar" class="faixa-aviso" hidden></div>
 
     <div class="botoes">
       <button id="rever" class="secundario">Rever</button>
       <button id="enviar" class="principal" disabled>Enviar</button>
     </div>
+    <button id="recolha-fechar" class="ligacao">Voltar ao fecho da semana</button>
   </section>
 
   <p id="erro" class="erro" hidden></p>
-  <footer><button id="sair" class="ligacao" hidden>Terminar sessão</button></footer>
 
   <script type="module" src="popup.js"></script>
 </body>

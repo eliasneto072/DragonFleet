@@ -187,7 +187,10 @@ async function sair() {
   $('login').hidden = false;
   $('recolha').hidden = true;
   $('semana').hidden = true;
+  $('menu').hidden = true;
   $('sair').hidden = true;
+  $('menu-abrir').hidden = true;
+  $('portal').textContent = '';
 }
 
 // ─── Leitura da página ────────────────────────────────────────────────────────
@@ -351,15 +354,30 @@ async function mostrarRecolha() {
   //
   // Fica, só na Uber e na Bolt — que são as únicas páginas onde sabe ler — e
   // SEM correr sozinha: espera que se carregue em "Rever".
+  //
+  // Nova arrumação (v0.9): continua disponível, mas no menu "Mais opções".
+  // Ao lado do fecho da semana, na mesma página, eram dois caminhos para a
+  // mesma Uber — e não se percebia qual usar.
   const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
   const h = aba?.url ?? '';
   const naPlataforma = h.includes('uber.com') || h.includes('bolt.eu');
-  $('recolha').hidden = !naPlataforma;
+  $('recolha').hidden = true;
+  $('menu-ganhos').hidden = !naPlataforma;
+  $('menu-abrir').hidden = false;
 }
 
 (async function inicio() {
   const guardado = await ler(['api', 'token', 'refreshToken']);
-  $('api').value = guardado.api ?? 'http://localhost:3000';
+  // Por omissão, a API de produção. Escondida atrás de "alterar": quem usa a
+  // extensão no dia a dia não precisa de saber que existe.
+  $('api').value = guardado.api ?? 'https://api.dragonfleet.pt';
+  const mostrarApi = () => { $('api-mostrar').textContent = $('api').value.replace(/^https?:\/\//, '') || '—'; };
+  mostrarApi();
+  $('api').addEventListener('input', mostrarApi);
+  $('api-alterar').addEventListener('click', () => {
+    $('api-campo').hidden = !$('api-campo').hidden;
+    if (!$('api-campo').hidden) $('api').focus();
+  });
   estado.api = guardado.api ?? '';
   estado.token = guardado.token ?? '';
   estado.refreshToken = guardado.refreshToken ?? '';
@@ -371,4 +389,21 @@ async function mostrarRecolha() {
   $('rever').addEventListener('click', rever);
   $('enviar').addEventListener('click', enviar);
   $('sair').addEventListener('click', sair);
+
+  // ── Menu "Mais opções" ───────────────────────────────────────────────────
+  const ecra = (qual) => {
+    $('menu').hidden = qual !== 'menu';
+    $('recolha').hidden = qual !== 'recolha';
+    $('semana').hidden = qual !== 'semana';
+    erro('');
+  };
+  $('menu-abrir').addEventListener('click', () => ecra($('menu').hidden ? 'menu' : 'semana'));
+  $('menu-fechar').addEventListener('click', () => ecra('semana'));
+  $('menu-ganhos').addEventListener('click', () => ecra('recolha'));
+  $('recolha-fechar').addEventListener('click', () => ecra('semana'));
+  // As ações do menu que mexem no fecho da semana voltam a ele, para se ver
+  // o efeito.
+  for (const id of ['semana-limpar', 'semana-limpar-pagina', 'semana-diagnostico']) {
+    $(id).addEventListener('click', () => ecra('semana'));
+  }
 })();
